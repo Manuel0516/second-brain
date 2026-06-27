@@ -1,0 +1,78 @@
+/* ─────────────────────────────────────────────────────
+   Zero-Five · Typography Tokens
+───────────────────────────────────────────────────── */
+
+:root {
+  /* ── Font Weights ── */
+  --weight-light:    300;
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ── Type Scale ── size / line-height / tracking */
+  --text-xs:           11px;
+  --text-xs-lh:        1.45;
+  --text-xs-tracking:  0.05em;
+
+  --text-sm:           13px;
+  --text-sm-lh:        1.5;
+  --text-sm-tracking:  0.01em;
+
+  --text-base:         15px;
+  --text-base-lh:      1.65;
+  --text-base-tracking: 0;
+
+  --text-lg:           18px;
+  --text-lg-lh:        1.55;
+  --text-lg-tracking:  -0.01em;
+
+  --text-xl:           22px;
+  --text-xl-lh:        1.4;
+  --text-xl-tracking:  -0.02em;
+
+  --text-2xl:          28px;
+  --text-2xl-lh:       1.3;
+  --text-2xl-tracking: -0.025em;
+
+  --text-3xl:          36px;
+  --text-3xl-lh:       1.15;
+  --text-3xl-tracking: -0.03em;
+
+  --text-4xl:          48px;
+  --text-4xl-lh:       1.05;
+  --text-4xl-tracking: -0.04em;
+
+  --text-5xl:          64px;
+  --text-5xl-lh:       0.95;
+  --text-5xl-tracking: -0.045em;
+
+  --text-6xl:          88px;
+  --text-6xl-lh:       0.9;
+  --text-6xl-tracking: -0.05em;
+
+  --text-hero:         128px;
+  --text-hero-lh:      0.85;
+  --text-hero-tracking:-0.06em;
+
+  /* ── Semantic Roles ── */
+  --text-display-font:    var(--font-display);
+  --text-display-weight:  var(--weight-bold);
+
+  --text-heading-font:    var(--font-display);
+  --text-heading-weight:  var(--weight-semibold);
+
+  --text-body-font:       var(--font-body);
+  --text-body-size:       var(--text-base);
+  --text-body-lh:         var(--text-base-lh);
+  --text-body-weight:     var(--weight-regular);
+
+  --text-label-font:      var(--font-mono);
+  --text-label-size:      var(--text-xs);
+  --text-label-tracking:  var(--text-xs-tracking);
+  --text-label-weight:    var(--weight-medium);
+
+  --text-caption-size:    var(--text-sm);
+  --text-caption-lh:      var(--text-sm-lh);
+  --text-caption-color:   var(--text-secondary);
+}

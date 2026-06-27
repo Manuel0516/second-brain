@@ -1,0 +1,18 @@
+{
+  "name": "secondbrain",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=24",
+    "npm": ">=11"
+  },
+  "scripts": {
+    "dev:web": "npm run dev --workspace @secondbrain/web",
+    "dev:api": "uv run --directory apps/api uvicorn app.main:app --reload",
+    "check:web": "npm run check --workspace @secondbrain/web",
+    "check:api": "uv run --directory apps/api ruff format --check . && uv run --directory apps/api ruff check . && uv run --directory apps/api mypy app tests && uv run --directory apps/api pytest",
+    "check": "npm run check:web && npm run check:api"
+  }
+}

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.24"
+          enable-cache: true
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: uv sync --project apps/api --locked --dev
+
+      - name: Check frontend and backend
+        run: npm run check
+
+      - name: Validate production Compose configuration
+        run: docker compose --env-file .env.example config --quiet

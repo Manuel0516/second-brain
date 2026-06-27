@@ -1,0 +1,78 @@
+/* ─────────────────────────────────────────────────────
+   Zero-Five · Color Tokens
+   Accent: Electric Blue/Cyan (from Neon Planet logo)
+   Success: Natural Green (reserved — not accent)
+───────────────────────────────────────────────────── */
+
+:root {
+  /* ── Primitives: Dark Scale (slightly violet-tinted) ── */
+  --color-black:    #09090B;
+  --color-dark-100: #111114;
+  --color-dark-200: #18181C;
+  --color-dark-300: #202024;
+  --color-dark-400: #28272D;
+  --color-dark-500: #323139;
+
+  /* ── Primitives: Neutral Scale ── */
+  --color-neutral-700: #3D3C45;
+  --color-neutral-600: #524F62;
+  --color-neutral-500: #6B6880;
+  --color-neutral-400: #8A8799;
+  --color-neutral-300: #AAA8BB;
+  --color-neutral-200: #C8C6D8;
+  --color-neutral-100: #E4E2F0;
+  --color-white:        #F0EFF8;
+
+  /* ── Primitives: Accent — Electric Blue (Neon Planet) ── */
+  --color-accent:        #22D3EE;
+  --color-accent-hover:  #38BDF8;
+  --color-accent-dim:    #0EA5E9;
+  --color-accent-muted:  #0369A1;
+  --color-accent-subtle: rgba(34, 211, 238, 0.08);
+  --color-accent-glow:   rgba(34, 211, 238, 0.22);
+
+  /* ── Primitives: Semantic ── */
+  --color-red:           #F43F5E;
+  --color-red-subtle:    rgba(244,  63,  94, 0.10);
+  --color-amber:         #F59E0B;
+  --color-amber-subtle:  rgba(245, 158,  11, 0.10);
+  /* Green = success / correct / positive ONLY. Never accent. */
+  --color-green:         #4ADE80;
+  --color-green-subtle:  rgba( 74, 222, 128, 0.10);
+  /* Info blue is indigo — distinct from accent cyan */
+  --color-blue:          #818CF8;
+  --color-blue-subtle:   rgba(129, 140, 248, 0.10);
+
+  /* ── Semantic: Backgrounds ── */
+  --bg-base:      var(--color-dark-100);
+  --bg-elevated:  var(--color-dark-200);
+  --bg-overlay:   var(--color-dark-300);
+  --bg-raised:    var(--color-dark-400);
+  --bg-input:     var(--color-dark-300);
+
+  /* ── Semantic: Borders ── */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.16);
+  --border-accent:  var(--color-accent);
+
+  /* ── Semantic: Text ── */
+  --text-primary:    var(--color-white);
+  --text-secondary:  var(--color-neutral-300);
+  --text-tertiary:   var(--color-neutral-500);
+  --text-disabled:   var(--color-neutral-700);
+  --text-accent:     var(--color-accent);
+  --text-on-accent:  var(--color-black);
+  --text-error:      var(--color-red);
+  --text-warning:    var(--color-amber);
+  --text-success:    var(--color-green);
+  --text-info:       var(--color-blue);
+
+  /* ── Semantic: Interactive ── */
+  --interactive-accent:       var(--color-accent);
+  --interactive-accent-hover: var(--color-accent-hover);
+  --interactive-accent-press: var(--color-accent-dim);
+  --interactive-destructive:  var(--color-red);
+  --interactive-ghost-hover:  rgba(255, 255, 255, 0.06);
+  --interactive-ghost-press:  rgba(255, 255, 255, 0.10);
+}
