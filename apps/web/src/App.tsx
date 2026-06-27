@@ -22,7 +22,9 @@ function AppRoutes() {
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/calendar" replace /> : <Login />}
+        element={
+          isAuthenticated ? <Navigate to="/calendar" replace /> : <Login />
+        }
       />
       <Route
         path="/calendar"

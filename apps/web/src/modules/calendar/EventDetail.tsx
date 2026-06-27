@@ -35,9 +35,7 @@ export function EventDetail({ event, onClose }: EventDetailProps) {
   }, [onClose])
 
   // Close on background click
-  const handleBackgroundClick = (
-    e: React.MouseEvent<HTMLDivElement>,
-  ) => {
+  const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       onClose()
     }

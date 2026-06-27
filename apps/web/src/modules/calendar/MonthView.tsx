@@ -167,7 +167,8 @@ export function MonthView({ onNavigate }: MonthViewProps) {
                       onClick={() => setSelectedEvent(event)}
                       className="block w-full truncate rounded text-xs px-2 py-1 text-left font-medium text-white transition-opacity hover:opacity-80"
                       style={{
-                        backgroundColor: event.color_override || event.calendar.color,
+                        backgroundColor:
+                          event.color_override || event.calendar.color,
                       }}
                       title={event.title}
                     >

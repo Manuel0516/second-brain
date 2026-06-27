@@ -62,19 +62,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    const refreshInterval = setInterval(async () => {
-      try {
-        const response = await apiCall('/api/auth/refresh', {
-          method: 'POST',
-        })
-        if (!response.ok) {
-          setIsAuthenticated(false)
-          setUser(null)
+    const refreshInterval = setInterval(
+      async () => {
+        try {
+          const response = await apiCall('/api/auth/refresh', {
+            method: 'POST',
+          })
+          if (!response.ok) {
+            setIsAuthenticated(false)
+            setUser(null)
+          }
+        } catch {
+          // Silent fail - token will be refreshed on next request
         }
-      } catch {
-        // Silent fail - token will be refreshed on next request
-      }
-    }, 14 * 60 * 1000) // 14 minutes
+      },
+      14 * 60 * 1000,
+    ) // 14 minutes
 
     return () => clearInterval(refreshInterval)
   }, [isAuthenticated])

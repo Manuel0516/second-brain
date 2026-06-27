@@ -19,9 +19,7 @@ beforeEach(() => {
         }),
       )
     }
-    return Promise.resolve(
-      new Response(JSON.stringify({}), { status: 200 }),
-    )
+    return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }))
   })
 })
 
@@ -29,8 +27,6 @@ test('renders the login page when not authenticated', async () => {
   render(<App />)
 
   await waitFor(() => {
-    expect(
-      screen.getByRole('heading', { name: 'Login' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
   })
 })
