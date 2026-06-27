@@ -1,5 +1,5 @@
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
 
 from app.config import get_settings
 
@@ -9,6 +9,13 @@ def create_database_engine() -> AsyncEngine:
 
 
 engine = create_database_engine()
+async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def get_async_session() -> AsyncSession:
+    """Dependency for getting an async database session."""
+    async with async_session_factory() as session:
+        yield session
 
 
 async def check_database() -> None:

@@ -1,5 +1,15 @@
 {
   "enabledPlugins": {
-    "ponytail@ponytail": true
-  }
+    "ponytail@ponytail": true,
+    "context-mode@context-mode": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    }
+  },
+  "enabledMcpjsonServers": ["context-mode"]
 }

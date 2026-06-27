@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { App } from './App'
 
@@ -8,26 +8,29 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('shows the application and reports a healthy API', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response('{}', { status: 200 }),
-  )
-
-  render(<App />)
-
-  expect(
-    screen.getByRole('heading', { name: 'Second Brain' }),
-  ).toBeInTheDocument()
-  expect(await screen.findByText('API ready')).toBeInTheDocument()
+beforeEach(() => {
+  // Mock the auth API call to simulate unauthenticated state
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.includes('/api/auth/me')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+        }),
+      )
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({}), { status: 200 }),
+    )
+  })
 })
 
-test('reports an unavailable API without hiding the application', async () => {
-  vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'))
-
+test('renders the login page when not authenticated', async () => {
   render(<App />)
 
-  expect(await screen.findByText('API unavailable')).toBeInTheDocument()
-  expect(
-    screen.getByRole('heading', { name: 'Second Brain' }),
-  ).toBeInTheDocument()
+  await waitFor(() => {
+    expect(
+      screen.getByRole('heading', { name: 'Login' }),
+    ).toBeInTheDocument()
+  })
 })
