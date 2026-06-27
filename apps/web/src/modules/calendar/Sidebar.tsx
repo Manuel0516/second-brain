@@ -1,103 +1,123 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { apiCall } from '../../lib/api'
+import type { CalendarData } from './types'
 
-interface Calendar {
-  id: string
-  name: string
-  color: string
-  is_visible: boolean
+interface Props {
+  calendars: CalendarData[]
+  onChanged: () => void
 }
 
-interface SidebarProps {
-  onVisibilityChange?: (calendarId: string, visible: boolean) => void
+async function errorMessage(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null)
+  if (typeof data?.detail === 'string') return data.detail
+  if (Array.isArray(data?.detail) && typeof data.detail[0]?.msg === 'string')
+    return data.detail[0].msg
+  return fallback
 }
 
-export function Sidebar({ onVisibilityChange }: SidebarProps) {
-  const [calendars, setCalendars] = useState<Calendar[]>([])
-  const [loading, setLoading] = useState(true)
-  const [visibleCalendars, setVisibleCalendars] = useState<Set<string>>(
-    new Set(),
-  )
+export function Sidebar({ calendars, onChanged }: Props) {
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [color, setColor] = useState('#8B5CF6')
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    const fetchCalendars = async () => {
-      setLoading(true)
-      try {
-        const response = await apiCall('/api/calendars')
-        if (response.ok) {
-          const data = await response.json()
-          setCalendars(data.calendars || [])
-          // Initialize visibility from server
-          const visible = new Set(
-            data.calendars
-              .filter((cal: Calendar) => cal.is_visible)
-              .map((cal: Calendar) => cal.id),
-          )
-          setVisibleCalendars(visible)
-        }
-      } catch {
-        // Handle error silently for MVP
-      } finally {
-        setLoading(false)
-      }
-    }
+  const patch = async (calendar: CalendarData, values: object) => {
+    setError('')
+    const response = await apiCall(`/api/calendars/${calendar.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    })
+    if (response.ok) onChanged()
+    else
+      setError(await errorMessage(response, 'Could not update the calendar.'))
+  }
 
-    fetchCalendars()
-  }, [])
-
-  const handleToggleVisibility = (calendarId: string, checked: boolean) => {
-    const newVisible = new Set(visibleCalendars)
-    if (checked) {
-      newVisible.add(calendarId)
-    } else {
-      newVisible.delete(calendarId)
-    }
-    setVisibleCalendars(newVisible)
-    onVisibilityChange?.(calendarId, checked)
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    const response = await apiCall('/api/calendars', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color }),
+    })
+    if (response.ok) {
+      setName('')
+      setAdding(false)
+      onChanged()
+    } else
+      setError(await errorMessage(response, 'Could not create the calendar.'))
   }
 
   return (
-    <aside className="hidden w-64 flex-shrink-0 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-6 sm:block">
-      <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-        Calendars
-      </h2>
-
-      {loading ? (
-        <div className="mt-6 flex justify-center">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
-        </div>
-      ) : calendars.length === 0 ? (
-        <p className="mt-4 text-sm text-[var(--text-tertiary)]">
-          No calendars yet
-        </p>
-      ) : (
-        <div className="mt-4 space-y-2">
-          {calendars.map((calendar) => (
-            <label
-              key={calendar.id}
-              className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-[var(--bg-base)]"
-            >
-              <input
-                type="checkbox"
-                checked={visibleCalendars.has(calendar.id)}
-                onChange={(e) =>
-                  handleToggleVisibility(calendar.id, e.target.checked)
-                }
-                className="h-4 w-4 cursor-pointer rounded border-[var(--border)] accent-[var(--accent)]"
-              />
-              <div className="flex flex-1 items-center gap-2">
-                <div
-                  className="h-3 w-3 flex-shrink-0 rounded-full"
-                  style={{ backgroundColor: calendar.color }}
-                />
-                <span className="text-sm font-medium text-[var(--text-primary)]">
-                  {calendar.name}
-                </span>
-              </div>
-            </label>
-          ))}
-        </div>
+    <aside className="calendar-sidebar">
+      <div className="sidebar-title">
+        <span>Calendars</span>
+        <button onClick={() => setAdding(!adding)} aria-label="Add calendar">
+          +
+        </button>
+      </div>
+      {adding && (
+        <form className="add-calendar" onSubmit={create}>
+          <input
+            required
+            placeholder="Calendar name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+          />
+          <button type="submit">Save</button>
+        </form>
       )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="calendar-list">
+        {calendars.map((calendar) => (
+          <div key={calendar.id} className="calendar-row">
+            <button
+              className="visibility"
+              aria-label={`${calendar.is_visible ? 'Hide' : 'Show'} ${calendar.name}`}
+              style={{
+                background: calendar.is_visible
+                  ? calendar.color
+                  : 'transparent',
+                borderColor: calendar.color,
+              }}
+              onClick={() =>
+                patch(calendar, { is_visible: !calendar.is_visible })
+              }
+            />
+            <input
+              aria-label={`${calendar.name} name`}
+              defaultValue={calendar.name}
+              onBlur={(e) =>
+                e.target.value.trim() &&
+                e.target.value !== calendar.name &&
+                patch(calendar, { name: e.target.value })
+              }
+            />
+            <input
+              aria-label={`${calendar.name} color`}
+              type="color"
+              value={calendar.color}
+              onChange={(e) => patch(calendar, { color: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="integration">
+        <span>Google Calendar</span>
+        <button disabled title="Google OAuth will be added in the sync phase">
+          Connect later
+        </button>
+      </div>
     </aside>
   )
 }

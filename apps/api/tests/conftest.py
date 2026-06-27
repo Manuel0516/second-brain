@@ -3,7 +3,12 @@ from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool
 
 from app.database import get_async_session
@@ -21,7 +26,7 @@ _test_counter = 0
 
 
 @pytest.fixture
-async def test_engine():
+async def test_engine() -> AsyncIterator[AsyncEngine]:
     """Create an in-memory SQLite database for testing."""
     global _test_counter
     _test_counter += 1
@@ -47,7 +52,7 @@ async def test_engine():
 
 
 @pytest.fixture
-async def test_db_session(test_engine):
+async def test_db_session(test_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     """Create a database session for testing."""
     async_session_factory = async_sessionmaker(
         test_engine,
@@ -60,7 +65,7 @@ async def test_db_session(test_engine):
 
 
 @pytest.fixture
-async def client(test_engine) -> AsyncIterator[AsyncClient]:
+async def client(test_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
     """Create a test client with a mocked database."""
     # Create a test session factory
     test_session_factory = async_sessionmaker(
@@ -69,7 +74,7 @@ async def client(test_engine) -> AsyncIterator[AsyncClient]:
         expire_on_commit=False,
     )
 
-    async def override_get_session():
+    async def override_get_session() -> AsyncIterator[AsyncSession]:
         async with test_session_factory() as session:
             yield session
 
@@ -77,6 +82,7 @@ async def client(test_engine) -> AsyncIterator[AsyncClient]:
 
     # Reset rate limiter for testing
     from app.dependencies import _login_attempts
+
     _login_attempts.clear()
 
     transport = ASGITransport(app=app)

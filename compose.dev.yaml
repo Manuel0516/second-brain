@@ -7,3 +7,11 @@ services:
     ports:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
+
+# Dev override (all platforms): the base `internal` network is `internal: true`,
+# which can block publishing db/minio ports to the host on some Docker backends
+# (e.g. Colima on macOS). Local dev needs them on localhost, so relax it here.
+# Production loads only the base compose, where the network stays internal.
+networks:
+  internal:
+    internal: false

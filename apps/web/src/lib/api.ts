@@ -26,7 +26,13 @@ export async function apiCall(
     credentials: 'include',
   })
 
-  if (response.status === 401) {
+  // A 401 from an auth endpoint is meaningful to the caller (not logged in,
+  // wrong credentials, or an expired refresh token). Silently refreshing and
+  // redirecting on those would loop the login probe, so only treat 401s from
+  // authenticated data requests as an expired session.
+  const isAuthEndpoint = endpoint.startsWith('/api/auth/')
+
+  if (response.status === 401 && !isAuthEndpoint) {
     const refreshed = await refresh()
     if (refreshed) {
       response = await fetch(endpoint, {

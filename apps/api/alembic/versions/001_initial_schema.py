@@ -1,8 +1,8 @@
 """Initial schema: users, login attempts, refresh tokens, calendars, and events."""
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # Alembic revision identifiers
 revision = "001"

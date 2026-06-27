@@ -20,12 +20,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          isAuthenticated ? <Navigate to="/calendar" replace /> : <Login />
-        }
-      />
+      <Route path="/login" element={<Login />} />
       <Route
         path="/calendar"
         element={
@@ -50,7 +45,9 @@ function AppRoutes() {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <AppRoutes />
     </BrowserRouter>
   )

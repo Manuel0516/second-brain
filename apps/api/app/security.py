@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import uuid4
 
 import jwt
 import pyotp
@@ -7,7 +8,6 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from app.config import get_settings
-
 
 _hasher = PasswordHasher()
 
@@ -29,7 +29,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def generate_jwt(user_id: str, token_type: str, expires_in_minutes: int) -> str:
     """Generate a JWT token."""
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=expires_in_minutes)
 
     payload = {
@@ -37,12 +37,13 @@ def generate_jwt(user_id: str, token_type: str, expires_in_minutes: int) -> str:
         "type": token_type,
         "iat": now,
         "exp": expires_at,
+        "jti": str(uuid4()),
     }
 
     return jwt.encode(payload, settings.jwt_secret_key, algorithm="HS256")
 
 
-def decode_jwt(token: str) -> dict:
+def decode_jwt(token: str) -> dict[str, Any]:
     """Decode and validate a JWT token."""
     settings = get_settings()
     try:

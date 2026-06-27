@@ -39,7 +39,7 @@ async def test_login_success(client: AsyncClient, test_user: User) -> None:
         json={
             "email": "test@example.com",
             "password": "testpassword123",
-        }
+        },
     )
 
     assert response.status_code == 200
@@ -57,7 +57,7 @@ async def test_login_invalid_credentials(client: AsyncClient, test_user: User) -
         json={
             "email": "test@example.com",
             "password": "wrongpassword",
-        }
+        },
     )
 
     assert response.status_code == 401
@@ -71,7 +71,7 @@ async def test_login_nonexistent_user(client: AsyncClient) -> None:
         json={
             "email": "nonexistent@example.com",
             "password": "testpassword123",
-        }
+        },
     )
 
     assert response.status_code == 401
@@ -86,7 +86,7 @@ async def test_get_me_authenticated(client: AsyncClient, test_user: User) -> Non
         json={
             "email": "test@example.com",
             "password": "testpassword123",
-        }
+        },
     )
     assert login_response.status_code == 200
 
@@ -95,10 +95,7 @@ async def test_get_me_authenticated(client: AsyncClient, test_user: User) -> Non
     assert access_token is not None
 
     # Make a new client with the token cookie
-    response = await client.get(
-        "/api/auth/me",
-        cookies={"access_token": access_token}
-    )
+    response = await client.get("/api/auth/me", cookies={"access_token": access_token})
 
     assert response.status_code == 200
     data = response.json()
@@ -122,7 +119,7 @@ async def test_logout(client: AsyncClient, test_user: User) -> None:
         json={
             "email": "test@example.com",
             "password": "testpassword123",
-        }
+        },
     )
     assert login_response.status_code == 200
 
@@ -133,8 +130,7 @@ async def test_logout(client: AsyncClient, test_user: User) -> None:
 
     # Then logout
     response = await client.post(
-        "/api/auth/logout",
-        cookies={"access_token": access_token, "refresh_token": refresh_token}
+        "/api/auth/logout", cookies={"access_token": access_token, "refresh_token": refresh_token}
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Logged out"
@@ -148,7 +144,7 @@ async def test_refresh_token(client: AsyncClient, test_user: User) -> None:
         json={
             "email": "test@example.com",
             "password": "testpassword123",
-        }
+        },
     )
     assert login_response.status_code == 200
 
@@ -156,10 +152,7 @@ async def test_refresh_token(client: AsyncClient, test_user: User) -> None:
     assert refresh_token is not None
 
     # Then refresh
-    response = await client.post(
-        "/api/auth/refresh",
-        cookies={"refresh_token": refresh_token}
-    )
+    response = await client.post("/api/auth/refresh", cookies={"refresh_token": refresh_token})
     assert response.status_code == 200
     assert "access_token" in response.cookies
     assert "refresh_token" in response.cookies
@@ -174,7 +167,7 @@ async def test_rate_limit(client: AsyncClient) -> None:
             json={
                 "email": "test@example.com",
                 "password": "wrongpassword",
-            }
+            },
         )
 
         if i < 5:

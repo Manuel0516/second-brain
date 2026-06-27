@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, status
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
-from app.database import check_database, async_session_factory
+from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
 from app.routes import auth, calendar
 from app.security import hash_password
@@ -70,6 +70,12 @@ async def ensure_initial_user() -> None:
         await session.flush()
 
         # Seed calendars
+        default_calendar = Calendar(
+            user_id=user.id,
+            name="Default",
+            color="#8B5CF6",  # Plum
+            is_visible=True,
+        )
         personal_calendar = Calendar(
             user_id=user.id,
             name="Personal",
@@ -82,8 +88,7 @@ async def ensure_initial_user() -> None:
             color="#004E89",  # Blue
             is_visible=True,
         )
-        session.add(personal_calendar)
-        session.add(work_calendar)
+        session.add_all([default_calendar, personal_calendar, work_calendar])
 
         await session.commit()
 
@@ -91,7 +96,7 @@ async def ensure_initial_user() -> None:
 async def cleanup_old_login_attempts() -> None:
     """Clean up login attempts older than 30 days."""
     async with async_session_factory() as session:
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+        cutoff_date = datetime.now(UTC) - timedelta(days=30)
         result = await session.execute(
             select(LoginAttempt).where(LoginAttempt.attempted_at < cutoff_date)
         )

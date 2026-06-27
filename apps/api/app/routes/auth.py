@@ -1,7 +1,8 @@
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,6 @@ from app.security import (
     generate_jwt,
     generate_totp_secret,
     get_totp_uri,
-    hash_password,
     verify_password,
     verify_totp,
 )
@@ -55,7 +55,7 @@ async def login(
     request: Request,
     payload: LoginRequest,
     session: AsyncSession = Depends(get_async_session),
-):
+) -> JSONResponse:
     """Login with email and password, optionally with TOTP code."""
     client_ip = get_client_ip(request)
 
@@ -137,14 +137,12 @@ async def login(
     refresh_token_obj = RefreshToken(
         user_id=user.id,
         token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days),
+        expires_at=datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days),
     )
     session.add(refresh_token_obj)
     await session.commit()
 
     # Return response with cookies
-    from fastapi.responses import JSONResponse
-
     response = JSONResponse(
         content={
             "id": user.id,
@@ -177,7 +175,7 @@ async def login(
 async def refresh(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
-):
+) -> JSONResponse:
     """Refresh access token using refresh token."""
     refresh_token = request.cookies.get("refresh_token")
 
@@ -206,14 +204,14 @@ async def refresh(
 
     # Check that token exists and is not revoked
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
-    result = await session.execute(
+    token_result = await session.execute(
         select(RefreshToken).where(
             RefreshToken.token_hash == token_hash,
             RefreshToken.revoked_at.is_(None),
-            RefreshToken.expires_at > datetime.now(timezone.utc),
+            RefreshToken.expires_at > datetime.now(UTC),
         )
     )
-    old_token = result.scalar_one_or_none()
+    old_token = token_result.scalar_one_or_none()
 
     if not old_token:
         raise HTTPException(
@@ -222,8 +220,8 @@ async def refresh(
         )
 
     # Get user
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user_result = await session.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
 
     if not user or not user.is_active:
         raise HTTPException(
@@ -232,7 +230,7 @@ async def refresh(
         )
 
     # Revoke old token
-    old_token.revoked_at = datetime.now(timezone.utc)
+    old_token.revoked_at = datetime.now(UTC)
 
     # Generate new tokens
     settings = get_settings()
@@ -252,14 +250,12 @@ async def refresh(
     refresh_token_obj = RefreshToken(
         user_id=user.id,
         token_hash=new_token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_token_expire_days),
+        expires_at=datetime.now(UTC) + timedelta(days=settings.jwt_refresh_token_expire_days),
     )
     session.add(refresh_token_obj)
     await session.commit()
 
     # Return response with new cookies
-    from fastapi.responses import JSONResponse
-
     response = JSONResponse(
         content={
             "id": user.id,
@@ -292,7 +288,7 @@ async def refresh(
 async def logout(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> JSONResponse:
     """Logout by revoking refresh token."""
     # Find and revoke all active refresh tokens for this user
     result = await session.execute(
@@ -304,13 +300,11 @@ async def logout(
     tokens = result.scalars().all()
 
     for token in tokens:
-        token.revoked_at = datetime.now(timezone.utc)
+        token.revoked_at = datetime.now(UTC)
 
     await session.commit()
 
     # Clear cookies
-    from fastapi.responses import JSONResponse
-
     response = JSONResponse(
         content={"message": "Logged out"},
         status_code=status.HTTP_200_OK,
@@ -321,7 +315,7 @@ async def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(user: User = Depends(get_current_user)) -> UserResponse:
     """Get current user info."""
     return UserResponse(
         id=user.id,
@@ -332,7 +326,7 @@ async def get_me(user: User = Depends(get_current_user)):
 
 
 @router.post("/totp/setup", response_model=TOTPSetupResponse)
-async def setup_totp(user: User = Depends(get_current_user)):
+async def setup_totp(user: User = Depends(get_current_user)) -> TOTPSetupResponse:
     """Get TOTP setup URI for 2FA."""
     secret = generate_totp_secret()
     uri = get_totp_uri(user.email, secret)
@@ -344,7 +338,7 @@ async def verify_totp_code(
     payload: TOTPVerifyRequest,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> None:
     """Verify TOTP code and enable 2FA."""
     # For MVP, we don't store the secret yet
     # This would be Phase 2 when we add encryption
@@ -358,7 +352,7 @@ async def verify_totp_code(
 async def disable_totp(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-):
+) -> None:
     """Disable 2FA."""
     # For MVP, we don't support this yet
     raise HTTPException(

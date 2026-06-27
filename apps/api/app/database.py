@@ -1,5 +1,12 @@
+from collections.abc import AsyncIterator
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.config import get_settings
 
@@ -12,7 +19,7 @@ engine = create_database_engine()
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-async def get_async_session() -> AsyncSession:
+async def get_async_session() -> AsyncIterator[AsyncSession]:
     """Dependency for getting an async database session."""
     async with async_session_factory() as session:
         yield session

@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +8,6 @@ from app.database import get_async_session
 from app.models import User
 from app.security import decode_jwt
 
-
 # In-memory rate limiter: {ip: [timestamp1, timestamp2, ...]}
 _login_attempts: dict[str, list[datetime]] = {}
 
@@ -17,7 +15,7 @@ _login_attempts: dict[str, list[datetime]] = {}
 def check_rate_limit(ip_address: str) -> bool:
     """Check if an IP has exceeded login rate limit. Returns True if within limit."""
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     window = timedelta(minutes=settings.login_rate_limit_window_minutes)
 
     if ip_address not in _login_attempts:
@@ -25,8 +23,7 @@ def check_rate_limit(ip_address: str) -> bool:
 
     # Clean old attempts outside the window
     _login_attempts[ip_address] = [
-        attempt for attempt in _login_attempts[ip_address]
-        if now - attempt < window
+        attempt for attempt in _login_attempts[ip_address] if now - attempt < window
     ]
 
     # Check if we've exceeded the limit
@@ -46,7 +43,7 @@ def get_client_ip(request: Request) -> str:
 
 
 async def get_current_user(
-    access_token: Optional[str] = Cookie(None),
+    access_token: str | None = Cookie(None),
     session: AsyncSession = Depends(get_async_session),
 ) -> User:
     """Extract current user from JWT access token cookie."""

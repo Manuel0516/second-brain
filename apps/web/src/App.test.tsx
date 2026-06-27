@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { App } from './App'
+import { AuthProvider } from './context/AuthContext'
 
 afterEach(() => {
   cleanup()
@@ -24,9 +25,15 @@ beforeEach(() => {
 })
 
 test('renders the login page when not authenticated', async () => {
-  render(<App />)
+  render(
+    <AuthProvider>
+      <App />
+    </AuthProvider>,
+  )
 
   await waitFor(() => {
-    expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Second Brain' }),
+    ).toBeInTheDocument()
   })
 })

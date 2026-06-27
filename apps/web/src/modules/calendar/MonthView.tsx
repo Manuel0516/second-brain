@@ -1,204 +1,156 @@
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  startOfWeek,
-  endOfWeek,
-  isSameMonth,
-  addMonths,
-  subMonths,
-} from 'date-fns'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiCall } from '../../lib/api'
-import { EventDetail } from './EventDetail'
+import type { CalendarData, CalendarEvent } from './types'
 
-interface CalendarEvent {
-  id: string
-  title: string
-  description?: string
-  start_at: string
-  end_at: string
-  all_day: boolean
-  color_override?: string
-  calendar: {
-    id: string
-    name: string
-    color: string
-  }
+interface Props {
+  monthDate: Date
+  calendars: CalendarData[]
+  refresh: number
+  onCreate: (start: Date) => void
+  onEdit: (event: CalendarEvent) => void
+  draftEvent?: Partial<CalendarEvent> | null
 }
 
-interface MonthViewProps {
-  onNavigate?: (date: Date) => void
+const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+// Six Monday-first weeks covering the month the date falls in.
+function monthGrid(monthDate: Date): Date[] {
+  const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+  const offset = (first.getDay() + 6) % 7 // Monday = 0
+  const start = new Date(first)
+  start.setDate(first.getDate() - offset)
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
+    return d
+  })
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-export function MonthView({ onNavigate }: MonthViewProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
+export function MonthView({
+  monthDate,
+  calendars,
+  refresh,
+  onCreate,
+  onEdit,
+  draftEvent,
+}: Props) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const cells = useMemo(() => monthGrid(monthDate), [monthDate])
+  const month = monthDate.getMonth()
+  const today = new Date()
 
-  const monthStart = startOfMonth(currentDate)
-  const monthEnd = endOfMonth(currentDate)
-  const calendarStart = startOfWeek(monthStart)
-  const calendarEnd = endOfWeek(monthEnd)
-
-  const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
-
-  // Fetch events for the month
   useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true)
-      try {
-        const from = calendarStart.toISOString().split('T')[0]
-        const to = calendarEnd.toISOString().split('T')[0]
-        const response = await apiCall(`/api/events?from=${from}&to=${to}`)
-        if (response.ok) {
-          const data = await response.json()
-          setEvents(data.events || [])
-        }
-      } catch {
-        // Handle error silently for MVP
-      } finally {
-        setLoading(false)
-      }
-    }
+    const from = cells[0]
+    const to = new Date(cells[cells.length - 1])
+    to.setDate(to.getDate() + 1)
+    apiCall(
+      `/api/events?from_date=${from.toISOString()}&to_date=${to.toISOString()}`,
+    )
+      .then(async (response) => response.ok && setEvents(await response.json()))
+      .catch(() => setEvents([]))
+  }, [cells, refresh])
 
-    fetchEvents()
-  }, [currentDate])
+  const weeks = useMemo(
+    () => Array.from({ length: 6 }, (_, w) => cells.slice(w * 7, w * 7 + 7)),
+    [cells],
+  )
 
-  const handlePrevMonth = () => {
-    const newDate = subMonths(currentDate, 1)
-    setCurrentDate(newDate)
-    onNavigate?.(newDate)
-  }
+  const previewEvents = draftEvent?.start_at
+    ? [
+        ...events.filter(
+          (event) => !draftEvent.id || event.id !== draftEvent.id,
+        ),
+        {
+          id: draftEvent.id ?? '__draft__',
+          calendar_id: draftEvent.calendar_id ?? '',
+          title: draftEvent.title || 'Untitled event',
+          start_at: draftEvent.start_at,
+          end_at: draftEvent.end_at ?? draftEvent.start_at,
+          all_day: draftEvent.all_day ?? false,
+          timezone:
+            draftEvent.timezone ??
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
+          color_override: draftEvent.color_override,
+        } satisfies CalendarEvent,
+      ]
+    : events
 
-  const handleNextMonth = () => {
-    const newDate = addMonths(currentDate, 1)
-    setCurrentDate(newDate)
-    onNavigate?.(newDate)
-  }
-
-  const getEventsForDay = (day: Date): CalendarEvent[] => {
-    const dayStr = format(day, 'yyyy-MM-dd')
-    return events.filter((event) => {
-      const eventStart = event.start_at.split('T')[0]
-      const eventEnd = event.end_at.split('T')[0]
-      return eventStart <= dayStr && dayStr <= eventEnd
-    })
-  }
+  const eventsFor = (day: Date) =>
+    previewEvents
+      .filter((event) => sameDay(new Date(event.start_at), day))
+      .sort((a, b) => a.start_at.localeCompare(b.start_at))
 
   return (
-    <div className="flex-1 space-y-4">
-      {/* Header with navigation */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {format(currentDate, 'MMMM yyyy')}
-        </h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handlePrevMonth}
-            className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-          >
-            Today
-          </button>
-          <button
-            onClick={handleNextMonth}
-            className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-elevated)]"
-          >
-            Next
-          </button>
-        </div>
+    <div className="month-view">
+      <div className="month-weekdays">
+        {WEEKDAYS.map((label, i) => (
+          <div key={label} className={i >= 5 ? 'weekend' : ''}>
+            {label}
+          </div>
+        ))}
       </div>
-
-      {/* Calendar grid */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 gap-0 border-b border-[var(--border)]">
-          {WEEKDAYS.map((day) => (
-            <div
-              key={day}
-              className="border-r border-[var(--border)] px-4 py-3 text-center text-sm font-medium text-[var(--text-secondary)] last:border-r-0"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Days grid */}
-        <div className="grid grid-cols-7 gap-0">
-          {days.map((day) => {
-            const dayEvents = getEventsForDay(day)
-            const isCurrentMonth = isSameMonth(day, currentDate)
-            const isToday =
-              format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-
-            return (
-              <div
-                key={format(day, 'yyyy-MM-dd')}
-                className={`min-h-24 border-r border-b border-[var(--border)] p-2 last:border-r-0 ${
-                  isCurrentMonth
-                    ? 'bg-[var(--bg-base)]'
-                    : 'bg-[var(--bg-raised)]'
-                } ${isToday ? 'ring-1 ring-inset ring-[var(--accent)]' : ''}`}
-              >
+      <div className="month-grid">
+        {weeks.map((week, wi) => (
+          <div className="month-week" key={wi}>
+            {week.map((day) => {
+              const outside = day.getMonth() !== month
+              const isToday = sameDay(day, today)
+              const dayEvents = eventsFor(day)
+              return (
                 <div
-                  className={`mb-2 text-sm font-medium ${
-                    isCurrentMonth
-                      ? 'text-[var(--text-primary)]'
-                      : 'text-[var(--text-tertiary)]'
-                  }`}
+                  key={day.toISOString()}
+                  className={`month-cell ${outside ? 'outside' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Create event on ${day.toDateString()}`}
+                  onClick={() => onCreate(day)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onCreate(day)
+                    }
+                  }}
                 >
-                  {format(day, 'd')}
-                </div>
-
-                <div className="space-y-1">
-                  {dayEvents.slice(0, 3).map((event) => (
-                    <button
-                      key={event.id}
-                      onClick={() => setSelectedEvent(event)}
-                      className="block w-full truncate rounded text-xs px-2 py-1 text-left font-medium text-white transition-opacity hover:opacity-80"
-                      style={{
-                        backgroundColor:
-                          event.color_override || event.calendar.color,
-                      }}
-                      title={event.title}
-                    >
-                      {event.title}
-                    </button>
-                  ))}
+                  <div
+                    className={`month-daynum ${isToday ? 'today' : ''} ${
+                      isWeekend(day) && !isToday ? 'weekend' : ''
+                    }`}
+                  >
+                    {day.getDate()}
+                  </div>
+                  {dayEvents.slice(0, 3).map((event) => {
+                    const calendar = calendars.find(
+                      (item) => item.id === event.calendar_id,
+                    )
+                    const color =
+                      event.color_override || calendar?.color || '#5B8AFD'
+                    return (
+                      <button
+                        key={`${event.id}-${event.start_at}`}
+                        className={`month-event ${event.id === '__draft__' ? 'draft' : ''}`}
+                        style={{ background: `${color}22`, color }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEdit(event)
+                        }}
+                      >
+                        {event.title}
+                      </button>
+                    )
+                  })}
                   {dayEvents.length > 3 && (
-                    <div className="text-xs text-[var(--text-tertiary)] px-2">
+                    <div className="month-more">
                       +{dayEvents.length - 3} more
                     </div>
                   )}
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        ))}
       </div>
-
-      {loading && (
-        <div className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
-        </div>
-      )}
-
-      {selectedEvent && (
-        <EventDetail
-          event={selectedEvent}
-          onClose={() => setSelectedEvent(null)}
-        />
-      )}
     </div>
   )
 }
