@@ -32,12 +32,14 @@ class LoginResponse(BaseModel):
     id: str
     email: str
     is_active: bool
+    totp_enabled: bool
 
 
 class UserResponse(BaseModel):
     id: str
     email: str
     is_active: bool
+    totp_enabled: bool
 
 
 class TOTPSetupResponse(BaseModel):
@@ -148,6 +150,7 @@ async def login(
             "id": user.id,
             "email": user.email,
             "is_active": user.is_active,
+            "totp_enabled": user.totp_secret is not None,
         },
         status_code=status.HTTP_200_OK,
     )
@@ -262,6 +265,7 @@ async def refresh(
             "id": user.id,
             "email": user.email,
             "is_active": user.is_active,
+            "totp_enabled": user.totp_secret is not None,
         },
         status_code=status.HTTP_200_OK,
     )
@@ -323,6 +327,7 @@ async def get_me(user: User = Depends(get_current_user)):
         id=user.id,
         email=user.email,
         is_active=user.is_active,
+        totp_enabled=user.totp_secret is not None,
     )
 
 

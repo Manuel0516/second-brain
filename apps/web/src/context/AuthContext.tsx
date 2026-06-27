@@ -37,7 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const response = await apiCall('/api/auth/me')
         if (response.ok) {
           const data = await response.json()
-          setUser(data.user)
+          setUser({
+            id: data.id,
+            email: data.email,
+          })
           setIsAuthenticated(true)
           setTotpEnabled(data.totp_enabled ?? false)
         } else {
@@ -82,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     totp?: string,
   ): Promise<string> => {
     const payload: Record<string, string> = { email, password }
-    if (totp) payload.totp = totp
+    if (totp) payload.totp_code = totp
 
     const response = await apiCall('/api/auth/login', {
       method: 'POST',
@@ -92,14 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!response.ok) {
       const error = await response.json()
-      if (error.code === 'totp_required') {
+      if (error.detail === 'TOTP code required') {
         return 'totp_required'
       }
-      throw new Error(error.message || 'Login failed')
+      throw new Error(error.detail || 'Login failed')
     }
 
     const data = await response.json()
-    setUser(data.user)
+    setUser({
+      id: data.id,
+      email: data.email,
+    })
     setIsAuthenticated(true)
     setTotpEnabled(data.totp_enabled ?? false)
     return 'success'
