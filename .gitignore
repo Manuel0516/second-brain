@@ -1,5 +1,8 @@
 .env
+.env.*
+!.env.example
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 .mypy_cache/
@@ -8,9 +11,16 @@ __pycache__/
 .coverage
 node_modules/
 dist/
+build/
+target/
 coverage/
+logs/
 *.tsbuildinfo
 *.log
+*.jsonl
+*.sqlite
+*.sqlite3
+*.db
 .DS_Store
 .idea/
 .vscode/

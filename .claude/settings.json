@@ -11,5 +11,26 @@
       }
     }
   },
-  "enabledMcpjsonServers": ["context-mode"]
+  "enabledMcpjsonServers": ["context-mode"],
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./node_modules/**)",
+      "Read(./dist/**)",
+      "Read(./build/**)",
+      "Read(./target/**)",
+      "Read(./coverage/**)",
+      "Read(./logs/**)",
+      "Read(./docs/design/design-canvas/**)",
+      "Read(./**/*.lock)",
+      "Read(./package-lock.json)",
+      "Read(./pnpm-lock.yaml)",
+      "Read(./yarn.lock)",
+      "Read(./**/*.csv)",
+      "Read(./**/*.jsonl)",
+      "Read(./**/*.sqlite*)",
+      "Read(./**/*.db)"
+    ]
+  }
 }

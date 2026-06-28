@@ -4,9 +4,12 @@
 
 1. Read `docs/CONTEXT.md`, then open only the specification mapped to the task.
 2. Before changing a subtree, read its nearest `AGENTS.md`.
-3. Search with `rg`/`rg --files` and inspect only files on the execution path. Never bulk-read all specs or source files.
-4. Read the Design Canvas export only for explicit frontend or visual-design work.
-5. For cross-cutting work, add only the directly affected adjacent specification.
+3. Before editing, name the exact files needed and why. Start with filenames, imports, and `rg`; inspect only files on the execution path.
+4. Read files in targeted ranges. Do not scan the repository or bulk-read specifications or source files.
+5. Do not read generated files, dependency folders, lockfiles, build output, logs, datasets, or local secrets unless the task explicitly requires one.
+6. Read the Design Canvas export only for explicit frontend or visual-design work.
+7. For cross-cutting work, add only the directly affected adjacent specification.
+8. If more than eight files are needed, summarize current findings and justify the expanded context before reading more.
 
 ## Context management
 
@@ -49,4 +52,5 @@ Available context-mode skills: `/ctx-search`, `/ctx-stats`, `/ctx-insight`, `/ct
 - Specialists return concise evidence and do not expand into adjacent subsystems.
 - Update `docs/ROADMAP.md` only after verification. Create an ADR only for a durable, hard-to-reverse decision.
 - Run `npm run check` before declaring implementation complete.
+- Finish with a concise summary of changed files, verification run, and any remaining work.
 - Do not deploy, push, publish images, or mutate the VPS unless explicitly requested.

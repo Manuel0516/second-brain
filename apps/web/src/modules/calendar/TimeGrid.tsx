@@ -7,6 +7,7 @@ import {
   resizeIsoRange,
   shiftIsoRange,
 } from './time'
+import { occurrenceKey } from './types'
 import type { CalendarData, CalendarEvent } from './types'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -77,7 +78,7 @@ function dateAtMinute(day: Date, minute: number) {
 // horizontal offset level so the shorter event sits slightly right and on top.
 function overlapOffsets(events: CalendarEvent[]) {
   const meta = events.map((event) => ({
-    id: event.id,
+    id: occurrenceKey(event),
     start: new Date(event.start_at).getTime(),
     end: new Date(event.end_at).getTime(),
   }))
@@ -109,7 +110,7 @@ export function TimeGrid({
 }: Props) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [newSelection, setNewSelection] = useState<NewSelection | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [interactionError, setInteractionError] = useState('')
   const [nowMinute, setNowMinute] = useState(() => {
@@ -120,7 +121,7 @@ export function TimeGrid({
   const allDayDragRef = useRef<AllDayDrag | null>(null)
   const selectionRef = useRef<NewSelection | null>(null)
   const gestureRef = useRef<Gesture | null>(null)
-  const clipboardRef = useRef<string[]>([])
+  const clipboardRef = useRef<CalendarEvent[]>([])
   const pasteTargetRef = useRef<Date | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const didInitialScroll = useRef(false)
@@ -194,9 +195,7 @@ export function TimeGrid({
 
   const pasteEvents = useCallback(async () => {
     if (!clipboardRef.current.length) return
-    const copied = events.filter((event) =>
-      clipboardRef.current.includes(event.id),
-    )
+    const copied = clipboardRef.current
     const firstStart = copied.length
       ? new Date(
           Math.min(
@@ -212,7 +211,7 @@ export function TimeGrid({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        event_ids: clipboardRef.current,
+        event_ids: [...new Set(copied.map((event) => event.id))],
         target_start: target.toISOString(),
       }),
     })
@@ -221,19 +220,21 @@ export function TimeGrid({
       return
     }
     const created: CalendarEvent[] = await response.json()
-    setSelectedIds(new Set(created.map((event) => event.id)))
+    setSelectedKeys(new Set(created.map(occurrenceKey)))
     pasteTargetRef.current = new Date(target.getTime() + 24 * 60 * 60 * 1000)
     loadEvents()
-  }, [events, loadEvents])
+  }, [loadEvents])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return
-      if (event.key === 'Escape') setSelectedIds(new Set())
+      if (event.key === 'Escape') setSelectedKeys(new Set())
       if (!(event.metaKey || event.ctrlKey)) return
-      if (event.key.toLowerCase() === 'c' && selectedIds.size) {
+      if (event.key.toLowerCase() === 'c' && selectedKeys.size) {
         event.preventDefault()
-        clipboardRef.current = [...selectedIds]
+        clipboardRef.current = events.filter((candidate) =>
+          selectedKeys.has(occurrenceKey(candidate)),
+        )
         pasteTargetRef.current = null
       }
       if (event.key.toLowerCase() === 'v' && clipboardRef.current.length) {
@@ -243,7 +244,7 @@ export function TimeGrid({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pasteEvents, selectedIds])
+  }, [events, pasteEvents, selectedKeys])
 
   const updateNewSelection = (next: NewSelection | null) => {
     selectionRef.current = next
@@ -259,7 +260,7 @@ export function TimeGrid({
       rowHeight,
     )
     pasteTargetRef.current = dateAtMinute(day, minute)
-    setSelectedIds(new Set())
+    setSelectedKeys(new Set())
     column.setPointerCapture(event.pointerId)
     updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
   }
@@ -308,29 +309,25 @@ export function TimeGrid({
   ) => {
     if (pointer.button !== 0) return
     pointer.stopPropagation()
-    if (pointer.metaKey || pointer.ctrlKey) {
+    if (pointer.shiftKey || pointer.metaKey || pointer.ctrlKey) {
       if (mode === 'move') {
-        setSelectedIds((current) => {
+        setSelectedKeys((current) => {
           const next = new Set(current)
-          if (next.has(event.id)) next.delete(event.id)
-          else next.add(event.id)
+          const key = occurrenceKey(event)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
           return next
         })
       }
       return
     }
-    const ids = selectedIds.has(event.id) ? selectedIds : new Set([event.id])
-    setSelectedIds(ids)
+    const key = occurrenceKey(event)
+    const keys = selectedKeys.has(key) ? selectedKeys : new Set([key])
+    setSelectedKeys(keys)
     const selectedEvents =
       mode === 'resize'
         ? [event]
-        : [
-            ...new Map(
-              events
-                .filter((candidate) => ids.has(candidate.id))
-                .map((candidate) => [candidate.id, candidate]),
-            ).values(),
-          ]
+        : events.filter((candidate) => keys.has(occurrenceKey(candidate)))
     const column = pointer.currentTarget.closest('.day-column') as HTMLElement
     pointer.currentTarget.setPointerCapture(pointer.pointerId)
     setCurrentGesture({
@@ -531,6 +528,9 @@ export function TimeGrid({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ...(event.rrule
+          ? { scope: 'this', occurrence_start: event.start_at }
+          : {}),
         all_day: false,
         start_at: start.toISOString(),
         end_at: end.toISOString(),
@@ -757,7 +757,8 @@ export function TimeGrid({
                 const start = new Date(event.start_at)
                 const end = new Date(event.end_at)
                 const color = colorFor(event)
-                const offset = offsets.get(event.id) ?? 0
+                const key = occurrenceKey(event)
+                const offset = offsets.get(key) ?? 0
                 const top =
                   (start.getHours() + start.getMinutes() / 60) * rowHeight
                 const height = Math.max(
@@ -771,13 +772,14 @@ export function TimeGrid({
                 const isPast =
                   sameDay(day, today) &&
                   end.getHours() * 60 + end.getMinutes() <= nowMinute
-                const isSelected = selectedIds.has(event.id)
+                const isSelected = selectedKeys.has(key)
                 const isMoving =
                   gesture?.mode === 'move' &&
-                  gesture.events.some((item) => item.id === event.id)
+                  gesture.events.some((item) => occurrenceKey(item) === key)
                 const isResizing =
                   gesture?.mode === 'resize' &&
-                  gesture.events[0]?.id === event.id
+                  gesture.events[0] &&
+                  occurrenceKey(gesture.events[0]) === key
                 return (
                   <button
                     key={`${event.id}-${event.start_at}`}

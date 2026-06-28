@@ -6,6 +6,17 @@ import {
   resizeIsoRange,
   shiftIsoRange,
 } from './time'
+import { occurrenceKey } from './types'
+
+describe('occurrenceKey', () => {
+  it('distinguishes expanded occurrences that share a series id', () => {
+    expect(
+      occurrenceKey({ id: 'series-1', start_at: '2026-06-27T10:00:00Z' }),
+    ).not.toBe(
+      occurrenceKey({ id: 'series-1', start_at: '2026-07-04T10:00:00Z' }),
+    )
+  })
+})
 
 describe('minuteAtPointer', () => {
   it('maps the pointer to a precise minute and clamps it to the day', () => {

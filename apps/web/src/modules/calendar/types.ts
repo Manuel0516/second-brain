@@ -50,3 +50,6 @@ export interface CalendarEvent {
   recurrence_until?: string | null
   connections?: EventConnections
 }
+
+export const occurrenceKey = (event: Pick<CalendarEvent, 'id' | 'start_at'>) =>
+  `${event.id}:${event.start_at}`
