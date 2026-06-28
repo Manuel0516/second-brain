@@ -8,7 +8,9 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 
-  --font-ui: 'Inter', system-ui, sans-serif;
+  /* 'Symbols Nerd Font' is unicode-range-scoped to PUA codepoints, so it only
+     ever supplies Nerd glyphs — normal text always falls to Inter. */
+  --font-ui: 'Inter', 'Symbols Nerd Font', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   /* surfaces */
@@ -90,6 +92,19 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+/* Nerd Font symbols. unicode-range limits this to Private-Use-Area codepoints,
+   so the file is only fetched when an actual Nerd glyph is rendered — normal
+   text and standard emoji never trigger the download. */
+@font-face {
+  font-family: 'Symbols Nerd Font';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@v3.3.0/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFont-Regular.ttf')
+    format('truetype');
+  unicode-range: U+E000-F8FF, U+F0000-FFFFD, U+100000-10FFFD;
 }
 
 ::-webkit-scrollbar {
@@ -198,16 +213,51 @@ textarea {
     transform: rotate(360deg);
   }
 }
+@keyframes backdropFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 @keyframes dash {
   to {
     stroke-dashoffset: 0;
   }
 }
 
-/* global press feel — matches design canvas */
-button:active {
+/* global hover lift + press feel — matches design canvas */
+button {
+  transition:
+    transform 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.14s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+button:not(.calendar-event):not(:disabled):hover {
+  transform: translateY(-1px);
+}
+button:not(.calendar-event):active {
   transform: scale(0.93) !important;
   transition: transform 0.08s !important;
+}
+/* Buttons that define their own transition still get the lift animated. */
+.event-editor footer button,
+.cal-card-actions button,
+.cal-card-close,
+.editor-close,
+.calendar-chip,
+.integration-button,
+.color-clear {
+  transition:
+    transform 0.14s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .calendar-sidebar {
@@ -216,7 +266,23 @@ button:active {
   padding: 20px 14px;
   border-right: 1px solid var(--border);
   background: var(--bg-base);
-  overflow-y: auto;
+  overflow: hidden auto;
+  transition:
+    width 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Desktop: collapse to zero width. */
+.calendar-sidebar.closed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right-width: 0;
+  opacity: 0;
+}
+.sidebar-backdrop {
+  display: none;
 }
 .sidebar-title {
   display: flex;
@@ -228,9 +294,16 @@ button:active {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.sidebar-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 .sidebar-title button {
   width: 32px;
   height: 32px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -238,31 +311,192 @@ button:active {
   cursor: pointer;
   font-size: 20px;
 }
+.sidebar-title button:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+/* Close button only shows in the mobile overlay drawer. */
+.sidebar-close {
+  display: none;
+}
 .calendar-list {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 .calendar-row {
+  position: relative;
   min-height: 40px;
   display: grid;
-  grid-template-columns: 18px 1fr 30px;
+  grid-template-columns: 18px 1fr 26px;
   gap: 8px;
   align-items: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  transition: background 0.14s;
+}
+.calendar-row:hover {
+  background: rgba(255, 240, 200, 0.04);
 }
 .calendar-row .visibility {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border: 2px solid;
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 0;
   cursor: pointer;
+  transition:
+    background 0.14s,
+    transform 0.1s;
+  position: relative;
 }
-.calendar-row input:not([type='color']) {
+/* Checkmark when the calendar is visible (filled swatch). */
+.calendar-row .visibility:not([style*='transparent'])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: no-repeat center/9px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23131210' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.8'/%3E%3C/svg%3E");
+}
+.calendar-name {
   min-width: 0;
-  border: 0;
-  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-primary);
-  padding: 6px;
+  font-size: 13px;
+}
+.calendar-menu-btn {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.14s,
+    background 0.14s,
+    color 0.14s;
+}
+.calendar-row:hover .calendar-menu-btn,
+.calendar-menu-btn[aria-expanded='true'],
+.calendar-menu-btn:focus-visible {
+  opacity: 1;
+}
+.calendar-menu-btn:hover,
+.calendar-menu-btn[aria-expanded='true'] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.calendar-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.calendar-menu {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 0;
+  right: 0;
+  z-index: 31;
+  margin-bottom: 0;
+}
+
+/* Calendar create/edit card — mirrors the event editor card style. */
+.cal-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 120ms ease-out both;
+}
+.cal-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cal-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cal-card-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cal-card-close:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.cal-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cal-field input:not([type='color']) {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: 400 13px var(--font-ui);
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 8px 10px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.cal-field input:not([type='color']):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.cal-card-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.cal-card-actions button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cal-card-actions .ghost {
+  background: transparent;
+}
+.cal-card-actions .primary {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--accent);
+  font-weight: 600;
 }
 input[type='color'] {
   width: 30px;
@@ -272,33 +506,85 @@ input[type='color'] {
   padding: 3px;
   cursor: pointer;
 }
-.add-calendar {
-  display: grid;
-  grid-template-columns: 1fr 34px;
-  gap: 6px;
-  padding-bottom: 12px;
-}
-.add-calendar input:first-child {
-  min-width: 0;
-}
-.add-calendar button {
-  grid-column: 1 / -1;
-}
 .integration {
   margin-top: 24px;
   padding-top: 18px;
   border-top: 1px solid var(--border);
   display: grid;
   gap: 10px;
+}
+.integration-title {
+  color: var(--text-tertiary);
+  font: 600 11px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.integration-button {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
   color: var(--text-secondary);
   font-size: 12px;
+  cursor: pointer;
+  text-align: left;
 }
-.integration button {
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-elevated);
+.integration-button:not(:disabled):hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.integration-button:disabled {
+  cursor: default;
+}
+.integration-icon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font: 700 13px var(--font-ui);
+}
+.integration-label {
+  flex: 1;
+  min-width: 0;
+}
+.integration-status {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--bg-raised);
   color: var(--text-tertiary);
+  font: 600 9px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@keyframes daySlideRight {
+  from {
+    opacity: 0.35;
+    transform: translateX(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes daySlideLeft {
+  from {
+    opacity: 0.35;
+    transform: translateX(-26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .week-scroll {
@@ -357,6 +643,58 @@ input[type='color'] {
   background: var(--accent-tint);
   color: var(--accent);
 }
+.allday-band {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 0 4px;
+}
+.allday-band:empty {
+  display: none;
+}
+.allday-event {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 4px;
+  font: 500 10px/1.4 var(--font-ui);
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+}
+.allday-event:active {
+  cursor: grabbing;
+}
+.allday-event.draft {
+  opacity: 0.7;
+  border-style: dashed;
+}
+/* Floating preview while dragging an all-day chip into the grid. */
+.allday-drag-ghost {
+  position: fixed;
+  z-index: 40;
+  transform: translate(8px, 8px);
+  max-width: 160px;
+  padding: 3px 8px;
+  border-left: 3px solid;
+  border-radius: 5px;
+  font: 500 11px/1.3 var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
 .time-grid > div {
   position: relative;
 }
@@ -377,8 +715,13 @@ input[type='color'] {
   border-left-color: var(--accent-tint-border);
   background: color-mix(in srgb, var(--accent) 1.5%, transparent);
 }
+/* Subtle weekend cue that doesn't dim the events inside the column. */
 .day-column.weekend-column {
-  opacity: 0.6;
+  background: rgba(0, 0, 0, 0.12);
+}
+/* Events already finished earlier today read as muted. */
+.calendar-event.past:not(.selected) {
+  opacity: 0.5;
 }
 .now-line {
   position: absolute;
@@ -445,23 +788,39 @@ input[type='color'] {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 5px 7px;
+  padding: 4px 7px;
   border: 0;
   border-left: 3px solid;
   border-radius: 5px;
   text-align: left;
   cursor: pointer;
   transition:
-    transform 150ms ease,
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    left 150ms ease,
     box-shadow 150ms ease;
+}
+.calendar-event.dragging {
+  transition:
+    transform 55ms linear,
+    height 55ms linear;
+}
+.calendar-event.settling {
+  z-index: 8;
 }
 .calendar-event:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
+/* Selected — solid colored fill, no border. currentColor is the event color. */
 .calendar-event.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  background: currentColor !important;
+  box-shadow: var(--shadow-md);
+}
+.calendar-event.selected strong,
+.calendar-event.selected span {
+  color: #fff;
+  opacity: 1;
 }
 .calendar-event.draft,
 .month-event.draft {
@@ -470,8 +829,8 @@ input[type='color'] {
 }
 .calendar-event.dragging {
   z-index: 8;
-  opacity: 0.82;
   cursor: grabbing;
+  box-shadow: var(--shadow-md);
 }
 .event-resize-handle {
   position: absolute;
@@ -498,11 +857,39 @@ input[type='color'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-primary);
+  opacity: 0.98;
   font-size: 11px;
+  line-height: 1.25;
+  transition: font-size 130ms ease;
 }
-.calendar-event span {
+/* Time label only — the title/icon spans live inside <strong>. */
+.calendar-event > span {
   font: 9px var(--font-mono);
-  opacity: 0.8;
+  color: var(--text-primary);
+  opacity: 0.86;
+}
+/* Short events: tighten padding and shrink the title so it stays visible. */
+.calendar-event.compact {
+  padding: 0 7px;
+  justify-content: center;
+  gap: 3px;
+}
+.calendar-event.compact strong {
+  font-size: 9px;
+  line-height: 1;
+}
+/* Title-only band: time has just dropped, so the title gets a touch larger to
+   fill the freed space, then shrinks again as the event keeps getting smaller. */
+.calendar-event.solo strong {
+  font-size: 10.5px;
+}
+.calendar-event.tiny {
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.calendar-event.tiny strong {
+  display: none;
 }
 
 /* ── Month view ── */
@@ -593,6 +980,7 @@ input[type='color'] {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  color: var(--text-primary) !important;
   transition: filter 0.15s;
 }
 .month-event:hover {
@@ -611,13 +999,323 @@ input[type='color'] {
   display: flex;
   justify-content: flex-end;
   background: rgba(0, 0, 0, 0.5);
+  animation: editorBackdropIn 300ms ease both;
+}
+@keyframes editorBackdropIn {
+  from {
+    background: transparent;
+  }
+}
+.calendar-backdrop.closing {
+  pointer-events: none;
+  animation: editorBackdropOut 220ms ease both;
+}
+@keyframes editorBackdropOut {
+  to {
+    background: transparent;
+  }
 }
 .event-editor {
-  width: min(480px, 100%);
-  height: 100%;
-  overflow-y: auto;
+  width: min(408px, calc(100% - 20px));
+  height: calc(100% - 20px);
+  margin: 10px;
+  overflow: hidden auto;
+  border: 1px solid var(--border);
+  border-radius: 16px;
   background: var(--bg-elevated);
   box-shadow: var(--shadow-md);
+  transform-origin: right center;
+  animation: editorIn 380ms cubic-bezier(0.22, 1.16, 0.36, 1) both;
+}
+.event-editor.locked {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Recurring-event scope chooser (edit / delete). */
+.scope-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  animation: backdropFade 0.15s ease;
+  height: 105%;
+}
+.scope-card {
+  width: min(340px, 100%);
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 140ms ease-out both;
+}
+.scope-card h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.scope-card p {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.scope-options {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.scope-option {
+  width: 100%;
+  padding: 11px 14px;
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.14s,
+    border-color 0.14s;
+}
+.scope-option:hover {
+  background: var(--bg-raised);
+  border-color: var(--accent);
+}
+.scope-cancel {
+  width: 100%;
+  padding: 9px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.scope-cancel:hover {
+  color: var(--text-secondary);
+}
+
+/* Repeat summary field (in the When group) — matches the editor's inputs. */
+.repeat-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.repeat-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.repeat-field:hover {
+  border-color: var(--accent);
+}
+.repeat-field svg {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+.repeat-clear {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    color 0.14s,
+    border-color 0.14s;
+}
+.repeat-clear:hover {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+/* Repeat editor card (reuses the .scope-prompt overlay) */
+.repeat-card {
+  width: min(360px, 100%);
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 140ms ease-out both;
+  display: grid;
+  gap: 18px;
+}
+.repeat-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.repeat-section {
+  display: grid;
+  gap: 8px;
+}
+/* Section header — same as editor-group legends. */
+.repeat-label {
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.repeat-line {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.repeat-interval {
+  flex: 0 0 72px;
+}
+.repeat-unit {
+  flex: 1;
+}
+.repeat-days {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+.repeat-day {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.14s,
+    color 0.14s,
+    border-color 0.14s;
+}
+.repeat-day:hover {
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+.repeat-day.active {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--text-primary);
+}
+/* Ends: a switch reveals a segmented choice (date vs. count). */
+.repeat-end-options {
+  display: grid;
+  gap: 10px;
+}
+.repeat-segmented {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.repeat-segmented button {
+  flex: 1;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.14s,
+    color 0.14s;
+}
+.repeat-segmented button:hover {
+  color: var(--text-primary);
+}
+.repeat-segmented button.active {
+  background: var(--accent-tint);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.repeat-count {
+  flex: 0 0 72px;
+}
+.repeat-times {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.repeat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.repeat-actions button {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.repeat-actions .primary {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* Springy slide-in from the right with a soft overshoot. */
+@keyframes editorIn {
+  0% {
+    opacity: 0;
+    transform: translateX(46px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+.event-editor.closing {
+  animation: editorOut 230ms cubic-bezier(0.5, 0, 0.84, 0.32) both;
+}
+@keyframes editorOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(52px) scale(0.93);
+  }
 }
 .event-editor header {
   position: sticky;
@@ -626,27 +1324,272 @@ input[type='color'] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 22px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
 }
 .event-editor h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
-.event-editor header button {
-  width: 44px;
-  height: 44px;
+.editor-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 25px;
   cursor: pointer;
+  transition: background 0.15s;
+}
+.editor-close:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 .event-editor form {
   display: grid;
-  gap: 16px;
-  padding: 22px;
+  gap: 14px;
+  padding: 20px;
+}
+.editor-alert {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 5;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: 1px solid rgba(217, 87, 63, 0.35);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: #d9573f;
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  transform: translateX(-50%);
+  animation: alertIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.editor-alert p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.editor-alert-icon {
+  flex: 0 0 auto;
+}
+@keyframes alertIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(14px) scale(0.97);
+  }
+  to {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Title — primary field, borderless and prominent. */
+.editor-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-title {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-bottom: 1.5px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 700 18px/1.25 var(--font-ui);
+  letter-spacing: -0.01em;
+  padding: 4px 2px 8px;
+  transition: border-color 0.15s;
+}
+.editor-title::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.editor-title:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+/* Shared icon glyph treatment: supports emoji and Nerd Font symbols. */
+.event-icon-glyph {
+  display: inline-block;
+  font-family:
+    'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'Nerd Font',
+    'Nerd Font Mono', 'JetBrains Mono', var(--font-ui), sans-serif;
+  font-size: 1em;
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+/* Gap between icon and title in the grid event view only. */
+.calendar-event strong .event-icon-glyph {
+  margin-right: 4px;
+}
+
+/* Event icon picker — an icon "slot" tile that opens a compact popover. */
+.editor-icon-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+.editor-icon-trigger {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.editor-icon-trigger:hover {
+  border-color: var(--text-tertiary);
+}
+.editor-icon-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+/* Open state — accent affordance, mirrors active controls elsewhere. */
+.editor-icon-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+/* Empty-state face icon (no chosen glyph yet). */
+.editor-icon-empty {
+  color: var(--text-tertiary);
+  transition: color 0.15s;
+}
+.editor-icon-trigger:hover .editor-icon-empty,
+.editor-icon-trigger[aria-expanded='true'] .editor-icon-empty {
+  color: var(--text-secondary);
+}
+
+/* Popover — same floating-card language as .cal-card / calendar menu. */
+.editor-icon-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 120;
+  width: 224px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 10px;
+  animation: popIn 120ms ease-out both;
+}
+.editor-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.editor-icon-choice {
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.editor-icon-choice:hover {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
+  transform: scale(1.08);
+}
+.editor-icon-choice.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+/* Custom freeform field — identical to the editor's text inputs. */
+.editor-icon-custom {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-family:
+    'Symbols Nerd Font', 'JetBrains Mono', var(--font-ui), sans-serif;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.editor-icon-custom::placeholder {
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.editor-icon-custom:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+/* Remove — ghost text link, only shown when an icon is set. */
+.editor-icon-clear {
+  justify-self: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-tertiary);
+  font: 500 11px var(--font-ui);
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.editor-icon-clear:hover {
+  color: var(--text-secondary);
+}
+
+/* Grouped sections */
+.editor-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+}
+.editor-group legend {
+  padding: 0;
+  margin-bottom: 2px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
 }
 .event-editor label {
   display: grid;
@@ -654,67 +1597,570 @@ input[type='color'] {
   color: var(--text-secondary);
   font-size: 12px;
 }
-.event-editor input:not([type='checkbox']):not([type='color']),
+.event-editor
+  input:not([type='checkbox']):not([type='color']):not([type='radio']),
 .event-editor select,
 .event-editor textarea,
 .add-calendar input {
   width: 100%;
-  min-height: 42px;
+  min-width: 0;
+  min-height: 38px;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
-  background: var(--bg-base);
+  background: var(--bg-elevated);
   color: var(--text-primary);
-  padding: 9px 11px;
+  font-size: 13px;
+  padding: 8px 10px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.event-editor
+  input:not([type='checkbox']):not([type='color']):not([type='radio']):focus,
+.event-editor select:focus,
+.event-editor textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
 }
 .event-editor textarea {
   resize: vertical;
+  min-height: 80px;
 }
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  min-width: 0;
+}
+.form-row label {
+  min-width: 0;
+}
+/* Starts / Ends: label left, compact date+time field right. */
+.event-editor .dt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  min-height: 38px;
 }
-.event-editor .check-label {
+.event-editor .dt-row > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+/* Date + time read as one segmented control with an internal divider. */
+.dt-field {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: 224px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.dt-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.event-editor .dt-field input {
+  width: auto !important;
+  min-width: 0;
+  min-height: 38px;
+  text-align: center;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+/* Date gets more room than time so it doesn't feel cramped. */
+.event-editor .dt-field input[type='date'] {
+  flex: 5 1 0;
+}
+.event-editor .dt-field input[type='time'] {
+  flex: 2 1 0;
+}
+.event-editor .dt-field input[type='date']:not(:first-child) {
+  border-left: 1px solid var(--border-strong) !important;
+}
+.event-editor .dt-field input::-webkit-calendar-picker-indicator {
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.event-editor .dt-field input::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+
+/* Calendar selection as scannable chips */
+.calendar-chips {
   display: flex;
-  grid-template-columns: none;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
+.calendar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.calendar-chip:hover {
+  color: var(--text-primary);
+}
+.calendar-chip.active {
+  border-color: var(--accent-tint-border);
+  background: var(--accent-tint);
+  color: var(--text-primary);
+}
+.chip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* All-day switch */
+.toggle-row {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.toggle-row input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 24px;
+  border-radius: 99px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.toggle-row input[type='checkbox']:focus {
+  outline: none;
+}
+.toggle-row input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.toggle-row input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition:
+    transform 0.18s,
+    background 0.18s;
+}
+.toggle-row input[type='checkbox']:checked {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+}
+.toggle-row input[type='checkbox']:checked::after {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+
+.connection-help {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.connection-list {
+  display: grid;
+  gap: 8px;
+}
+.connection-card {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+/* Active: a clean raised card — the accent lives in the toggle, not a wash. */
+.connection-card.active {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+.connection-options {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  animation: connectionOpen 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.connection-options > label {
+  min-width: 0;
+}
+.connection-options.two-column {
+  grid-template-columns: 1fr 1fr;
+}
+.connection-wide {
+  grid-column: 1 / -1;
+}
+/* Inline checkbox — same checkmark language as the sidebar visibility swatch. */
+.connection-check {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 9px !important;
+  min-height: 30px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.connection-check input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-base);
+  cursor: pointer;
+  position: relative;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.connection-check input:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.connection-check input:checked::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: no-repeat center/11px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23131210' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.8'/%3E%3C/svg%3E");
+}
+@keyframes connectionOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Event-color swatches */
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.color-swatch {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+.color-swatch:hover {
+  transform: scale(1.12);
+}
+.color-swatch.active {
+  border-color: var(--bg-base);
+  box-shadow: 0 0 0 2px var(--cc-on, var(--text-primary));
+}
+/* Label paints the chosen color; the native input is an invisible overlay so
+   the picked color reliably fills the whole circle across browsers. */
+.color-custom {
+  position: relative;
+  display: inline-grid !important;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition:
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.16s ease;
+}
+.color-custom:hover {
+  transform: scale(1.18);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    var(--shadow-sm);
+}
+.color-custom.active {
+  box-shadow: 0 0 0 2px var(--cc-on, var(--text-primary));
+}
+.color-custom-icon {
+  transition: opacity 0.16s ease;
+  opacity: 0.85;
+}
+.color-custom:hover .color-custom-icon {
+  opacity: 1;
+}
+.color-custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+/* Pencil icon overlay marking the swatch as a custom color picker. */
+.color-custom-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  color: var(--cc-on, var(--text-primary));
+  transform: translateX(-0.92px) translateY(0.2px);
+  pointer-events: none;
+}
+.color-clear {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
 .event-editor footer {
+  position: sticky;
+  bottom: 0;
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-top: 6px;
+  margin: 0 -20px -20px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
 }
 .event-editor footer span {
   flex: 1;
 }
 .event-editor footer button,
 .add-calendar button {
-  min-height: 40px;
+  height: 34px;
   padding: 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--bg-raised);
   color: var(--text-primary);
+  font-size: 12.5px;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 .event-editor footer .primary {
+  width: 64px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   background: var(--accent-tint);
   border-color: var(--accent-tint-border);
   color: var(--accent);
+  font-weight: 600;
+}
+.event-editor footer .primary.saving {
+  border-color: transparent;
+  background: rgba(240, 237, 229, 0.5);
+  color: #131210;
+  cursor: default;
+}
+.event-editor footer .primary.saved {
+  border-color: #43c58a;
+  background: #43c58a;
+  color: #fff;
+  cursor: default;
+}
+.event-save-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: #131210;
+  border-radius: 50%;
+  animation: spin 0.5s linear infinite;
+}
+.event-save-check path {
+  animation: dash 0.25s ease forwards;
 }
 .event-editor footer .danger,
 .form-error {
   color: #d9573f;
 }
+.event-editor footer .danger {
+  border-color: transparent;
+  background: transparent;
+}
+.event-editor footer .primary.save-error {
+  border-color: rgba(217, 87, 63, 0.45);
+  background: rgba(217, 87, 63, 0.12);
+  color: #d9573f;
+  animation: saveErrorShake 0.55s ease both;
+}
+@keyframes saveErrorShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
 
 @media (max-width: 800px) {
+  /* App rail and calendar sidebar become one coordinated mobile drawer. */
+  .app-rail {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    height: 100dvh;
+    z-index: 41 !important;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
+    transition:
+      transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.18s ease;
+    will-change: transform;
+  }
+  .app-rail.closed {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-rail.open {
+    transform: translateX(0);
+    opacity: 1;
+  }
   .calendar-sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 64px;
+    z-index: 40;
+    width: min(240px, calc(100vw - 64px));
+    padding: 20px 14px;
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.18s ease;
+    will-change: transform;
+  }
+  .calendar-sidebar.closed {
+    width: min(240px, calc(100vw - 64px));
+    padding: 20px 14px;
+    border-right-width: 1px;
+    opacity: 0;
+    transform: translateX(calc(-100% - 64px));
+    pointer-events: none;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.45);
+    animation: backdropFade 0.2s ease both;
+  }
+  .sidebar-close {
+    display: grid;
   }
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  /* Topbar: center the rows and declutter on small screens. */
+  .cal-topbar {
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 12px 14px !important;
+  }
+  .cal-topbar-nav {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  .cal-new-event-label {
+    display: none;
+  }
+  .cal-new-event {
+    width: 36px !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+}
+
+/* Mobile: detail panel becomes a bottom sheet (DESIGN_SYSTEM.md §6). */
+@media (max-width: 640px) {
+  .calendar-backdrop {
+    align-items: flex-end;
+    justify-content: stretch;
+  }
+  .event-editor {
+    width: 100%;
+    height: auto;
+    max-height: 92vh;
+    margin: 0;
+    border: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    transform-origin: bottom center;
+    animation: sheetUp 400ms cubic-bezier(0.22, 1.16, 0.36, 1) both;
+  }
+  .event-editor.closing {
+    animation: sheetDown 250ms cubic-bezier(0.5, 0, 0.84, 0.32) both;
+  }
+  @keyframes sheetUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes sheetDown {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(100%);
+    }
   }
 }

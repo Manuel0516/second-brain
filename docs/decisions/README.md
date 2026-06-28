@@ -9,3 +9,4 @@ Each record contains: context, decision, consequences, and status. Supersede old
 - [0001 - Foundation layout and operating model](./0001-foundation.md)
 - [0002 - Phase 0B + Phase 1 combined report](./0002-phase-0b-phase-1-combined-report.md)
 - [0003 - Calendar view and behavior decisions](./0003-calendar-view-behavior.md)
+- [0004 - Calendar first-pass implementation and integration decisions](./0004-calendar-first-pass-implementation.md)

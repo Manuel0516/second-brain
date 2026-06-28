@@ -63,6 +63,7 @@ export function MonthView({
           (event) => !draftEvent.id || event.id !== draftEvent.id,
         ),
         {
+          ...draftEvent,
           id: draftEvent.id ?? '__draft__',
           calendar_id: draftEvent.calendar_id ?? '',
           title: draftEvent.title || 'Untitled event',
@@ -136,7 +137,10 @@ export function MonthView({
                           onEdit(event)
                         }}
                       >
-                        {event.title}
+                        {event.icon && (
+                          <span className="event-icon-glyph">{event.icon}</span>
+                        )}
+                        <span>{event.title}</span>
                       </button>
                     )
                   })}

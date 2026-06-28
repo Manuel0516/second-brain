@@ -1,10 +1,85 @@
 import { useState } from 'react'
 import { apiCall } from '../../lib/api'
+import { COLOR_PRESETS, onColor } from './colors'
 import type { CalendarData } from './types'
+
+function ColorField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (color: string) => void
+}) {
+  const custom = !COLOR_PRESETS.some(
+    (preset) => preset.toLowerCase() === value.toLowerCase(),
+  )
+  return (
+    <div className="cal-field">
+      <span>Color</span>
+      <div className="color-swatches">
+        {COLOR_PRESETS.map((preset) => {
+          const active = value.toLowerCase() === preset.toLowerCase()
+          return (
+            <button
+              key={preset}
+              type="button"
+              className={`color-swatch ${active ? 'active' : ''}`}
+              aria-label={`Use color ${preset}`}
+              aria-pressed={active}
+              style={
+                {
+                  background: preset,
+                  '--cc-on': onColor(preset),
+                } as React.CSSProperties
+              }
+              onClick={() => onChange(preset)}
+            />
+          )
+        })}
+        <label
+          className={`color-custom ${custom ? 'active' : ''}`}
+          title="Custom color"
+          style={
+            {
+              background: value,
+              '--cc-on': onColor(value),
+            } as React.CSSProperties
+          }
+        >
+          <input
+            type="color"
+            aria-label="Custom color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <PencilIcon />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+const PencilIcon = () => (
+  <svg
+    className="color-custom-icon"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+    <path d="M12.5 5.5l2 2" />
+  </svg>
+)
 
 interface Props {
   calendars: CalendarData[]
   onChanged: () => void
+  open?: boolean
+  onClose?: () => void
 }
 
 async function errorMessage(response: Response, fallback: string) {
@@ -15,11 +90,12 @@ async function errorMessage(response: Response, fallback: string) {
   return fallback
 }
 
-export function Sidebar({ calendars, onChanged }: Props) {
+export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState('#8B5CF6')
   const [error, setError] = useState('')
+  const [menuFor, setMenuFor] = useState<string | null>(null)
 
   const patch = async (calendar: CalendarData, values: object) => {
     setError('')
@@ -50,33 +126,99 @@ export function Sidebar({ calendars, onChanged }: Props) {
   }
 
   return (
-    <aside className="calendar-sidebar">
+    <aside className={`calendar-sidebar ${open ? '' : 'closed'}`}>
       <div className="sidebar-title">
         <span>Calendars</span>
-        <button onClick={() => setAdding(!adding)} aria-label="Add calendar">
-          +
-        </button>
+        <div className="sidebar-title-actions">
+          <button onClick={() => setAdding(!adding)} aria-label="Add calendar">
+            +
+          </button>
+          <button
+            type="button"
+            className="sidebar-close"
+            aria-label="Close navigation"
+            onClick={() => onClose?.()}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
+              <path d="M5 5l10 10M15 5L5 15" />
+            </svg>
+          </button>
+        </div>
       </div>
       {adding && (
-        <form className="add-calendar" onSubmit={create}>
-          <input
-            required
-            placeholder="Calendar name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
-          <button type="submit">Save</button>
+        <form className="cal-card" onSubmit={create}>
+          <div className="cal-card-head">
+            <h3>New calendar</h3>
+            <button
+              type="button"
+              className="cal-card-close"
+              aria-label="Close"
+              onClick={() => {
+                setAdding(false)
+                setName('')
+                setError('')
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              >
+                <path d="M5 5l10 10M15 5L5 15" />
+              </svg>
+            </button>
+          </div>
+          <label className="cal-field">
+            Name
+            <input
+              required
+              placeholder="Calendar name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <ColorField value={color} onChange={setColor} />
+          <div className="cal-card-actions">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setAdding(false)
+                setName('')
+                setError('')
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="primary">
+              Save
+            </button>
+          </div>
         </form>
       )}
       {error && (
         <p className="form-error" role="alert">
           {error}
         </p>
+      )}
+      {menuFor && (
+        <div
+          className="calendar-menu-overlay"
+          role="presentation"
+          onClick={() => setMenuFor(null)}
+        />
       )}
       <div className="calendar-list">
         {calendars.map((calendar) => (
@@ -94,28 +236,91 @@ export function Sidebar({ calendars, onChanged }: Props) {
                 patch(calendar, { is_visible: !calendar.is_visible })
               }
             />
-            <input
-              aria-label={`${calendar.name} name`}
-              defaultValue={calendar.name}
-              onBlur={(e) =>
-                e.target.value.trim() &&
-                e.target.value !== calendar.name &&
-                patch(calendar, { name: e.target.value })
+            <span className="calendar-name">{calendar.name}</span>
+            <button
+              type="button"
+              className="calendar-menu-btn"
+              aria-label={`${calendar.name} options`}
+              aria-haspopup="menu"
+              aria-expanded={menuFor === calendar.id}
+              onClick={() =>
+                setMenuFor((current) =>
+                  current === calendar.id ? null : calendar.id,
+                )
               }
-            />
-            <input
-              aria-label={`${calendar.name} color`}
-              type="color"
-              value={calendar.color}
-              onChange={(e) => patch(calendar, { color: e.target.value })}
-            />
+            >
+              ⋯
+            </button>
+            {menuFor === calendar.id && (
+              <div className="cal-card calendar-menu" role="menu">
+                <div className="cal-card-head">
+                  <h3>Edit calendar</h3>
+                  <button
+                    type="button"
+                    className="cal-card-close"
+                    aria-label="Close"
+                    onClick={() => setMenuFor(null)}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    >
+                      <path d="M5 5l10 10M15 5L5 15" />
+                    </svg>
+                  </button>
+                </div>
+                <label className="cal-field">
+                  Name
+                  <input
+                    aria-label={`${calendar.name} name`}
+                    defaultValue={calendar.name}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                      if (e.key === 'Escape') setMenuFor(null)
+                    }}
+                    onBlur={(e) =>
+                      e.target.value.trim() &&
+                      e.target.value !== calendar.name &&
+                      patch(calendar, { name: e.target.value })
+                    }
+                  />
+                </label>
+                <ColorField
+                  value={calendar.color}
+                  onChange={(c) => patch(calendar, { color: c })}
+                />
+                <div className="cal-card-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => setMenuFor(null)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
       <div className="integration">
-        <span>Google Calendar</span>
-        <button disabled title="Google OAuth will be added in the sync phase">
-          Connect later
+        <span className="integration-title">Integrations</span>
+        <button
+          type="button"
+          className="integration-button"
+          disabled
+          title="Google OAuth will be added in the sync phase"
+        >
+          <span className="integration-icon" aria-hidden="true">
+            G
+          </span>
+          <span className="integration-label">Import from Google Calendar</span>
+          <span className="integration-status">Soon</span>
         </button>
       </div>
     </aside>

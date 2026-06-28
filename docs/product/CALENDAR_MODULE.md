@@ -101,6 +101,22 @@ rows for every future occurrence:
   `Link` table — with a button to create a new linked note directly from there.
 - Drag to move an event, drag the bottom edge to resize duration.
 
+### Cross-module connection drafts
+
+The event editor can prepare structured details for a related Note, Finance transaction,
+Fitness session, or Food log. These values live in `CalendarEvent.connections` until the
+corresponding module exists. They are creation drafts, not graph edges.
+
+When a target module is implemented, saving an enabled connection must transactionally:
+
+1. create or update the real module record;
+2. create the generic `Link` row from the event to that record; and
+3. retain the event draft only as needed for editing/provenance.
+
+Do not write placeholder `Link` rows: every `target_id` must identify a real target record.
+Adding another life area extends the connections object and editor list without adding a
+new boolean column to `CalendarEvent`.
+
 ---
 
 ## 4. Google Calendar Sync

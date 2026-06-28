@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import UUID, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    UUID,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -113,6 +123,7 @@ class CalendarEvent(Base):
         UUID(as_uuid=False), ForeignKey("calendars.id"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(32), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
@@ -122,7 +133,29 @@ class CalendarEvent(Base):
     color_override: Mapped[str | None] = mapped_column(String(7), nullable=True)
     link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     reminder_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # rrule holds the frequency: DAILY / WEEKLY / MONTHLY / YEARLY.
     rrule: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Recurrence rule (single stored row + on-read expansion):
+    #  - recurrence_interval: repeat every N freq units
+    #  - recurrence_byday: weekday codes for weekly rules, e.g. ["MO","WE"]
+    #  - recurrence_count: stop after N occurrences (mutually exclusive with until)
+    #  - recurrence_until: series stops before this occurrence ("this and following")
+    #  - recurrence_exdates: occurrence starts skipped during expansion
+    #  - recurrence_parent_id / recurrence_overridden_at: override row for one occurrence
+    recurrence_interval: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    recurrence_byday: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    recurrence_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    recurrence_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    recurrence_exdates: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    recurrence_parent_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("calendar_events.id"), nullable=True
+    )
+    recurrence_overridden_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    connections: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -134,3 +167,29 @@ class CalendarEvent(Base):
     )
 
     calendar: Mapped["Calendar"] = relationship("Calendar", back_populates="events")
+
+
+class Link(Base):
+    __tablename__ = "links"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_type",
+            "source_id",
+            "target_type",
+            "target_id",
+            "relation",
+            name="uq_links_edge",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
+    relation: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )

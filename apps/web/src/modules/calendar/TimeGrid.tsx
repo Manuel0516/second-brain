@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { apiCall } from '../../lib/api'
 import {
   clampRowHeight,
@@ -29,6 +30,20 @@ interface Gesture {
   events: CalendarEvent[]
   deltaMinutes: number
   deltaDays: number
+  // Snapped pixel offset used by the live drag preview.
+  rawX: number
+  rawY: number
+  moved: boolean
+  // On release, the transform animates from rawX/rawY to the snapped grid
+  // position; once settling the transition is enabled so it glides, not jumps.
+  settling: boolean
+}
+
+interface AllDayDrag {
+  event: CalendarEvent
+  pointerId: number
+  x: number
+  y: number
   moved: boolean
 }
 
@@ -57,6 +72,30 @@ function dateAtMinute(day: Date, minute: number) {
   return date
 }
 
+// ponytail: O(n²) per day column; day columns rarely hold enough events to matter.
+// For each event, count overlapping events that are longer — that count becomes its
+// horizontal offset level so the shorter event sits slightly right and on top.
+function overlapOffsets(events: CalendarEvent[]) {
+  const meta = events.map((event) => ({
+    id: event.id,
+    start: new Date(event.start_at).getTime(),
+    end: new Date(event.end_at).getTime(),
+  }))
+  const offsets = new Map<string, number>()
+  for (const a of meta) {
+    let longer = 0
+    const aDur = a.end - a.start
+    for (const b of meta) {
+      if (a.id === b.id) continue
+      if (!(a.start < b.end && b.start < a.end)) continue
+      const bDur = b.end - b.start
+      if (bDur > aDur || (bDur === aDur && b.start < a.start)) longer++
+    }
+    offsets.set(a.id, longer)
+  }
+  return offsets
+}
+
 export function TimeGrid({
   days,
   rowHeight,
@@ -77,6 +116,8 @@ export function TimeGrid({
     const now = new Date()
     return now.getHours() * 60 + now.getMinutes()
   })
+  const [allDayDrag, setAllDayDrag] = useState<AllDayDrag | null>(null)
+  const allDayDragRef = useRef<AllDayDrag | null>(null)
   const selectionRef = useRef<NewSelection | null>(null)
   const gestureRef = useRef<Gesture | null>(null)
   const clipboardRef = useRef<string[]>([])
@@ -301,7 +342,10 @@ export function TimeGrid({
       events: selectedEvents,
       deltaMinutes: 0,
       deltaDays: 0,
+      rawX: 0,
+      rawY: 0,
       moved: false,
+      settling: false,
     })
   }
 
@@ -319,14 +363,19 @@ export function TimeGrid({
       current.moved ||
       Math.abs(deltaX) >= DRAG_THRESHOLD ||
       Math.abs(deltaY) >= DRAG_THRESHOLD
+    // Keep the live preview on the same 5-minute and day grid committed on drop.
+    const deltaMinutes = moved ? Math.round((deltaY / rowHeight) * 12) * 5 : 0
+    const deltaDays =
+      moved && current.mode === 'move' && current.columnWidth
+        ? Math.round(deltaX / current.columnWidth)
+        : 0
     setCurrentGesture({
       ...current,
       moved,
-      deltaMinutes: moved ? Math.round((deltaY / rowHeight) * 60) : 0,
-      deltaDays:
-        moved && current.mode === 'move' && current.columnWidth
-          ? Math.round(deltaX / current.columnWidth)
-          : 0,
+      deltaMinutes,
+      deltaDays,
+      rawX: deltaDays * current.columnWidth,
+      rawY: (deltaMinutes / 60) * rowHeight,
     })
   }
 
@@ -342,32 +391,154 @@ export function TimeGrid({
     )
       return
     pointer.currentTarget.releasePointerCapture(pointer.pointerId)
-    setCurrentGesture(null)
     if (!current.moved) {
+      setCurrentGesture(null)
       if (current.mode === 'move') onEdit(clickedEvent)
       return
     }
+    // Glide from where the pointer left off to the snapped grid position.
+    // The snapped position equals where the reloaded data will render, so
+    // swapping to real data after the glide produces no visible jump.
+    setCurrentGesture({
+      ...current,
+      settling: true,
+      rawX: current.deltaDays * current.columnWidth,
+      rawY: (current.deltaMinutes / 60) * rowHeight,
+    })
     const totalMinutes =
       current.deltaMinutes + current.deltaDays * MINUTES_PER_DAY
-    const changes = current.events.map((event) => ({
-      id: event.id,
-      original_start_at: event.start_at,
-      ...(current.mode === 'move'
+    const shiftedRange = (event: CalendarEvent) =>
+      current.mode === 'move'
         ? shiftIsoRange(event.start_at, event.end_at, totalMinutes)
-        : resizeIsoRange(event.start_at, event.end_at, current.deltaMinutes)),
-    }))
-    setInteractionError('')
-    const response = await apiCall('/api/events', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: changes }),
-    })
-    if (!response.ok) {
+        : resizeIsoRange(event.start_at, event.end_at, current.deltaMinutes)
+    // Recurring occurrences become single-occurrence overrides; plain events
+    // move in bulk. Dragging one instance must not shift the whole series.
+    const recurring = current.events.filter((event) => event.rrule)
+    const plain = current.events.filter((event) => !event.rrule)
+    const failed = () => {
+      setCurrentGesture(null)
       setInteractionError(
         current.mode === 'move'
           ? 'Could not move the selected events.'
           : 'Could not resize the event.',
       )
+    }
+    setInteractionError('')
+    if (plain.length) {
+      const changes = plain.map((event) => ({
+        id: event.id,
+        original_start_at: event.start_at,
+        ...shiftedRange(event),
+      }))
+      const response = await apiCall('/api/events', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: changes }),
+      })
+      if (!response.ok) return failed()
+      // Apply new times locally before dropping the gesture so the event stays
+      // put through the round-trip instead of snapping back.
+      setEvents((prev) =>
+        prev.map((ev) => {
+          const change = changes.find(
+            (c) => c.id === ev.id && c.original_start_at === ev.start_at,
+          )
+          return change
+            ? { ...ev, start_at: change.start_at, end_at: change.end_at }
+            : ev
+        }),
+      )
+    }
+    for (const event of recurring) {
+      const range = shiftedRange(event)
+      const response = await apiCall(`/api/events/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'this',
+          occurrence_start: event.start_at,
+          start_at: range.start_at,
+          end_at: range.end_at,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      })
+      if (!response.ok) return failed()
+    }
+    setCurrentGesture(null)
+    loadEvents()
+  }
+
+  // Drag an all-day chip down into the grid to convert it into a 30-minute
+  // timed event at the drop location (loses the all-day property).
+  const startAllDayDrag = (
+    pointer: React.PointerEvent<HTMLElement>,
+    event: CalendarEvent,
+  ) => {
+    if (pointer.button !== 0 || event.id === '__draft__') return
+    pointer.currentTarget.setPointerCapture(pointer.pointerId)
+    const next: AllDayDrag = {
+      event,
+      pointerId: pointer.pointerId,
+      x: pointer.clientX,
+      y: pointer.clientY,
+      moved: false,
+    }
+    allDayDragRef.current = next
+    setAllDayDrag(next)
+  }
+
+  const moveAllDayDrag = (pointer: React.PointerEvent<HTMLElement>) => {
+    const current = allDayDragRef.current
+    if (!current || current.pointerId !== pointer.pointerId) return
+    const moved =
+      current.moved ||
+      Math.abs(pointer.clientX - current.x) > DRAG_THRESHOLD ||
+      Math.abs(pointer.clientY - current.y) > DRAG_THRESHOLD
+    const next = { ...current, x: pointer.clientX, y: pointer.clientY, moved }
+    allDayDragRef.current = next
+    setAllDayDrag(next)
+  }
+
+  const finishAllDayDrag = async (
+    pointer: React.PointerEvent<HTMLElement>,
+    event: CalendarEvent,
+  ) => {
+    const current = allDayDragRef.current
+    if (!current || current.pointerId !== pointer.pointerId) return
+    pointer.currentTarget.releasePointerCapture(pointer.pointerId)
+    allDayDragRef.current = null
+    setAllDayDrag(null)
+    if (!current.moved) return
+    const column = document
+      .elementFromPoint(pointer.clientX, pointer.clientY)
+      ?.closest('.day-column') as HTMLElement | null
+    if (!column || column.dataset.dayIndex === undefined) return
+    const day = days[Number(column.dataset.dayIndex)]
+    if (!day) return
+    const minute = minuteAtPointer(
+      pointer.clientY,
+      column.getBoundingClientRect().top,
+      rowHeight,
+    )
+    const snapped = Math.min(
+      Math.round(minute / 5) * 5,
+      MINUTES_PER_DAY - DEFAULT_DURATION / 2,
+    )
+    const start = dateAtMinute(day, snapped)
+    const end = new Date(start.getTime() + 30 * 60_000)
+    setInteractionError('')
+    const response = await apiCall(`/api/events/${event.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        all_day: false,
+        start_at: start.toISOString(),
+        end_at: end.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    })
+    if (!response.ok) {
+      setInteractionError('Could not move the event into the day.')
       return
     }
     loadEvents()
@@ -378,12 +549,17 @@ export function TimeGrid({
   })`
   const minWidth = days.length === 1 ? 'auto' : TIME_COL + days.length * 96
   const today = new Date()
+  const colorFor = (event: CalendarEvent) => {
+    const calendar = calendars.find((item) => item.id === event.calendar_id)
+    return event.color_override || calendar?.color || '#5B8AFD'
+  }
   const draft = draftEvent
   const draftId = draft?.id
   const draftStart = draft?.start_at ? new Date(draft.start_at) : null
   const previewDraft: CalendarEvent | null =
     draft && draftStart && !Number.isNaN(draftStart.getTime())
       ? {
+          ...draft,
           id: draft.id ?? '__draft__',
           calendar_id: draft.calendar_id ?? '',
           title: draft.title || 'Untitled event',
@@ -413,6 +589,25 @@ export function TimeGrid({
           {interactionError}
         </p>
       )}
+      {allDayDrag?.moved &&
+        createPortal(
+          <div
+            className="allday-drag-ghost"
+            style={{
+              left: allDayDrag.x,
+              top: allDayDrag.y,
+              borderColor: colorFor(allDayDrag.event),
+              background: `${colorFor(allDayDrag.event)}22`,
+              color: colorFor(allDayDrag.event),
+            }}
+          >
+            {allDayDrag.event.icon && (
+              <span className="event-icon-glyph">{allDayDrag.event.icon}</span>
+            )}
+            <span>{allDayDrag.event.title}</span>
+          </div>,
+          document.body,
+        )}
       <div
         className="week-grid week-header"
         style={{ gridTemplateColumns: columns, minWidth }}
@@ -430,6 +625,50 @@ export function TimeGrid({
           >
             <span>{day.toLocaleDateString([], { weekday: 'short' })}</span>
             <strong>{day.getDate()}</strong>
+            <div className="allday-band">
+              {visibleEvents
+                .filter(
+                  (event) =>
+                    event.all_day && sameDay(new Date(event.start_at), day),
+                )
+                .map((event) => {
+                  const color = colorFor(event)
+                  return (
+                    <button
+                      key={`${event.id}-allday`}
+                      type="button"
+                      className={`allday-event ${event.id === '__draft__' ? 'draft' : ''}`}
+                      style={{
+                        borderColor: color,
+                        background: `${color}22`,
+                        color,
+                      }}
+                      onPointerDown={(pointer) =>
+                        startAllDayDrag(pointer, event)
+                      }
+                      onPointerMove={moveAllDayDrag}
+                      onPointerUp={(pointer) =>
+                        void finishAllDayDrag(pointer, event)
+                      }
+                      onPointerCancel={() => {
+                        allDayDragRef.current = null
+                        setAllDayDrag(null)
+                      }}
+                      onClick={(pointer) =>
+                        pointer.detail === 0 &&
+                        event.id !== '__draft__' &&
+                        onEdit(event)
+                      }
+                      title={event.title}
+                    >
+                      {event.icon && (
+                        <span className="event-icon-glyph">{event.icon}</span>
+                      )}
+                      <span>{event.title}</span>
+                    </button>
+                  )
+                })}
+            </div>
           </div>
         ))}
       </div>
@@ -444,12 +683,13 @@ export function TimeGrid({
             </div>
           ))}
         </div>
-        {days.map((day) => (
+        {days.map((day, dayIndex) => (
           <div
             className={`day-column ${sameDay(day, today) ? 'today-column' : ''} ${
               isWeekend(day) && !sameDay(day, today) ? 'weekend-column' : ''
             }`}
             key={day.toISOString()}
+            data-day-index={dayIndex}
             onPointerDown={(event) => startNewSelection(event, day)}
             onPointerMove={moveNewSelection}
             onPointerUp={finishNewSelection}
@@ -507,25 +747,30 @@ export function TimeGrid({
                   </div>
                 )
               })()}
-            {visibleEvents
-              .filter(
+            {(() => {
+              const dayEvents = visibleEvents.filter(
                 (event) =>
                   sameDay(new Date(event.start_at), day) && !event.all_day,
               )
-              .map((event) => {
+              const offsets = overlapOffsets(dayEvents)
+              return dayEvents.map((event) => {
                 const start = new Date(event.start_at)
                 const end = new Date(event.end_at)
-                const calendar = calendars.find(
-                  (item) => item.id === event.calendar_id,
-                )
-                const color =
-                  event.color_override || calendar?.color || '#5B8AFD'
+                const color = colorFor(event)
+                const offset = offsets.get(event.id) ?? 0
                 const top =
                   (start.getHours() + start.getMinutes() / 60) * rowHeight
                 const height = Math.max(
-                  22,
+                  (5 / 60) * rowHeight, // floor at 5 minutes, not a fixed pixel min
                   ((end.getTime() - start.getTime()) / 3_600_000) * rowHeight,
                 )
+                const durationMinutes =
+                  (end.getTime() - start.getTime()) / 60_000
+                const showTime = height >= 34
+                // Dim only events that already ended earlier today.
+                const isPast =
+                  sameDay(day, today) &&
+                  end.getHours() * 60 + end.getMinutes() <= nowMinute
                 const isSelected = selectedIds.has(event.id)
                 const isMoving =
                   gesture?.mode === 'move' &&
@@ -537,23 +782,35 @@ export function TimeGrid({
                   <button
                     key={`${event.id}-${event.start_at}`}
                     type="button"
+                    aria-label={event.title}
                     aria-pressed={isSelected}
                     className={`calendar-event ${event.id === '__draft__' ? 'draft' : ''} ${isSelected ? 'selected' : ''} ${
-                      isMoving || isResizing ? 'dragging' : ''
-                    }`}
+                      isPast ? 'past' : ''
+                    } ${height < 40 ? 'compact' : ''} ${!showTime && height >= 18 ? 'solo' : ''} ${height < 7 ? 'tiny' : ''} ${
+                      (isMoving || isResizing) && !gesture?.settling
+                        ? 'dragging'
+                        : ''
+                    } ${(isMoving || isResizing) && gesture?.settling ? 'settling' : ''}`}
                     style={{
                       top,
                       height: isResizing
-                        ? Math.max(
-                            2,
-                            height + (gesture.deltaMinutes / 60) * rowHeight,
-                          )
+                        ? Math.max(2, height + gesture.rawY)
                         : height,
+                      // Shorter overlapping events shift right and stack above
+                      // longer ones, kept within the day column.
+                      left: offset ? `calc(3px + ${offset * 14}px)` : undefined,
+                      zIndex: isMoving || isResizing ? undefined : 2 + offset,
                       borderColor: color,
                       color,
-                      background: `${color}22`,
+                      // An event stacked on top of another (or being dragged)
+                      // gets a solid backdrop so the one beneath can't bleed
+                      // through; otherwise keep the translucent tint.
+                      background:
+                        offset || isMoving || isResizing
+                          ? `linear-gradient(${color}22, ${color}22), var(--bg-elevated)`
+                          : `${color}22`,
                       transform: isMoving
-                        ? `translate(${gesture.deltaDays * gesture.columnWidth}px, ${(gesture.deltaMinutes / 60) * rowHeight}px)`
+                        ? `translate(${gesture.rawX}px, ${gesture.rawY}px)`
                         : undefined,
                     }}
                     onPointerDown={(pointer) =>
@@ -565,8 +822,13 @@ export function TimeGrid({
                     }
                     onPointerCancel={() => setCurrentGesture(null)}
                   >
-                    <strong>{event.title}</strong>
-                    {height >= 34 && (
+                    <strong>
+                      {event.icon && (
+                        <span className="event-icon-glyph">{event.icon}</span>
+                      )}
+                      <span>{event.title}</span>
+                    </strong>
+                    {showTime && (
                       <span>
                         {start.toLocaleTimeString([], {
                           hour: '2-digit',
@@ -581,22 +843,25 @@ export function TimeGrid({
                         })}
                       </span>
                     )}
-                    <span
-                      className="event-resize-handle"
-                      aria-hidden="true"
-                      onPointerDown={(pointer) => {
-                        pointer.stopPropagation()
-                        startEventGesture(pointer, event, 'resize')
-                      }}
-                      onPointerMove={moveEventGesture}
-                      onPointerUp={(pointer) =>
-                        void finishEventGesture(pointer, event)
-                      }
-                      onPointerCancel={() => setCurrentGesture(null)}
-                    />
+                    {durationMinutes >= 15 && (
+                      <span
+                        className="event-resize-handle"
+                        aria-hidden="true"
+                        onPointerDown={(pointer) => {
+                          pointer.stopPropagation()
+                          startEventGesture(pointer, event, 'resize')
+                        }}
+                        onPointerMove={moveEventGesture}
+                        onPointerUp={(pointer) =>
+                          void finishEventGesture(pointer, event)
+                        }
+                        onPointerCancel={() => setCurrentGesture(null)}
+                      />
+                    )}
                   </button>
                 )
-              })}
+              })
+            })()}
           </div>
         ))}
       </div>

@@ -6,10 +6,34 @@ export interface CalendarData {
   source: string
 }
 
+export interface EventConnections {
+  notes?: { title: string } | null
+  finance?: {
+    type: 'income' | 'expense'
+    amount: number
+    currency: string
+    category: string
+    counterparty?: string | null
+    tax_relevant: boolean
+  } | null
+  fitness?: { workout_type: string; notes?: string | null } | null
+  food?: {
+    meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+    name: string
+    quantity: number
+    unit: string
+    calories?: number | null
+    protein?: number | null
+    carbs?: number | null
+    fat?: number | null
+  } | null
+}
+
 export interface CalendarEvent {
   id: string
   calendar_id: string
   title: string
+  icon?: string
   description?: string
   location?: string
   link?: string
@@ -19,5 +43,10 @@ export interface CalendarEvent {
   timezone: string
   color_override?: string
   reminder_minutes?: number
-  rrule?: 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  rrule?: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+  recurrence_interval?: number
+  recurrence_byday?: string[]
+  recurrence_count?: number | null
+  recurrence_until?: string | null
+  connections?: EventConnections
 }

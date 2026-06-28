@@ -25,6 +25,7 @@ Log out and back in after the group change, then verify with `docker version` an
 
 ```bash
 cp .env.example .env
+colima start
 docker compose -f compose.yaml -f compose.dev.yaml up -d db minio
 uv sync --project apps/api --dev
 npm install

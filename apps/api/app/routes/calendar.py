@@ -1,9 +1,10 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
@@ -12,6 +13,11 @@ from app.models import Calendar, CalendarEvent, User
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
+CURRENCY = r"^[A-Z]{3}$"
+
+Frequency = Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]
+Weekday = Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+WEEKDAY_INDEX = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
 
 
 class CalendarWrite(BaseModel):
@@ -47,9 +53,46 @@ class CalendarResponse(BaseModel):
     source: str
 
 
+class NoteConnection(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
+class FinanceConnection(BaseModel):
+    type: Literal["income", "expense"] = "expense"
+    amount: float = Field(gt=0)
+    currency: str = Field(default="SEK", pattern=CURRENCY)
+    category: str = Field(min_length=1, max_length=100)
+    counterparty: str | None = Field(default=None, max_length=255)
+    tax_relevant: bool = False
+
+
+class FitnessConnection(BaseModel):
+    workout_type: str = Field(min_length=1, max_length=255)
+    notes: str | None = Field(default=None, max_length=10_000)
+
+
+class FoodConnection(BaseModel):
+    meal_type: Literal["breakfast", "lunch", "dinner", "snack"] = "lunch"
+    name: str = Field(min_length=1, max_length=255)
+    quantity: float = Field(default=1, gt=0)
+    unit: str = Field(default="serving", min_length=1, max_length=50)
+    calories: float | None = Field(default=None, ge=0)
+    protein: float | None = Field(default=None, ge=0)
+    carbs: float | None = Field(default=None, ge=0)
+    fat: float | None = Field(default=None, ge=0)
+
+
+class EventConnections(BaseModel):
+    notes: NoteConnection | None = None
+    finance: FinanceConnection | None = None
+    fitness: FitnessConnection | None = None
+    food: FoodConnection | None = None
+
+
 class EventWrite(BaseModel):
     calendar_id: str
     title: str = Field(min_length=1, max_length=255)
+    icon: str | None = Field(default=None, max_length=32)
     description: str | None = Field(default=None, max_length=100_000)
     location: str | None = Field(default=None, max_length=255)
     link: HttpUrl | None = None
@@ -59,7 +102,12 @@ class EventWrite(BaseModel):
     timezone: str = Field(default="Europe/Stockholm", min_length=1, max_length=63)
     color_override: str | None = Field(default=None, pattern=HEX)
     reminder_minutes: int | None = Field(default=None, ge=0, le=40_320)
-    rrule: Literal["DAILY", "WEEKLY", "MONTHLY"] | None = None
+    rrule: Frequency | None = None
+    recurrence_interval: int = Field(default=1, ge=1, le=365)
+    recurrence_byday: list[Weekday] = Field(default_factory=list)
+    recurrence_count: int | None = Field(default=None, ge=1, le=730)
+    recurrence_until: datetime | None = None
+    connections: EventConnections = Field(default_factory=EventConnections)
 
     @field_validator("title")
     @classmethod
@@ -72,12 +120,15 @@ class EventWrite(BaseModel):
     def valid_range(self) -> "EventWrite":
         if self.end_at <= self.start_at:
             raise ValueError("end_at must be after start_at")
+        if self.recurrence_count is not None and self.recurrence_until is not None:
+            raise ValueError("recurrence_count and recurrence_until are mutually exclusive")
         return self
 
 
 class EventPatch(BaseModel):
     calendar_id: str | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
+    icon: str | None = Field(default=None, max_length=32)
     description: str | None = Field(default=None, max_length=100_000)
     location: str | None = Field(default=None, max_length=255)
     link: HttpUrl | None = None
@@ -87,7 +138,16 @@ class EventPatch(BaseModel):
     timezone: str | None = Field(default=None, min_length=1, max_length=63)
     color_override: str | None = Field(default=None, pattern=HEX)
     reminder_minutes: int | None = Field(default=None, ge=0, le=40_320)
-    rrule: Literal["DAILY", "WEEKLY", "MONTHLY"] | None = None
+    rrule: Frequency | None = None
+    recurrence_interval: int | None = Field(default=None, ge=1, le=365)
+    recurrence_byday: list[Weekday] | None = None
+    recurrence_count: int | None = Field(default=None, ge=1, le=730)
+    recurrence_until: datetime | None = None
+    connections: EventConnections | None = None
+    # Recurrence edit scope. "this" creates a single-occurrence override and
+    # leaves the rest of the series intact; "all" edits the whole series.
+    scope: Literal["all", "this"] = "all"
+    occurrence_start: datetime | None = None
 
     @field_validator("title")
     @classmethod
@@ -101,6 +161,7 @@ class EventResponse(BaseModel):
     id: str
     calendar_id: str
     title: str
+    icon: str | None
     description: str | None
     location: str | None
     link: str | None
@@ -111,6 +172,11 @@ class EventResponse(BaseModel):
     color_override: str | None
     reminder_minutes: int | None
     rrule: str | None
+    recurrence_interval: int
+    recurrence_byday: list[str]
+    recurrence_count: int | None
+    recurrence_until: datetime | None
+    connections: EventConnections
 
 
 class EventMove(BaseModel):
@@ -142,6 +208,7 @@ def event_response(
         id=event.id,
         calendar_id=event.calendar_id,
         title=event.title,
+        icon=event.icon,
         description=event.description,
         location=event.location,
         link=event.link,
@@ -152,6 +219,44 @@ def event_response(
         color_override=event.color_override,
         reminder_minutes=event.reminder_minutes,
         rrule=event.rrule,
+        recurrence_interval=event.recurrence_interval or 1,
+        recurrence_byday=list(event.recurrence_byday or []),
+        recurrence_count=event.recurrence_count,
+        recurrence_until=event.recurrence_until,
+        connections=EventConnections.model_validate(event.connections or {}),
+    )
+
+
+def _build_override(
+    parent: CalendarEvent, values: dict[str, object], occurrence_start: datetime
+) -> CalendarEvent:
+    """A standalone row replacing one occurrence: parent fields, patch overlaid."""
+
+    def pick(key: str, default: object) -> object:
+        return values[key] if key in values else default
+
+    duration = _as_utc(parent.end_at) - _as_utc(parent.start_at)
+    link = values["link"] if "link" in values else parent.link
+    connections = (
+        values["connections"] if "connections" in values else dict(parent.connections or {})
+    )
+    return CalendarEvent(
+        calendar_id=pick("calendar_id", parent.calendar_id),
+        title=pick("title", parent.title),
+        icon=pick("icon", parent.icon),
+        description=pick("description", parent.description),
+        location=pick("location", parent.location),
+        start_at=pick("start_at", occurrence_start),
+        end_at=pick("end_at", occurrence_start + duration),
+        all_day=pick("all_day", parent.all_day),
+        timezone=pick("timezone", parent.timezone),
+        color_override=pick("color_override", parent.color_override),
+        link=str(link) if link else None,
+        reminder_minutes=pick("reminder_minutes", parent.reminder_minutes),
+        rrule=None,
+        recurrence_parent_id=parent.id,
+        recurrence_overridden_at=occurrence_start,
+        connections=connections or {},
     )
 
 
@@ -233,30 +338,85 @@ async def delete_calendar(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _occurrence_key(value: datetime) -> int:
+    """Stable per-occurrence key (whole seconds, UTC) for exdate matching."""
+    return int(_as_utc(value).timestamp())
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    total = value.month - 1 + months
+    year = value.year + total // 12
+    month = total % 12 + 1
+    return value.replace(year=year, month=month, day=min(value.day, 28))
+
+
+def _occurrence_starts(event: CalendarEvent, event_start: datetime) -> Iterator[datetime]:
+    """Series occurrence starts in chronological order, bounded by count/until.
+
+    Lazy: the caller stops consuming once it leaves the requested window, so an
+    open-ended series (no count/until) is fine — the guard only caps worst case.
+    """
+    freq = event.rrule
+    interval = max(1, event.recurrence_interval or 1)
+    count = event.recurrence_count
+    until = _as_utc(event.recurrence_until) if event.recurrence_until else None
+    generated = 0
+
+    def within_limits(occ: datetime) -> bool:
+        return (until is None or occ < until) and (count is None or generated < count)
+
+    if freq == "WEEKLY":
+        weekdays = sorted(
+            {WEEKDAY_INDEX[d] for d in (event.recurrence_byday or [])} or {event_start.weekday()}
+        )
+        week_start = event_start - timedelta(days=event_start.weekday())
+        for block in range(0, 5000, interval):
+            for weekday in weekdays:
+                occ = week_start + timedelta(weeks=block, days=weekday)
+                if occ < event_start:
+                    continue
+                if not within_limits(occ):
+                    return
+                generated += 1
+                yield occ
+        return
+
+    occ = event_start
+    for _ in range(5000):
+        if not within_limits(occ):
+            return
+        generated += 1
+        yield occ
+        if freq == "DAILY":
+            occ = occ + timedelta(days=interval)
+        elif freq == "MONTHLY":
+            occ = _add_months(occ, interval)
+        elif freq == "YEARLY":
+            occ = occ.replace(year=occ.year + interval)
+        else:
+            return
+
+
 def expand_event(event: CalendarEvent, start: datetime, end: datetime) -> list[EventResponse]:
-    start = start if start.tzinfo else start.replace(tzinfo=UTC)
-    end = end if end.tzinfo else end.replace(tzinfo=UTC)
-    event_start = event.start_at if event.start_at.tzinfo else event.start_at.replace(tzinfo=UTC)
-    event_end = event.end_at if event.end_at.tzinfo else event.end_at.replace(tzinfo=UTC)
+    start = _as_utc(start)
+    end = _as_utc(end)
+    event_start = _as_utc(event.start_at)
+    event_end = _as_utc(event.end_at)
     if not event.rrule:
         return [event_response(event)] if event_start < end and event_end > start else []
-    step = timedelta(days=1 if event.rrule == "DAILY" else 7)
-    current_start, current_end = event_start, event_end
+    duration = event_end - event_start
+    exdates = {_occurrence_key(datetime.fromisoformat(d)) for d in (event.recurrence_exdates or [])}
     items: list[EventResponse] = []
-    while current_start < end:
-        if current_end > start:
-            items.append(event_response(event, current_start, current_end))
-        if event.rrule == "MONTHLY":
-            month = current_start.month % 12 + 1
-            year = current_start.year + current_start.month // 12
-            next_start = current_start.replace(
-                year=year, month=month, day=min(current_start.day, 28)
-            )
-            current_end = next_start + (current_end - current_start)
-            current_start = next_start
-        else:
-            current_start += step
-            current_end += step
+    for occ in _occurrence_starts(event, event_start):
+        if occ >= end:
+            break
+        occ_end = occ + duration
+        if occ_end > start and _occurrence_key(occ) not in exdates:
+            items.append(event_response(event, occ, occ_end))
         if len(items) > 500:
             break
     return items
@@ -312,9 +472,33 @@ async def patch_event(
 ) -> EventResponse:
     event = await owned_event(event_id, user, session)
     values = data.model_dump(exclude_unset=True)
+    values.pop("scope", None)
+    values.pop("occurrence_start", None)
     if data.calendar_id:
         await owned_calendar(data.calendar_id, user, session)
+
+    # Editing a single occurrence of a series: split it off as an override row
+    # and hide the original occurrence from the parent, so the series continues.
+    if data.scope == "this" and event.rrule:
+        if data.occurrence_start is None:
+            raise HTTPException(
+                status_code=422, detail="occurrence_start is required to edit one occurrence"
+            )
+        override = _build_override(event, values, _as_utc(data.occurrence_start))
+        if override.end_at <= override.start_at:
+            raise HTTPException(status_code=422, detail="end_at must be after start_at")
+        event.recurrence_exdates = [
+            *(event.recurrence_exdates or []),
+            _as_utc(data.occurrence_start).isoformat(),
+        ]
+        session.add(override)
+        await session.commit()
+        await session.refresh(override)
+        return event_response(override)
+
     for key, value in values.items():
+        if key == "connections":
+            value = value or {}
         setattr(event, key, str(value) if key == "link" and value else value)
     if event.end_at <= event.start_at:
         raise HTTPException(status_code=422, detail="end_at must be after start_at")
@@ -362,6 +546,7 @@ async def copy_events(
         copy = CalendarEvent(
             calendar_id=event.calendar_id,
             title=event.title,
+            icon=event.icon,
             description=event.description,
             location=event.location,
             link=event.link,
@@ -372,6 +557,11 @@ async def copy_events(
             color_override=event.color_override,
             reminder_minutes=event.reminder_minutes,
             rrule=event.rrule,
+            recurrence_interval=event.recurrence_interval,
+            recurrence_byday=list(event.recurrence_byday or []),
+            recurrence_count=event.recurrence_count,
+            recurrence_until=event.recurrence_until,
+            connections=dict(event.connections or {}),
         )
         session.add(copy)
         copies.append(copy)
@@ -384,10 +574,44 @@ async def copy_events(
 @router.delete("/events/{event_id}", status_code=204)
 async def delete_event(
     event_id: str,
+    scope: Literal["all", "this", "following"] = "all",
+    occurrence_start: datetime | None = None,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> Response:
     event = await owned_event(event_id, user, session)
-    await session.delete(event)
+
+    # Non-recurring, or the whole series: drop the row (override children cascade).
+    if scope == "all" or not event.rrule:
+        await session.delete(event)
+        await session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    if occurrence_start is None:
+        raise HTTPException(
+            status_code=422, detail="occurrence_start is required for this/following"
+        )
+    occ = _as_utc(occurrence_start)
+
+    if scope == "this":
+        # Hide just this occurrence and remove any override that replaced it.
+        event.recurrence_exdates = [*(event.recurrence_exdates or []), occ.isoformat()]
+        await session.execute(
+            delete(CalendarEvent).where(
+                CalendarEvent.recurrence_parent_id == event.id,
+                CalendarEvent.recurrence_overridden_at == occ,
+            )
+        )
+    else:  # following — end the series here and drop later overrides/exceptions.
+        event.recurrence_until = occ
+        await session.execute(
+            delete(CalendarEvent).where(
+                CalendarEvent.recurrence_parent_id == event.id,
+                CalendarEvent.recurrence_overridden_at >= occ,
+            )
+        )
+        event.recurrence_exdates = [
+            d for d in (event.recurrence_exdates or []) if _as_utc(datetime.fromisoformat(d)) < occ
+        ]
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

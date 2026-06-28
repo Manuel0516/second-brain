@@ -274,6 +274,7 @@ async def test_event_create_update_delete(
         "/api/events",
         json={
             "calendar_id": calendar.id,
+            "icon": "☕",
             "title": "Planning",
             "start_at": start.isoformat(),
             "end_at": (start + timedelta(hours=1)).isoformat(),
@@ -282,17 +283,36 @@ async def test_event_create_update_delete(
             "link": "https://example.com/agenda",
             "reminder_minutes": 15,
             "rrule": "WEEKLY",
+            "connections": {
+                "finance": {
+                    "type": "expense",
+                    "amount": 250,
+                    "currency": "SEK",
+                    "category": "Work",
+                    "counterparty": "Studio",
+                    "tax_relevant": True,
+                },
+                "fitness": {
+                    "workout_type": "Strength",
+                    "notes": "Upper body",
+                },
+            },
         },
     )
     assert created.status_code == 201
     event = created.json()
+    assert event["icon"] == "☕"
     assert event["rrule"] == "WEEKLY"
+    assert event["connections"]["finance"]["amount"] == 250
+    assert event["connections"]["fitness"]["workout_type"] == "Strength"
 
     updated = await authenticated_client.patch(
-        f"/api/events/{event['id']}", json={"title": "Weekly planning"}
+        f"/api/events/{event['id']}",
+        json={"title": "Weekly planning", "icon": "📌"},
     )
     assert updated.status_code == 200
     assert updated.json()["title"] == "Weekly planning"
+    assert updated.json()["icon"] == "📌"
 
     deleted = await authenticated_client.delete(f"/api/events/{event['id']}")
     assert deleted.status_code == 204
@@ -315,6 +335,37 @@ async def test_event_rejects_blank_title(
             "title": "   ",
             "start_at": start.isoformat(),
             "end_at": (start + timedelta(hours=1)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 422
+
+
+async def test_event_rejects_invalid_connection_data(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    user = await test_db_session.scalar(select(User).where(User.email == "testuser@example.com"))
+    assert user is not None
+    calendar = Calendar(user_id=user.id, name="Default", color="#8B5CF6", is_visible=True)
+    test_db_session.add(calendar)
+    await test_db_session.commit()
+    start = datetime.now(UTC) + timedelta(days=1)
+
+    response = await authenticated_client.post(
+        "/api/events",
+        json={
+            "calendar_id": calendar.id,
+            "title": "Lunch",
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(hours=1)).isoformat(),
+            "connections": {
+                "finance": {
+                    "type": "expense",
+                    "amount": 0,
+                    "currency": "SEK",
+                    "category": "Food",
+                }
+            },
         },
     )
 
@@ -373,3 +424,120 @@ async def test_bulk_move_and_copy_events(
     assert datetime.fromisoformat(copies[1]["start_at"]) - datetime.fromisoformat(
         copies[0]["start_at"]
     ) == timedelta(hours=1)
+
+
+def _next_monday() -> datetime:
+    base = datetime.now(UTC).replace(hour=9, minute=0, second=0, microsecond=0)
+    return base + timedelta(days=(0 - base.weekday()) % 7 or 7)
+
+
+async def _make_calendar(client: AsyncClient, session: AsyncSession) -> Calendar:
+    user = await session.scalar(select(User).where(User.email == "testuser@example.com"))
+    assert user is not None
+    calendar = Calendar(user_id=user.id, name="Recurring", color="#2E9E6E", is_visible=True)
+    session.add(calendar)
+    await session.commit()
+    return calendar
+
+
+async def _create_series(
+    client: AsyncClient, calendar_id: str, **rule: object
+) -> dict[str, object]:
+    monday = _next_monday()
+    response = await client.post(
+        "/api/events",
+        json={
+            "calendar_id": calendar_id,
+            "title": "Standup",
+            "start_at": monday.isoformat(),
+            "end_at": (monday + timedelta(hours=1)).isoformat(),
+            "rrule": "WEEKLY",
+            **rule,
+        },
+    )
+    assert response.status_code == 201, response.text
+    result: dict[str, object] = response.json()
+    return result
+
+
+async def _list_events(client: AsyncClient, window_days: int = 21) -> list[dict[str, object]]:
+    monday = _next_monday()
+    response = await client.get(
+        "/api/events",
+        params={
+            "from_date": (monday - timedelta(days=1)).isoformat(),
+            "to_date": (monday + timedelta(days=window_days)).isoformat(),
+        },
+    )
+    assert response.status_code == 200
+    return sorted(response.json(), key=lambda e: e["start_at"])
+
+
+async def test_weekly_byday_and_count_expansion(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    await _create_series(
+        authenticated_client,
+        calendar.id,
+        recurrence_byday=["MO", "WE"],
+        recurrence_count=4,
+    )
+    events = await _list_events(authenticated_client)
+    weekdays = [datetime.fromisoformat(str(e["start_at"])).weekday() for e in events]
+    # Mon, Wed, Mon, Wed across two weeks — count caps it at four.
+    assert weekdays == [0, 2, 0, 2]
+
+
+async def test_delete_single_occurrence_keeps_series(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    series = await _create_series(authenticated_client, calendar.id, recurrence_count=4)
+    second = (_next_monday() + timedelta(days=7)).isoformat()
+    deleted = await authenticated_client.delete(
+        f"/api/events/{series['id']}", params={"scope": "this", "occurrence_start": second}
+    )
+    assert deleted.status_code == 204
+    starts = [str(e["start_at"]) for e in await _list_events(authenticated_client, 28)]
+    assert datetime.fromisoformat(second) not in [datetime.fromisoformat(s) for s in starts]
+    assert len(starts) == 3
+
+
+async def test_edit_single_occurrence_creates_override(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    series = await _create_series(authenticated_client, calendar.id, recurrence_count=4)
+    second_start = _next_monday() + timedelta(days=7)
+    moved = await authenticated_client.patch(
+        f"/api/events/{series['id']}",
+        json={
+            "scope": "this",
+            "occurrence_start": second_start.isoformat(),
+            "title": "Moved standup",
+            "start_at": (second_start + timedelta(hours=3)).isoformat(),
+            "end_at": (second_start + timedelta(hours=4)).isoformat(),
+        },
+    )
+    assert moved.status_code == 200
+    assert moved.json()["rrule"] is None
+    events = await _list_events(authenticated_client, 28)
+    titles = [e["title"] for e in events]
+    # Override replaces the original occurrence: still four items, one renamed.
+    assert titles.count("Moved standup") == 1
+    assert len(events) == 4
+
+
+async def test_following_delete_truncates_series(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    series = await _create_series(authenticated_client, calendar.id, recurrence_count=5)
+    third = (_next_monday() + timedelta(days=14)).isoformat()
+    deleted = await authenticated_client.delete(
+        f"/api/events/{series['id']}", params={"scope": "following", "occurrence_start": third}
+    )
+    assert deleted.status_code == 204
+    events = await _list_events(authenticated_client, 60)
+    assert len(events) == 2  # weeks 0 and 1 remain, week 2 onward removed

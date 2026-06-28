@@ -1,6 +1,60 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiCall } from '../../lib/api'
-import type { CalendarData, CalendarEvent } from './types'
+import { COLOR_PRESETS, onColor } from './colors'
+import type { CalendarData, CalendarEvent, EventConnections } from './types'
+
+const ICON_PRESETS = ['📅', '💼', '☕', '🏃', '🍽️', '📝', '🎧', '🎯']
+const MIN_SAVE_SPINNER_MS = 145
+
+type Freq = '' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+const FREQ_UNIT: Record<Exclude<Freq, ''>, string> = {
+  DAILY: 'day',
+  WEEKLY: 'week',
+  MONTHLY: 'month',
+  YEARLY: 'year',
+}
+// Monday-first, matching the calendar grid.
+const WEEKDAYS: { code: string; label: string }[] = [
+  { code: 'MO', label: 'Mo' },
+  { code: 'TU', label: 'Tu' },
+  { code: 'WE', label: 'We' },
+  { code: 'TH', label: 'Th' },
+  { code: 'FR', label: 'Fr' },
+  { code: 'SA', label: 'Sa' },
+  { code: 'SU', label: 'Su' },
+]
+
+interface Recurrence {
+  freq: Freq
+  interval: number
+  byday: string[]
+  ends: 'never' | 'on' | 'after'
+  count: number
+  until: string // YYYY-MM-DD
+}
+
+function recurrenceSummary(r: Recurrence): string {
+  if (!r.freq) return 'Does not repeat'
+  const unit = FREQ_UNIT[r.freq]
+  let text = r.interval > 1 ? `Every ${r.interval} ${unit}s` : `Every ${unit}`
+  if (r.freq === 'WEEKLY' && r.byday.length) {
+    const order = WEEKDAYS.map((d) => d.code)
+    const names = [...r.byday]
+      .sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      .map((code) => WEEKDAYS.find((d) => d.code === code)?.label)
+      .join(', ')
+    text += ` on ${names}`
+  }
+  if (r.ends === 'after') text += `, ${r.count}×`
+  if (r.ends === 'on' && r.until) text += `, until ${r.until}`
+  return text
+}
+
+// The weekday code (MO..SU) of a local "YYYY-MM-DDTHH:mm" or ISO string.
+function weekdayCode(value: string): string {
+  const date = value ? new Date(value) : new Date()
+  return WEEKDAYS[(date.getDay() + 6) % 7].code
+}
 
 interface Props {
   calendars: CalendarData[]
@@ -24,6 +78,7 @@ export function EventEditor({
   onSaved,
   onDraftChange,
 }: Props) {
+  const [icon, setIcon] = useState(event.icon ?? '')
   const [form, setForm] = useState({
     title: event.title ?? '',
     calendar_id: event.calendar_id ?? calendars[0]?.id ?? '',
@@ -31,25 +86,134 @@ export function EventEditor({
     end_at: localValue(event.end_at ?? event.start_at ?? ''),
     all_day: event.all_day ?? false,
     color_override: event.color_override ?? '',
-    rrule: event.rrule ?? '',
     location: event.location ?? '',
     link: event.link ?? '',
     reminder_minutes: event.reminder_minutes?.toString() ?? '',
     description: event.description ?? '',
+    connect_notes: Boolean(event.connections?.notes),
+    note_title: event.connections?.notes?.title ?? event.title ?? '',
+    connect_finance: Boolean(event.connections?.finance),
+    finance_type: event.connections?.finance?.type ?? 'expense',
+    finance_amount: event.connections?.finance?.amount?.toString() ?? '',
+    finance_currency: event.connections?.finance?.currency ?? 'SEK',
+    finance_category: event.connections?.finance?.category ?? '',
+    finance_counterparty: event.connections?.finance?.counterparty ?? '',
+    finance_tax_relevant: event.connections?.finance?.tax_relevant ?? false,
+    connect_fitness: Boolean(event.connections?.fitness),
+    workout_type: event.connections?.fitness?.workout_type ?? '',
+    workout_notes: event.connections?.fitness?.notes ?? '',
+    connect_food: Boolean(event.connections?.food),
+    meal_type: event.connections?.food?.meal_type ?? 'lunch',
+    food_name: event.connections?.food?.name ?? '',
+    food_quantity: event.connections?.food?.quantity?.toString() ?? '1',
+    food_unit: event.connections?.food?.unit ?? 'serving',
+    food_calories: event.connections?.food?.calories?.toString() ?? '',
+    food_protein: event.connections?.food?.protein?.toString() ?? '',
+    food_carbs: event.connections?.food?.carbs?.toString() ?? '',
+    food_fat: event.connections?.food?.fat?.toString() ?? '',
   })
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(
+    'idle',
+  )
+  const [saveErrorPulse, setSaveErrorPulse] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [iconPickerOpen, setIconPickerOpen] = useState(false)
+  // When set, a recurring event needs the user to choose an edit/delete scope.
+  const [scopePrompt, setScopePrompt] = useState<'save' | 'delete' | null>(null)
+  const [recurrence, setRecurrence] = useState<Recurrence>({
+    freq: event.rrule ?? '',
+    interval: event.recurrence_interval ?? 1,
+    byday: event.recurrence_byday ?? [],
+    ends: event.recurrence_count
+      ? 'after'
+      : event.recurrence_until
+        ? 'on'
+        : 'never',
+    count: event.recurrence_count ?? 4,
+    until: event.recurrence_until ? event.recurrence_until.slice(0, 10) : '',
+  })
+  // Repeat editor popover + the snapshot to restore on Cancel.
+  const [repeatOpen, setRepeatOpen] = useState(false)
+  const repeatSnapshot = useRef<Recurrence | null>(null)
+  // The occurrence the editor opened on (before any time edits) — anchors
+  // single-occurrence overrides and exceptions.
+  const occurrenceStart = event.start_at
+  const isRecurring = Boolean(event.id && event.rrule)
+  const closingRef = useRef(false)
+  const closeTimer = useRef(0)
+  const saveStateTimer = useRef(0)
+  const errorFrame = useRef(0)
+  const errorTimer = useRef(0)
+  const iconPickerRef = useRef<HTMLDivElement>(null)
+
+  const closeWithAnimation = useCallback((complete: () => void) => {
+    if (closingRef.current) return
+    closingRef.current = true
+    setClosing(true)
+    closeTimer.current = window.setTimeout(complete, 240)
+  }, [])
 
   useEffect(() => {
-    const escape = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const escape = (e: KeyboardEvent) =>
+      e.key === 'Escape' && closeWithAnimation(onClose)
     window.addEventListener('keydown', escape)
-    return () => window.removeEventListener('keydown', escape)
-  }, [onClose])
+    return () => {
+      window.removeEventListener('keydown', escape)
+      window.clearTimeout(closeTimer.current)
+      window.clearTimeout(saveStateTimer.current)
+      window.cancelAnimationFrame(errorFrame.current)
+      window.clearTimeout(errorTimer.current)
+    }
+  }, [closeWithAnimation, onClose])
 
-  const set = (key: keyof typeof form, value: string | boolean) =>
+  useEffect(() => {
+    if (!iconPickerOpen) return
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (
+        iconPickerRef.current &&
+        !iconPickerRef.current.contains(event.target as Node)
+      ) {
+        setIconPickerOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', closeOnOutsideClick)
+    return () => window.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [iconPickerOpen])
+
+  const showSaveError = useCallback((message: string) => {
+    setError(message)
+    setSaveErrorPulse(false)
+    window.cancelAnimationFrame(errorFrame.current)
+    window.clearTimeout(errorTimer.current)
+    errorFrame.current = window.requestAnimationFrame(() => {
+      setSaveErrorPulse(true)
+      errorTimer.current = window.setTimeout(
+        () => setSaveErrorPulse(false),
+        650,
+      )
+    })
+  }, [])
+
+  const set = (key: keyof typeof form, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  // start_at/end_at are kept as "YYYY-MM-DDTHH:mm"; edit date and time halves
+  // separately for a cleaner picker without changing the submitted shape.
+  type TimeKey = 'start_at' | 'end_at'
+  const datePart = (value: string) =>
+    value.slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const timePart = (value: string) => value.slice(11, 16) || '09:00'
+  const setDatePart = (key: TimeKey, date: string) =>
+    set(key, `${date}T${timePart(form[key])}`)
+  const setTimePart = (key: TimeKey, time: string) =>
+    set(key, `${datePart(form[key])}T${time}`)
 
   const selectedCalendarId = form.calendar_id || calendars[0]?.id || ''
+  const selectedCalendarColor =
+    calendars.find((calendar) => calendar.id === selectedCalendarId)?.color ||
+    '#3B6FE0'
 
   useEffect(() => {
     if (!onDraftChange) return
@@ -64,6 +228,7 @@ export function EventEditor({
         : start.toISOString(),
       end_at: Number.isNaN(end.getTime()) ? event.end_at : end.toISOString(),
       all_day: form.all_day,
+      icon: icon.trim() || undefined,
       color_override: form.color_override || undefined,
       location: form.location || undefined,
       link: form.link || undefined,
@@ -71,232 +236,1118 @@ export function EventEditor({
       reminder_minutes: form.reminder_minutes
         ? Number(form.reminder_minutes)
         : undefined,
-      rrule:
-        form.rrule === 'DAILY' ||
-        form.rrule === 'WEEKLY' ||
-        form.rrule === 'MONTHLY'
-          ? form.rrule
-          : undefined,
+      rrule: recurrence.freq || undefined,
     })
-  }, [event, form, onDraftChange, selectedCalendarId])
+  }, [event, form, icon, onDraftChange, recurrence.freq, selectedCalendarId])
+
+  const persist = useCallback(
+    async (scope: 'all' | 'this' = 'all') => {
+      setError('')
+      const fail = (message: string) => {
+        setSaveState('idle')
+        showSaveError(message)
+        return false
+      }
+      if (!selectedCalendarId) {
+        return fail('Create or select a calendar before saving this event.')
+      }
+      if (!form.title.trim()) {
+        return fail('Add an event title.')
+      }
+      const start = new Date(form.start_at)
+      const end = new Date(form.end_at)
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return fail('Choose a valid start and end time.')
+      }
+      if (end <= start) {
+        return fail('The end time must be after the start time.')
+      }
+      if (form.connect_finance && Number(form.finance_amount) <= 0) {
+        return fail('Add a finance amount greater than zero.')
+      }
+      if (form.connect_finance && !form.finance_category.trim()) {
+        return fail('Add a finance category.')
+      }
+      if (form.connect_fitness && !form.workout_type.trim()) {
+        return fail('Add a workout type.')
+      }
+      if (form.connect_food && !form.food_name.trim()) {
+        return fail('Add a food or meal name.')
+      }
+      if (form.connect_food && Number(form.food_quantity) <= 0) {
+        return fail('Add a food quantity greater than zero.')
+      }
+      const saveStartedAt = performance.now()
+      setSaveState('saving')
+      const numberOrNull = (value: string) =>
+        value === '' ? null : Number(value)
+      const connections: EventConnections = {
+        notes: form.connect_notes
+          ? { title: form.note_title.trim() || form.title.trim() }
+          : null,
+        finance: form.connect_finance
+          ? {
+              type: form.finance_type as 'income' | 'expense',
+              amount: Number(form.finance_amount),
+              currency: form.finance_currency.trim().toUpperCase(),
+              category: form.finance_category.trim(),
+              counterparty: form.finance_counterparty.trim() || null,
+              tax_relevant: form.finance_tax_relevant,
+            }
+          : null,
+        fitness: form.connect_fitness
+          ? {
+              workout_type: form.workout_type.trim(),
+              notes: form.workout_notes.trim() || null,
+            }
+          : null,
+        food: form.connect_food
+          ? {
+              meal_type: form.meal_type as
+                | 'breakfast'
+                | 'lunch'
+                | 'dinner'
+                | 'snack',
+              name: form.food_name.trim(),
+              quantity: Number(form.food_quantity),
+              unit: form.food_unit.trim() || 'serving',
+              calories: numberOrNull(form.food_calories),
+              protein: numberOrNull(form.food_protein),
+              carbs: numberOrNull(form.food_carbs),
+              fat: numberOrNull(form.food_fat),
+            }
+          : null,
+      }
+      const recurrenceBody = recurrence.freq
+        ? {
+            rrule: recurrence.freq,
+            recurrence_interval: Math.min(
+              365,
+              Math.max(1, Math.round(recurrence.interval) || 1),
+            ),
+            recurrence_byday:
+              recurrence.freq === 'WEEKLY' ? recurrence.byday : [],
+            recurrence_count:
+              recurrence.ends === 'after'
+                ? Math.max(1, Math.round(recurrence.count) || 1)
+                : null,
+            recurrence_until:
+              recurrence.ends === 'on' && recurrence.until
+                ? new Date(`${recurrence.until}T23:59:59`).toISOString()
+                : null,
+          }
+        : {
+            rrule: null,
+            recurrence_interval: 1,
+            recurrence_byday: [],
+            recurrence_count: null,
+            recurrence_until: null,
+          }
+      const body = {
+        ...form,
+        calendar_id: selectedCalendarId,
+        title: form.title.trim(),
+        icon: icon.trim().slice(0, 32) || null,
+        start_at: start.toISOString(),
+        end_at: end.toISOString(),
+        color_override: form.color_override || null,
+        location: form.location || null,
+        link: form.link || null,
+        reminder_minutes: form.reminder_minutes
+          ? Number(form.reminder_minutes)
+          : null,
+        description: form.description || null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        connections,
+        ...recurrenceBody,
+        ...(scope === 'this'
+          ? { scope: 'this', occurrence_start: occurrenceStart }
+          : {}),
+      }
+      let response: Response
+      try {
+        response = await apiCall(
+          event.id ? `/api/events/${event.id}` : '/api/events',
+          {
+            method: event.id ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          },
+        )
+      } catch {
+        return fail('Could not connect to save the event.')
+      }
+      if (response.ok) {
+        const remaining =
+          MIN_SAVE_SPINNER_MS - (performance.now() - saveStartedAt)
+        if (remaining > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, remaining))
+        }
+        setSaveState('saved')
+        return true
+      } else {
+        const data = await response.json().catch(() => ({}))
+        const message =
+          typeof data.detail === 'string'
+            ? data.detail
+            : 'Could not save the event.'
+        return fail(message)
+      }
+    },
+    [
+      event.id,
+      form,
+      icon,
+      occurrenceStart,
+      recurrence,
+      selectedCalendarId,
+      showSaveError,
+    ],
+  )
+
+  const commitSave = async (scope: 'all' | 'this') => {
+    setScopePrompt(null)
+    if (await persist(scope)) {
+      window.clearTimeout(saveStateTimer.current)
+      saveStateTimer.current = window.setTimeout(
+        () => closeWithAnimation(onSaved),
+        450,
+      )
+    }
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    if (!selectedCalendarId) {
-      setError('Create or select a calendar before saving this event.')
+    // Recurring events ask whether to edit this occurrence or the whole series.
+    if (isRecurring) {
+      setScopePrompt('save')
       return
     }
-    if (!form.title.trim()) {
-      setError('Add an event title.')
-      return
-    }
-    const start = new Date(form.start_at)
-    const end = new Date(form.end_at)
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      setError('Choose a valid start and end time.')
-      return
-    }
-    if (end <= start) {
-      setError('The end time must be after the start time.')
-      return
-    }
-    setSaving(true)
-    const body = {
-      ...form,
-      calendar_id: selectedCalendarId,
-      title: form.title.trim(),
-      start_at: start.toISOString(),
-      end_at: end.toISOString(),
-      color_override: form.color_override || null,
-      rrule: form.rrule || null,
-      location: form.location || null,
-      link: form.link || null,
-      reminder_minutes: form.reminder_minutes
-        ? Number(form.reminder_minutes)
-        : null,
-      description: form.description || null,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }
-    const response = await apiCall(
-      event.id ? `/api/events/${event.id}` : '/api/events',
-      {
-        method: event.id ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    )
-    if (response.ok) onSaved()
-    else {
-      const data = await response.json().catch(() => ({}))
-      setError(
-        typeof data.detail === 'string'
-          ? data.detail
-          : 'Could not save the event.',
-      )
-      setSaving(false)
-    }
+    await commitSave('all')
   }
 
-  const remove = async () => {
-    if (!event.id || !window.confirm('Delete this event or repeating series?'))
-      return
-    const response = await apiCall(`/api/events/${event.id}`, {
+  const performDelete = async (scope: 'all' | 'this' | 'following') => {
+    setScopePrompt(null)
+    const query =
+      scope === 'all'
+        ? ''
+        : `?scope=${scope}&occurrence_start=${encodeURIComponent(occurrenceStart ?? '')}`
+    const response = await apiCall(`/api/events/${event.id}${query}`, {
       method: 'DELETE',
     })
-    if (response.ok) onSaved()
+    if (response.ok) closeWithAnimation(onSaved)
     else setError('Could not delete the event.')
   }
 
+  const remove = () => {
+    if (!event.id) return
+    if (isRecurring) {
+      setScopePrompt('delete')
+      return
+    }
+    if (window.confirm('Delete this event?')) void performDelete('all')
+  }
+
+  const openRepeat = () => {
+    repeatSnapshot.current = recurrence
+    setRecurrence((r) =>
+      r.freq
+        ? r
+        : { ...r, freq: 'WEEKLY', byday: [weekdayCode(form.start_at)] },
+    )
+    setRepeatOpen(true)
+  }
+  const cancelRepeat = () => {
+    if (repeatSnapshot.current) setRecurrence(repeatSnapshot.current)
+    setRepeatOpen(false)
+  }
+  const toggleByday = (code: string) =>
+    setRecurrence((r) => {
+      if (r.byday.includes(code)) {
+        // Keep at least one weekday selected.
+        if (r.byday.length === 1) return r
+        return { ...r, byday: r.byday.filter((c) => c !== code) }
+      }
+      return { ...r, byday: [...r.byday, code] }
+    })
+
   return (
     <div
-      className="calendar-backdrop"
+      className={`calendar-backdrop ${closing ? 'closing' : ''}`}
       role="presentation"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      onMouseDown={(e) =>
+        e.target === e.currentTarget && closeWithAnimation(onClose)
+      }
+      onKeyDown={(e) => e.key === 'Escape' && closeWithAnimation(onClose)}
     >
       <aside
-        className="event-editor"
+        className={`event-editor ${closing ? 'closing' : ''} ${repeatOpen || scopePrompt ? 'locked' : ''}`}
         aria-label={event.id ? 'Edit event' : 'New event'}
       >
         <header>
           <h2>{event.id ? 'Edit event' : 'New event'}</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
-            ×
+          <button
+            type="button"
+            className="editor-close"
+            onClick={() => closeWithAnimation(onClose)}
+            aria-label="Close"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
+              <path d="M5 5l10 10M15 5L5 15" />
+            </svg>
           </button>
         </header>
-        <form onSubmit={save}>
-          <label>
-            Title
+        <form onSubmit={save} noValidate>
+          <div className="editor-title-row">
+            <div className="editor-icon-picker" ref={iconPickerRef}>
+              <button
+                type="button"
+                className="editor-icon-trigger"
+                aria-label="Choose event icon"
+                aria-haspopup="menu"
+                aria-expanded={iconPickerOpen}
+                onClick={() => setIconPickerOpen((current) => !current)}
+              >
+                {icon ? (
+                  <span className="event-icon-glyph" aria-hidden="true">
+                    {icon}
+                  </span>
+                ) : (
+                  <svg
+                    className="editor-icon-empty"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 14.5a4 4 0 0 0 7 0" />
+                    <path d="M9 9.5h.01M15 9.5h.01" />
+                  </svg>
+                )}
+              </button>
+              {iconPickerOpen && (
+                <div
+                  className="editor-icon-popover"
+                  role="dialog"
+                  aria-label="Event icon"
+                >
+                  <div className="editor-icon-grid">
+                    {ICON_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        className={`editor-icon-choice ${icon === preset ? 'active' : ''}`}
+                        aria-pressed={icon === preset}
+                        onClick={() => {
+                          setIcon(preset)
+                          setIconPickerOpen(false)
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="editor-icon-custom"
+                    aria-label="Custom icon — type or paste any emoji or Nerd Font glyph"
+                    placeholder="Type or paste emoji / glyph…"
+                    inputMode="text"
+                    title="macOS: Ctrl+Cmd+Space for emoji picker"
+                    value={icon}
+                    onChange={(e) => setIcon(e.target.value.slice(0, 32))}
+                  />
+                  {icon && (
+                    <button
+                      type="button"
+                      className="editor-icon-clear"
+                      onClick={() => {
+                        setIcon('')
+                        setIconPickerOpen(false)
+                      }}
+                    >
+                      Remove icon
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <input
+              className="editor-title"
               required
               placeholder="Event title"
+              aria-label="Title"
               value={form.title}
               onChange={(e) => set('title', e.target.value)}
             />
-          </label>
-          <label>
-            Calendar
-            <select
-              required
-              value={selectedCalendarId}
-              onChange={(e) => set('calendar_id', e.target.value)}
-            >
-              {calendars.map((calendar) => (
-                <option key={calendar.id} value={calendar.id}>
-                  {calendar.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="form-row">
-            <label>
-              Starts
-              <input
-                required
-                type="datetime-local"
-                value={form.start_at}
-                onChange={(e) => set('start_at', e.target.value)}
-              />
-            </label>
-            <label>
-              Ends
-              <input
-                required
-                type="datetime-local"
-                value={form.end_at}
-                onChange={(e) => set('end_at', e.target.value)}
-              />
-            </label>
           </div>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={form.all_day}
-              onChange={(e) => set('all_day', e.target.checked)}
-            />{' '}
-            All day
-          </label>
-          <div className="form-row">
+
+          <fieldset className="editor-group">
+            <legend>Calendar</legend>
+            <div
+              className="calendar-chips"
+              role="radiogroup"
+              aria-label="Calendar"
+            >
+              {calendars.map((calendar) => {
+                const active = calendar.id === selectedCalendarId
+                return (
+                  <button
+                    key={calendar.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`calendar-chip ${active ? 'active' : ''}`}
+                    onClick={() => set('calendar_id', calendar.id)}
+                  >
+                    <span
+                      className="chip-dot"
+                      style={{ background: calendar.color }}
+                    />
+                    {calendar.name}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset className="editor-group">
+            <legend>When</legend>
+            <label className="toggle-row">
+              <span>All day</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={form.all_day}
+                onChange={(e) => set('all_day', e.target.checked)}
+              />
+            </label>
+            <label className="dt-row">
+              <span>Starts</span>
+              <div className="dt-field">
+                {!form.all_day && (
+                  <input
+                    type="time"
+                    step={300}
+                    aria-label="Start time"
+                    value={timePart(form.start_at)}
+                    onChange={(e) => setTimePart('start_at', e.target.value)}
+                  />
+                )}
+                <input
+                  required
+                  type="date"
+                  aria-label="Start date"
+                  value={datePart(form.start_at)}
+                  onChange={(e) => setDatePart('start_at', e.target.value)}
+                />
+              </div>
+            </label>
+            <label className="dt-row">
+              <span>Ends</span>
+              <div className="dt-field">
+                {!form.all_day && (
+                  <input
+                    type="time"
+                    step={300}
+                    aria-label="End time"
+                    value={timePart(form.end_at)}
+                    onChange={(e) => setTimePart('end_at', e.target.value)}
+                  />
+                )}
+                <input
+                  required
+                  type="date"
+                  aria-label="End date"
+                  value={datePart(form.end_at)}
+                  onChange={(e) => setDatePart('end_at', e.target.value)}
+                />
+              </div>
+            </label>
             <label>
               Repeats
-              <select
-                value={form.rrule}
-                onChange={(e) => set('rrule', e.target.value)}
+              <div className="repeat-field-row">
+                <button
+                  type="button"
+                  className="repeat-field"
+                  onClick={openRepeat}
+                >
+                  {recurrenceSummary(recurrence)}
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 7.5l5 5 5-5" />
+                  </svg>
+                </button>
+                {recurrence.freq && (
+                  <button
+                    type="button"
+                    className="repeat-clear"
+                    aria-label="Remove repeat"
+                    onClick={() => setRecurrence((r) => ({ ...r, freq: '' }))}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    >
+                      <path d="M5 5l10 10M15 5L5 15" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </label>
+          </fieldset>
+
+          <fieldset className="editor-group">
+            <legend>Color</legend>
+            <div className="color-swatches">
+              {COLOR_PRESETS.map((preset) => {
+                const active =
+                  form.color_override.toLowerCase() === preset.toLowerCase()
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`color-swatch ${active ? 'active' : ''}`}
+                    aria-label={`Use color ${preset}`}
+                    aria-pressed={active}
+                    style={
+                      {
+                        background: preset,
+                        '--cc-on': onColor(preset),
+                      } as React.CSSProperties
+                    }
+                    onClick={() => set('color_override', preset)}
+                  />
+                )
+              })}
+              <label
+                className={`color-custom ${
+                  form.color_override &&
+                  !COLOR_PRESETS.some(
+                    (preset) =>
+                      preset.toLowerCase() ===
+                      form.color_override.toLowerCase(),
+                  )
+                    ? 'active'
+                    : ''
+                }`}
+                title="Custom color"
+                style={
+                  {
+                    background: form.color_override || selectedCalendarColor,
+                    '--cc-on': onColor(
+                      form.color_override || selectedCalendarColor,
+                    ),
+                  } as React.CSSProperties
+                }
               >
-                <option value="">Never</option>
-                <option value="DAILY">Every day</option>
-                <option value="WEEKLY">Every week</option>
-                <option value="MONTHLY">Every month</option>
+                <input
+                  type="color"
+                  aria-label="Custom event color"
+                  value={form.color_override || selectedCalendarColor}
+                  onChange={(e) => set('color_override', e.target.value)}
+                />
+                <svg
+                  className="color-custom-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                  <path d="M12.5 5.5l2 2" />
+                </svg>
+              </label>
+              <button
+                type="button"
+                className="color-clear"
+                aria-pressed={!form.color_override}
+                onClick={() => set('color_override', '')}
+              >
+                Use calendar color
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset className="editor-group">
+            <legend>Connections</legend>
+            <p className="connection-help">
+              Prepare related records that will live in the other modules.
+            </p>
+            <div className="connection-list">
+              <div
+                className={`connection-card ${form.connect_notes ? 'active' : ''}`}
+              >
+                <label className="toggle-row">
+                  <span>Notes</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={form.connect_notes}
+                    onChange={(e) => {
+                      set('connect_notes', e.target.checked)
+                      if (e.target.checked && !form.note_title)
+                        set('note_title', form.title)
+                    }}
+                  />
+                </label>
+                {form.connect_notes && (
+                  <div className="connection-options">
+                    <label>
+                      Note title
+                      <input
+                        value={form.note_title}
+                        placeholder={form.title || 'Related note'}
+                        onChange={(e) => set('note_title', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`connection-card ${form.connect_finance ? 'active' : ''}`}
+              >
+                <label className="toggle-row">
+                  <span>Finance</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={form.connect_finance}
+                    onChange={(e) => set('connect_finance', e.target.checked)}
+                  />
+                </label>
+                {form.connect_finance && (
+                  <div className="connection-options two-column">
+                    <label>
+                      Type
+                      <select
+                        value={form.finance_type}
+                        onChange={(e) => set('finance_type', e.target.value)}
+                      >
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                      </select>
+                    </label>
+                    <label>
+                      Amount
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={form.finance_amount}
+                        onChange={(e) => set('finance_amount', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Currency
+                      <input
+                        maxLength={3}
+                        value={form.finance_currency}
+                        onChange={(e) =>
+                          set('finance_currency', e.target.value)
+                        }
+                      />
+                    </label>
+                    <label>
+                      Category
+                      <input
+                        value={form.finance_category}
+                        onChange={(e) =>
+                          set('finance_category', e.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="connection-wide">
+                      Counterparty
+                      <input
+                        value={form.finance_counterparty}
+                        onChange={(e) =>
+                          set('finance_counterparty', e.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="connection-check connection-wide">
+                      <input
+                        type="checkbox"
+                        checked={form.finance_tax_relevant}
+                        onChange={(e) =>
+                          set('finance_tax_relevant', e.target.checked)
+                        }
+                      />
+                      Tax relevant
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`connection-card ${form.connect_fitness ? 'active' : ''}`}
+              >
+                <label className="toggle-row">
+                  <span>Fitness</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={form.connect_fitness}
+                    onChange={(e) => set('connect_fitness', e.target.checked)}
+                  />
+                </label>
+                {form.connect_fitness && (
+                  <div className="connection-options">
+                    <label>
+                      Workout type
+                      <input
+                        placeholder="Strength, run, mobility…"
+                        value={form.workout_type}
+                        onChange={(e) => set('workout_type', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Workout notes
+                      <textarea
+                        rows={2}
+                        value={form.workout_notes}
+                        onChange={(e) => set('workout_notes', e.target.value)}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`connection-card ${form.connect_food ? 'active' : ''}`}
+              >
+                <label className="toggle-row">
+                  <span>Food</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={form.connect_food}
+                    onChange={(e) => set('connect_food', e.target.checked)}
+                  />
+                </label>
+                {form.connect_food && (
+                  <div className="connection-options two-column">
+                    <label>
+                      Meal
+                      <select
+                        value={form.meal_type}
+                        onChange={(e) => set('meal_type', e.target.value)}
+                      >
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                        <option value="snack">Snack</option>
+                      </select>
+                    </label>
+                    <label>
+                      Food or meal
+                      <input
+                        value={form.food_name}
+                        onChange={(e) => set('food_name', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Quantity
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={form.food_quantity}
+                        onChange={(e) => set('food_quantity', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Unit
+                      <input
+                        value={form.food_unit}
+                        onChange={(e) => set('food_unit', e.target.value)}
+                      />
+                    </label>
+                    {(['calories', 'protein', 'carbs', 'fat'] as const).map(
+                      (macro) => (
+                        <label key={macro}>
+                          {macro[0].toUpperCase() + macro.slice(1)}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={form[`food_${macro}`]}
+                            onChange={(e) =>
+                              set(`food_${macro}`, e.target.value)
+                            }
+                          />
+                        </label>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="editor-group">
+            <legend>Details</legend>
+            <label>
+              Location
+              <input
+                placeholder="Add a place"
+                value={form.location}
+                onChange={(e) => set('location', e.target.value)}
+              />
+            </label>
+            <label>
+              Link
+              <input
+                type="url"
+                placeholder="https://"
+                value={form.link}
+                onChange={(e) => set('link', e.target.value)}
+              />
+            </label>
+            <label>
+              Reminder
+              <select
+                value={form.reminder_minutes}
+                onChange={(e) => set('reminder_minutes', e.target.value)}
+              >
+                <option value="">None</option>
+                <option value="5">5 minutes before</option>
+                <option value="15">15 minutes before</option>
+                <option value="30">30 minutes before</option>
+                <option value="60">1 hour before</option>
+                <option value="1440">1 day before</option>
               </select>
             </label>
             <label>
-              Event color
-              <input
-                type="color"
-                value={form.color_override || '#3B6FE0'}
-                onChange={(e) => set('color_override', e.target.value)}
+              Notes
+              <textarea
+                rows={4}
+                placeholder="Add notes"
+                value={form.description}
+                onChange={(e) => set('description', e.target.value)}
               />
             </label>
-          </div>
-          <label>
-            Location
-            <input
-              value={form.location}
-              onChange={(e) => set('location', e.target.value)}
-            />
-          </label>
-          <label>
-            Link
-            <input
-              type="url"
-              placeholder="https://"
-              value={form.link}
-              onChange={(e) => set('link', e.target.value)}
-            />
-          </label>
-          <label>
-            Reminder
-            <select
-              value={form.reminder_minutes}
-              onChange={(e) => set('reminder_minutes', e.target.value)}
-            >
-              <option value="">None</option>
-              <option value="5">5 minutes before</option>
-              <option value="15">15 minutes before</option>
-              <option value="30">30 minutes before</option>
-              <option value="60">1 hour before</option>
-              <option value="1440">1 day before</option>
-            </select>
-          </label>
-          <label>
-            Notes
-            <textarea
-              rows={5}
-              value={form.description}
-              onChange={(e) => set('description', e.target.value)}
-            />
-          </label>
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
+          </fieldset>
+
           <footer>
             {event.id && (
               <button className="danger" type="button" onClick={remove}>
                 Delete
               </button>
             )}
+            {error && (
+              <div className="editor-alert" role="alert">
+                <svg
+                  className="editor-alert-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="10" cy="10" r="7.5" />
+                  <path d="M10 6.2v4.8M10 14h.01" />
+                </svg>
+                <p>{error}</p>
+              </div>
+            )}
             <span />
-            <button type="button" onClick={onClose}>
+            <button type="button" onClick={() => closeWithAnimation(onClose)}>
               Cancel
             </button>
-            <button className="primary" type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
+            <button
+              className={`primary ${saveState} ${saveErrorPulse ? 'save-error' : ''}`}
+              type="submit"
+              disabled={saveState !== 'idle'}
+              aria-label={
+                saveState === 'saving'
+                  ? 'Saving event'
+                  : saveState === 'saved'
+                    ? 'Event saved'
+                    : 'Save'
+              }
+            >
+              {saveState === 'saving' && (
+                <span className="event-save-spinner" />
+              )}
+              {saveState === 'saved' && (
+                <svg
+                  className="event-save-check"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 8.5L6.5 12L13 4"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray="20"
+                    strokeDashoffset="20"
+                  />
+                </svg>
+              )}
+              {saveState === 'idle' && 'Save'}
             </button>
           </footer>
         </form>
+        {repeatOpen && (
+          <div className="scope-prompt" role="dialog" aria-label="Repeat">
+            <div className="repeat-card">
+              <h3>Repeat</h3>
+              <div className="repeat-section">
+                <span className="repeat-label">Every</span>
+                <div className="repeat-line">
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    className="repeat-interval"
+                    aria-label="Interval"
+                    value={recurrence.interval}
+                    onChange={(e) =>
+                      setRecurrence((r) => ({
+                        ...r,
+                        interval: Math.max(1, Number(e.target.value) || 1),
+                      }))
+                    }
+                  />
+                  <select
+                    className="repeat-unit"
+                    aria-label="Frequency"
+                    value={recurrence.freq || 'WEEKLY'}
+                    onChange={(e) =>
+                      setRecurrence((r) => ({
+                        ...r,
+                        freq: e.target.value as Freq,
+                      }))
+                    }
+                  >
+                    <option value="DAILY">
+                      {recurrence.interval > 1 ? 'days' : 'day'}
+                    </option>
+                    <option value="WEEKLY">
+                      {recurrence.interval > 1 ? 'weeks' : 'week'}
+                    </option>
+                    <option value="MONTHLY">
+                      {recurrence.interval > 1 ? 'months' : 'month'}
+                    </option>
+                    <option value="YEARLY">
+                      {recurrence.interval > 1 ? 'years' : 'year'}
+                    </option>
+                  </select>
+                </div>
+              </div>
+              {recurrence.freq === 'WEEKLY' && (
+                <div className="repeat-section">
+                  <span className="repeat-label">Repeat on</span>
+                  <div className="repeat-days">
+                    {WEEKDAYS.map((day) => (
+                      <button
+                        key={day.code}
+                        type="button"
+                        className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
+                        aria-pressed={recurrence.byday.includes(day.code)}
+                        onClick={() => toggleByday(day.code)}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="repeat-section">
+                <label className="toggle-row">
+                  <span>Ends</span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="Ends"
+                    checked={recurrence.ends !== 'never'}
+                    onChange={(e) =>
+                      setRecurrence((r) => ({
+                        ...r,
+                        ends: e.target.checked
+                          ? r.ends === 'never'
+                            ? 'on'
+                            : r.ends
+                          : 'never',
+                      }))
+                    }
+                  />
+                </label>
+                {recurrence.ends !== 'never' && (
+                  <div className="repeat-end-options">
+                    <div
+                      className="repeat-segmented"
+                      role="radiogroup"
+                      aria-label="End condition"
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={recurrence.ends === 'on'}
+                        className={recurrence.ends === 'on' ? 'active' : ''}
+                        onClick={() =>
+                          setRecurrence((r) => ({ ...r, ends: 'on' }))
+                        }
+                      >
+                        On date
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={recurrence.ends === 'after'}
+                        className={recurrence.ends === 'after' ? 'active' : ''}
+                        onClick={() =>
+                          setRecurrence((r) => ({ ...r, ends: 'after' }))
+                        }
+                      >
+                        After count
+                      </button>
+                    </div>
+                    {recurrence.ends === 'on' ? (
+                      <input
+                        type="date"
+                        aria-label="End date"
+                        value={recurrence.until}
+                        onChange={(e) =>
+                          setRecurrence((r) => ({
+                            ...r,
+                            until: e.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <div className="repeat-line">
+                        <input
+                          type="number"
+                          min={1}
+                          max={730}
+                          aria-label="Occurrence count"
+                          className="repeat-count"
+                          value={recurrence.count}
+                          onChange={(e) =>
+                            setRecurrence((r) => ({
+                              ...r,
+                              count: Math.max(1, Number(e.target.value) || 1),
+                            }))
+                          }
+                        />
+                        <span className="repeat-times">times</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="repeat-actions">
+                <button type="button" className="ghost" onClick={cancelRepeat}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => setRepeatOpen(false)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {scopePrompt && (
+          <div
+            className="scope-prompt"
+            role="dialog"
+            aria-label="Repeating event"
+          >
+            <div className="scope-card">
+              <h3>
+                {scopePrompt === 'delete'
+                  ? 'Delete repeating event'
+                  : 'Edit repeating event'}
+              </h3>
+              <p>This event repeats. Apply your change to:</p>
+              <div className="scope-options">
+                <button
+                  type="button"
+                  className="scope-option"
+                  onClick={() =>
+                    scopePrompt === 'delete'
+                      ? void performDelete('this')
+                      : void commitSave('this')
+                  }
+                >
+                  This event
+                </button>
+                {scopePrompt === 'delete' && (
+                  <button
+                    type="button"
+                    className="scope-option"
+                    onClick={() => void performDelete('following')}
+                  >
+                    This and following events
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="scope-option"
+                  onClick={() =>
+                    scopePrompt === 'delete'
+                      ? void performDelete('all')
+                      : void commitSave('all')
+                  }
+                >
+                  All events
+                </button>
+              </div>
+              <button
+                type="button"
+                className="scope-cancel"
+                onClick={() => setScopePrompt(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   )
