@@ -143,8 +143,7 @@ textarea {
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@v3.3.0/patched-fonts/NerdFontsSymbolsOnly/SymbolsNerdFont-Regular.ttf')
-    format('truetype');
+  src: url('/fonts/SymbolsNerdFont-Regular.ttf') format('truetype');
   unicode-range: U+E000-F8FF, U+F0000-FFFFD, U+100000-10FFFD;
 }
 
