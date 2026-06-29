@@ -36,7 +36,7 @@ jobs:
 
       - name: Deploy tested commit
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" bash -s -- "$DEPLOY_SHA" <<'REMOTE'
+          ssh -p 2020 -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" bash -s -- "$DEPLOY_SHA" <<'REMOTE'
           set -euo pipefail
 
           deploy_sha="$1"

@@ -150,9 +150,9 @@ repository's `production` environment in GitHub:
 | `VPS_HOST`        | VPS hostname or IP address               |
 | `VPS_USER`        | `manuel`                                 |
 | `VPS_SSH_KEY`     | Dedicated private SSH key for deployment |
-| `VPS_KNOWN_HOSTS` | Verified SSH host-key line for the VPS   |
+| `VPS_KNOWN_HOSTS` | Verified `[host]:2020` SSH host-key line |
 
-Generate the `VPS_KNOWN_HOSTS` value with `ssh-keyscan`, but compare its
+Generate the `VPS_KNOWN_HOSTS` value with `ssh-keyscan -p 2020`, but compare its
 fingerprint with the VPS host key over an already trusted SSH connection before
 saving it. Do not use `StrictHostKeyChecking=no`.
 

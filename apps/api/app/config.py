@@ -4,9 +4,12 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The repo keeps a single root `.env`. Resolve it by path so settings load the
-# same file no matter which directory the API process is started from.
-_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+# Load the repository `.env` locally. Production values are injected by Compose,
+# so the shallower container filesystem does not need to contain this file.
+_ENV_FILE = next(
+    (parent / ".env" for parent in Path(__file__).resolve().parents if (parent / ".env").is_file()),
+    None,
+)
 
 
 class Settings(BaseSettings):
