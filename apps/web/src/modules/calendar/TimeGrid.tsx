@@ -84,24 +84,73 @@ interface TimedEventSegment {
 }
 
 function overlapOffsets(segments: TimedEventSegment[]) {
-  const meta = segments.map(({ event, start, end }) => ({
-    id: occurrenceKey(event),
-    start: start.getTime(),
-    end: end.getTime(),
-  }))
-  const offsets = new Map<string, number>()
-  for (const a of meta) {
-    let longer = 0
-    const aDur = a.end - a.start
-    for (const b of meta) {
-      if (a.id === b.id) continue
-      if (!(a.start < b.end && b.start < a.end)) continue
-      const bDur = b.end - b.start
-      if (bDur > aDur || (bDur === aDur && b.start < a.start)) longer++
+  // Google Calendar greedy column assignment — only within overlap groups.
+  // Events that don't overlap with anything get full width (100%).
+  const meta = segments
+    .map(({ event, start, end }) => ({
+      id: occurrenceKey(event),
+      start: start.getTime(),
+      end: end.getTime(),
+    }))
+    .sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start))
+
+  // Assign each event to an overlap group: events that share time intersect
+  // belong to the same group.
+  const groups: { id: string; start: number; end: number }[][] = []
+  const groupFor = new Map<string, number>()
+
+  for (const m of meta) {
+    // Find first group this event overlaps with
+    let groupIdx = -1
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi]
+      if (g.some((e) => e.start < m.end && e.end > m.start)) {
+        groupIdx = gi
+        break
+      }
     }
-    offsets.set(a.id, longer)
+    if (groupIdx === -1) {
+      groupIdx = groups.length
+      groups.push([])
+    }
+    groups[groupIdx].push(m)
+    groupFor.set(m.id, groupIdx)
   }
-  return offsets
+
+  // Within each group, run greedy column assignment
+  const assignments = new Map<string, { col: number; groupMax: number }>()
+
+  for (const group of groups) {
+    const columns: { id: string; end: number }[][] = []
+    for (const m of group) {
+      let col = 0
+      while (col < columns.length) {
+        const last = columns[col][columns[col].length - 1]
+        if (last.end <= m.start) break
+        col++
+      }
+      if (col >= columns.length) columns.push([])
+      columns[col].push(m)
+      assignments.set(m.id, { col, groupMax: columns.length })
+    }
+    // Ensure all events in this group know the true max column count
+    for (const m of group) {
+      const a = assignments.get(m.id)!
+      a.groupMax = Math.max(a.groupMax, columns.length)
+    }
+  }
+
+  // Solo events (groups of 1) get full width
+  const result = new Map<string, { left: number; width: number; col: number }>()
+  for (const [id, a] of assignments) {
+    if (a.groupMax <= 1) {
+      result.set(id, { left: 0, width: 1, col: 0 })
+    } else {
+      const width = 1 / a.groupMax
+      result.set(id, { left: a.col * width, width, col: a.col })
+    }
+  }
+  return result
 }
 
 export function TimeGrid({
@@ -133,6 +182,7 @@ export function TimeGrid({
   const scrollRef = useRef<HTMLDivElement>(null)
   const didInitialScroll = useRef(false)
   const horizontalWheel = useRef(0)
+  const [resizingDay, setResizingDay] = useState<string | null>(null)
 
   const loadEvents = useCallback(() => {
     const from = new Date(days[0])
@@ -258,21 +308,32 @@ export function TimeGrid({
     setNewSelection(next)
   }
 
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchMovedRef = useRef(false)
+
   const startNewSelection = (event: React.PointerEvent, day: Date) => {
     if (event.button !== 0) return
-    const column = event.currentTarget as HTMLElement
-    const minute = minuteAtPointer(
-      event.clientY,
-      column.getBoundingClientRect().top,
-      rowHeight,
-    )
-    pasteTargetRef.current = dateAtMinute(day, minute)
-    setSelectedKeys(new Set())
-    column.setPointerCapture(event.pointerId)
-    updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
+    // FIX-3: on touch devices, gate creation with a 300ms long-press
+    if (event.pointerType === 'touch') {
+      touchMovedRef.current = false
+      touchTimerRef.current = setTimeout(() => {
+        if (!touchMovedRef.current) commitNewSelection(event, day)
+      }, 300)
+      return
+    }
+    commitNewSelection(event, day)
   }
 
   const moveNewSelection = (event: React.PointerEvent) => {
+    // FIX-3: cancel touch timer on move
+    if (event.pointerType === 'touch') {
+      touchMovedRef.current = true
+      if (touchTimerRef.current) {
+        clearTimeout(touchTimerRef.current)
+        touchTimerRef.current = null
+      }
+      return
+    }
     const current = selectionRef.current
     if (!current || !event.currentTarget.hasPointerCapture(event.pointerId))
       return
@@ -288,6 +349,8 @@ export function TimeGrid({
   }
 
   const finishNewSelection = (event: React.PointerEvent) => {
+    // FIX-3: touch handled by timer already
+    if (event.pointerType === 'touch') return
     const current = selectionRef.current
     if (!current || !event.currentTarget.hasPointerCapture(event.pointerId))
       return
@@ -302,6 +365,27 @@ export function TimeGrid({
       dateAtMinute(current.day, startMinute),
       dateAtMinute(current.day, endMinute),
     )
+  }
+
+  const commitNewSelection = (event: React.PointerEvent, day: Date) => {
+    const column = event.currentTarget as HTMLElement
+    const minute = minuteAtPointer(
+      event.clientY,
+      column.getBoundingClientRect().top,
+      rowHeight,
+    )
+    pasteTargetRef.current = dateAtMinute(day, minute)
+    setSelectedKeys(new Set())
+    column.setPointerCapture(event.pointerId)
+    updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
+  }
+
+  const cancelNewSelection = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current)
+      touchTimerRef.current = null
+    }
+    updateNewSelection(null)
   }
 
   const setCurrentGesture = (next: Gesture | null) => {
@@ -560,6 +644,10 @@ export function TimeGrid({
     const calendar = calendars.find((item) => item.id === event.calendar_id)
     return event.color_override || calendar?.color || '#5B8AFD'
   }
+  const calendarColorFor = (event: CalendarEvent) => {
+    const calendar = calendars.find((item) => item.id === event.calendar_id)
+    return calendar?.color || '#5B8AFD'
+  }
   const draft = draftEvent
   const draftId = draft?.id
   const draftStart = draft?.start_at ? new Date(draft.start_at) : null
@@ -700,7 +788,7 @@ export function TimeGrid({
             onPointerDown={(event) => startNewSelection(event, day)}
             onPointerMove={moveNewSelection}
             onPointerUp={finishNewSelection}
-            onPointerCancel={() => updateNewSelection(null)}
+            onPointerCancel={() => cancelNewSelection()}
           >
             {HOURS.map((hour) => (
               <button
@@ -769,8 +857,15 @@ export function TimeGrid({
                 const eventStart = new Date(event.start_at)
                 const eventEnd = new Date(event.end_at)
                 const color = colorFor(event)
+                const calColor = calendarColorFor(event)
                 const key = occurrenceKey(event)
-                const offset = offsets.get(key) ?? 0
+                const ol = offsets.get(key)
+                const leftPct = ol
+                  ? `${(ol.left * 100).toFixed(1)}%`
+                  : undefined
+                const widthPct = ol
+                  ? `${(ol.width * 100).toFixed(1)}%`
+                  : undefined
                 const top =
                   (start.getHours() + start.getMinutes() / 60) * rowHeight
                 const height = Math.max(
@@ -804,28 +899,37 @@ export function TimeGrid({
                         ? 'dragging'
                         : ''
                     } ${(isMoving || isResizing) && gesture?.settling ? 'settling' : ''}`}
-                    style={{
-                      top,
-                      height: isResizing
-                        ? Math.max(2, height + gesture.rawY)
-                        : height,
-                      // Shorter overlapping events shift right and stack above
-                      // longer ones, kept within the day column.
-                      left: offset ? `calc(3px + ${offset * 14}px)` : undefined,
-                      zIndex: isMoving || isResizing ? undefined : 2 + offset,
-                      borderColor: color,
-                      color,
-                      // An event stacked on top of another (or being dragged)
-                      // gets a solid backdrop so the one beneath can't bleed
-                      // through; otherwise keep the translucent tint.
-                      background:
-                        offset || isMoving || isResizing
-                          ? `linear-gradient(${color}22, ${color}22), var(--bg-elevated)`
-                          : `${color}22`,
-                      transform: isMoving
-                        ? `translate(${gesture.rawX}px, ${gesture.rawY}px)`
-                        : undefined,
-                    }}
+                    style={
+                      {
+                        top,
+                        height: isResizing
+                          ? Math.max(
+                              2,
+                              height +
+                                (resizingDay &&
+                                sameDay(day, new Date(resizingDay))
+                                  ? gesture.rawY
+                                  : 0),
+                            )
+                          : height,
+                        left: leftPct,
+                        width: widthPct,
+                        '--cal-color': calColor as string | undefined,
+                        zIndex:
+                          isMoving || isResizing
+                            ? undefined
+                            : 2 + (ol?.col ?? 0),
+                        borderColor: color,
+                        color,
+                        background:
+                          ol && ol.col > 0
+                            ? `linear-gradient(${color}22, ${color}22), var(--bg-elevated)`
+                            : `${color}22`,
+                        transform: isMoving
+                          ? `translate(${gesture.rawX}px, ${gesture.rawY}px)`
+                          : undefined,
+                      } as React.CSSProperties
+                    }
                     onPointerDown={(pointer) =>
                       startEventGesture(pointer, event, 'move')
                     }
@@ -863,12 +967,23 @@ export function TimeGrid({
                           aria-hidden="true"
                           onPointerDown={(pointer) => {
                             pointer.stopPropagation()
+                            // FIX-1: record which day's segment is being resized
+                            const col = pointer.currentTarget.closest(
+                              '.day-column',
+                            ) as HTMLElement | null
+                            if (col?.dataset.dayIndex !== undefined) {
+                              const dayIdx = Number(col.dataset.dayIndex)
+                              setResizingDay(
+                                days[dayIdx]?.toDateString() ?? null,
+                              )
+                            }
                             startEventGesture(pointer, event, 'resize')
                           }}
                           onPointerMove={moveEventGesture}
-                          onPointerUp={(pointer) =>
+                          onPointerUp={(pointer) => {
+                            setResizingDay(null)
                             void finishEventGesture(pointer, event)
-                          }
+                          }}
                           onPointerCancel={() => setCurrentGesture(null)}
                         />
                       )}
