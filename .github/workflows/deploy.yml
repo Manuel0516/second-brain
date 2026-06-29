@@ -31,7 +31,9 @@ jobs:
         run: |
           install -d -m 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          host_key=$(printf '%s\n' "$VPS_KNOWN_HOSTS" | awk '$2 == "ssh-ed25519" { print $2, $3; exit }')
+          test -n "$host_key"
+          printf '[%s]:2020 %s\n' "$VPS_HOST" "$host_key" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
       - name: Deploy tested commit

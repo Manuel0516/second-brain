@@ -154,7 +154,9 @@ repository's `production` environment in GitHub:
 
 Generate the `VPS_KNOWN_HOSTS` value with `ssh-keyscan -p 2020`, but compare its
 fingerprint with the VPS host key over an already trusted SSH connection before
-saving it. Do not use `StrictHostKeyChecking=no`.
+saving it. The workflow pins that key to the configured `VPS_HOST`; this avoids
+hostname/IP formatting mismatches without disabling host verification. Do not
+use `StrictHostKeyChecking=no`.
 
 The VPS checkout must already exist, contain its production `.env`, have access
 to the Git repository, and remain clean. Deployment deliberately fails rather
