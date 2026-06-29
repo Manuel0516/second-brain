@@ -10,6 +10,7 @@ import { Calendar } from './pages/Calendar'
 import { SettingsLayout } from './modules/settings/SettingsLayout'
 import { GeneralSettings } from './modules/settings/GeneralSettings'
 import { CalendarSettings } from './modules/settings/CalendarSettings'
+import { AdminSettings } from './modules/settings/AdminSettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
@@ -71,6 +72,7 @@ function AppRoutes() {
           <Route index element={<Navigate to="/settings/general" replace />} />
           <Route path="general" element={<GeneralSettings />} />
           <Route path="calendar" element={<CalendarSettings />} />
+          <Route path="admin" element={<AdminSettings />} />
         </Route>
         <Route
           path="/"

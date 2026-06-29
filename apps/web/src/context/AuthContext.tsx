@@ -11,6 +11,8 @@ interface User {
   id: string
   username: string
   email: string
+  role?: string
+  is_test_account?: boolean
 }
 
 interface AuthContextType {
@@ -42,6 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: data.id,
             username: data.username,
             email: data.email,
+            role: data.is_admin ? 'admin' : 'user',
+            is_test_account: data.is_test_account ?? false,
           })
           setIsAuthenticated(true)
           setTotpEnabled(data.totp_enabled ?? false)
@@ -111,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: data.id,
       username: data.username,
       email: data.email,
+      role: data.is_admin ? 'admin' : 'user',
+      is_test_account: data.is_test_account ?? false,
     })
     setIsAuthenticated(true)
     setTotpEnabled(data.totp_enabled ?? false)

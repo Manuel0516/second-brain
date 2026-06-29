@@ -394,143 +394,161 @@ export function GeneralSettings() {
         )}
       </SettingsCard>
 
-      {/* Password */}
-      <SettingsCard
-        title="Password"
-        description="Change your account password."
-        onSave={savePassword}
-        hasChanges={hasPasswordChanges}
-        saving={passwordSaving}
-      >
-        <div className="settings-field-row" style={{ display: 'grid', gap: 6 }}>
-          <label
-            htmlFor="settings-current-pw"
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: 'var(--text-tertiary)',
-              fontFamily: 'var(--font-mono)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
+      {user?.role !== 'testing' && !user?.is_test_account && (
+        <>
+          {/* Password */}
+          <SettingsCard
+            title="Password"
+            description="Change your account password."
+            onSave={savePassword}
+            hasChanges={hasPasswordChanges}
+            saving={passwordSaving}
           >
-            Current password
-          </label>
-          <input
-            id="settings-current-pw"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            style={{
-              minHeight: 38,
-              border: '1px solid var(--border-strong)',
-              borderRadius: 7,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-              padding: '8px 10px',
-              outline: 'none',
-              transition: 'border-color .15s, box-shadow .15s',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-tint)'
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-strong)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          />
-        </div>
-        <div className="settings-field-row" style={{ display: 'grid', gap: 6 }}>
-          <label
-            htmlFor="settings-new-pw"
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: 'var(--text-tertiary)',
-              fontFamily: 'var(--font-mono)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
-          >
-            New password
-          </label>
-          <input
-            id="settings-new-pw"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            style={{
-              minHeight: 38,
-              border: '1px solid var(--border-strong)',
-              borderRadius: 7,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-              padding: '8px 10px',
-              outline: 'none',
-              transition: 'border-color .15s, box-shadow .15s',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-tint)'
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-strong)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          />
-        </div>
-        <div className="settings-field-row" style={{ display: 'grid', gap: 6 }}>
-          <label
-            htmlFor="settings-confirm-pw"
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: 'var(--text-tertiary)',
-              fontFamily: 'var(--font-mono)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-            }}
-          >
-            Confirm new password
-          </label>
-          <input
-            id="settings-confirm-pw"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            style={{
-              minHeight: 38,
-              border: '1px solid var(--border-strong)',
-              borderRadius: 7,
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-              padding: '8px 10px',
-              outline: 'none',
-              transition: 'border-color .15s, box-shadow .15s',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-tint)'
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'var(--border-strong)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          />
-        </div>
-        {passwordError && (
-          <div style={{ fontSize: 12, color: '#D9573F' }}>{passwordError}</div>
-        )}
-        {passwordSaved && (
-          <div style={{ fontSize: 12, color: '#2E9E6E' }}>
-            Password updated ✓
-          </div>
-        )}
-      </SettingsCard>
+            <div
+              className="settings-field-row"
+              style={{ display: 'grid', gap: 6 }}
+            >
+              <label
+                htmlFor="settings-current-pw"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Current password
+              </label>
+              <input
+                id="settings-current-pw"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                style={{
+                  minHeight: 38,
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 7,
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  padding: '8px 10px',
+                  outline: 'none',
+                  transition: 'border-color .15s, box-shadow .15s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                  e.currentTarget.style.boxShadow =
+                    '0 0 0 3px var(--accent-tint)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-strong)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              />
+            </div>
+            <div
+              className="settings-field-row"
+              style={{ display: 'grid', gap: 6 }}
+            >
+              <label
+                htmlFor="settings-new-pw"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                New password
+              </label>
+              <input
+                id="settings-new-pw"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                style={{
+                  minHeight: 38,
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 7,
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  padding: '8px 10px',
+                  outline: 'none',
+                  transition: 'border-color .15s, box-shadow .15s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                  e.currentTarget.style.boxShadow =
+                    '0 0 0 3px var(--accent-tint)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-strong)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              />
+            </div>
+            <div
+              className="settings-field-row"
+              style={{ display: 'grid', gap: 6 }}
+            >
+              <label
+                htmlFor="settings-confirm-pw"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-mono)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Confirm new password
+              </label>
+              <input
+                id="settings-confirm-pw"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                style={{
+                  minHeight: 38,
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 7,
+                  background: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  padding: '8px 10px',
+                  outline: 'none',
+                  transition: 'border-color .15s, box-shadow .15s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                  e.currentTarget.style.boxShadow =
+                    '0 0 0 3px var(--accent-tint)'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-strong)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              />
+            </div>
+            {passwordError && (
+              <div style={{ fontSize: 12, color: '#D9573F' }}>
+                {passwordError}
+              </div>
+            )}
+            {passwordSaved && (
+              <div style={{ fontSize: 12, color: '#2E9E6E' }}>
+                Password updated ✓
+              </div>
+            )}
+          </SettingsCard>
+        </>
+      )}
 
       {/* Appearance */}
       <SettingsCard title="Appearance">

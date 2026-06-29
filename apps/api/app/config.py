@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,6 +10,7 @@ _ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
+    environment: Literal["dev", "prod"] = "dev"
     database_url: str = "postgresql+psycopg://secondbrain:secondbrain@localhost:5432/secondbrain"
 
     # JWT and Auth
@@ -24,6 +26,9 @@ class Settings(BaseSettings):
     # Rate limiting
     login_rate_limit_attempts: int = 5
     login_rate_limit_window_minutes: int = 5
+
+    # TOTP encryption (Fernet key for encrypted TOTP storage)
+    totp_encryption_key: str = ""
 
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 

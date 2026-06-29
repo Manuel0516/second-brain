@@ -1,5 +1,7 @@
 # Plan A — Settings Module (General + Calendar)
 
+> ✅ **Implemented 2026-06-29.** Full build verification passed (`npm run check`).
+
 > Audience: an implementing AI (Codex / DeepSeek) or developer. This is a precise,
 > self-contained build spec. Follow it top to bottom. Do **not** invent new
 > visual language — every screen reuses the tokens and component patterns already

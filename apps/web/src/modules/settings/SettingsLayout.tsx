@@ -137,7 +137,9 @@ export function SettingsLayout() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 2 }}>
+          <div
+            style={{ display: 'grid', gap: 2, flex: 1, alignContent: 'start' }}
+          >
             {NAV_ITEMS.map((item) =>
               item.disabled ? (
                 <div
@@ -203,6 +205,59 @@ export function SettingsLayout() {
               ),
             )}
           </div>
+
+          {/* Admin nav — only visible to admins, at the bottom */}
+          {user?.role === 'admin' && (
+            <>
+              <div
+                style={{
+                  height: 1,
+                  margin: '8px 10px',
+                  background: 'var(--border)',
+                }}
+              />
+              <NavLink
+                to="/settings/admin"
+                end
+                className={({ isActive }) =>
+                  `settings-nav-item ${isActive ? 'active' : ''}`
+                }
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 38,
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  textDecoration: 'none',
+                  fontSize: 13,
+                  color: 'var(--text-secondary)',
+                  transition: 'background .14s, color .14s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!e.currentTarget.classList.contains('active')) {
+                    e.currentTarget.style.background =
+                      'color-mix(in srgb, var(--text-primary) 4%, transparent)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!e.currentTarget.classList.contains('active')) {
+                    e.currentTarget.style.background = 'transparent'
+                  }
+                }}
+              >
+                {({ isActive }) => (
+                  <span
+                    style={{
+                      color: isActive ? 'var(--text-primary)' : undefined,
+                      fontWeight: isActive ? 600 : 400,
+                    }}
+                  >
+                    Admin
+                  </span>
+                )}
+              </NavLink>
+            </>
+          )}
         </nav>
         {sidebarOpen && (
           <div

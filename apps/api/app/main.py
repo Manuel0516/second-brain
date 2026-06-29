@@ -1,7 +1,10 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import get_settings
 from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
-from app.routes import auth, calendar, settings
+from app.routes import admin, auth, calendar, settings
 from app.security import hash_password
 
 
@@ -21,12 +24,55 @@ class ReadinessResponse(BaseModel):
     status: Literal["ready"] = "ready"
 
 
-app = FastAPI(title="Second Brain API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan: runs startup and shutdown tasks."""
+    settings = get_settings()
+
+    # ── Prod config guard ──────────────────────────────────────────────
+    if settings.environment == "prod":
+        issues: list[str] = []
+        key = settings.jwt_secret_key
+        if key == "your-secret-key-change-in-production":
+            issues.append("jwt_secret_key is still the default value")
+        elif len(key) < 32:
+            issues.append("jwt_secret_key must be at least 32 characters long")
+
+        if settings.initial_user_password == "changeme":
+            issues.append("initial_user_password is still the default ('changeme')")
+
+        db = settings.database_url
+        if "localhost" in db or "127.0.0.1" in db:
+            issues.append("database_url still points to localhost — must use a production database")
+
+        if issues:
+            msg = "Production configuration errors:\n  - " + "\n  - ".join(issues)
+            raise RuntimeError(msg)
+
+    # ── Startup tasks ──────────────────────────────────────────────────
+    await ensure_initial_user()
+    await cleanup_old_login_attempts()
+
+    yield
+
+
+app = FastAPI(title="Second Brain API", version="0.1.0", lifespan=lifespan)
 
 # Include routers
 app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(settings.router)
+app.include_router(admin.router)
+
+
+# ── Security headers middleware ─────────────────────────────────────────
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next: Any) -> Response:
+    response: Response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -67,6 +113,7 @@ async def ensure_initial_user() -> None:
             email=settings.initial_user_email,
             password_hash=hash_password(settings.initial_user_password),
             is_active=True,
+            role="admin",
         )
         session.add(user)
         await session.flush()
@@ -108,10 +155,3 @@ async def cleanup_old_login_attempts() -> None:
             await session.delete(attempt)
 
         await session.commit()
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    """Run startup tasks."""
-    await ensure_initial_user()
-    await cleanup_old_login_attempts()

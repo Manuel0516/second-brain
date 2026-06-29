@@ -35,6 +35,8 @@ class LoginResponse(BaseModel):
     email: str
     is_active: bool
     totp_enabled: bool
+    is_admin: bool
+    is_test_account: bool = False
 
 
 class UserResponse(BaseModel):
@@ -43,6 +45,8 @@ class UserResponse(BaseModel):
     email: str
     is_active: bool
     totp_enabled: bool
+    is_admin: bool = False
+    is_test_account: bool = False
 
 
 class ProfileUpdate(BaseModel):
@@ -59,9 +63,15 @@ class PasswordChange(BaseModel):
 
 class TOTPSetupResponse(BaseModel):
     uri: str
+    secret: str
 
 
 class TOTPVerifyRequest(BaseModel):
+    code: str
+
+
+class TOTPDisableRequest(BaseModel):
+    password: str
     code: str
 
 
@@ -165,6 +175,8 @@ async def login(
             "email": user.email,
             "is_active": user.is_active,
             "totp_enabled": user.totp_secret is not None,
+            "is_test_account": user.is_test_account,
+            "is_admin": user.role == "admin",
         },
         status_code=status.HTTP_200_OK,
     )
@@ -172,7 +184,7 @@ async def login(
         "access_token",
         access_token,
         httponly=True,
-        secure=True,
+        secure=settings.environment == "prod",
         samesite="strict",
         max_age=settings.jwt_access_token_expire_minutes * 60,
     )
@@ -180,7 +192,7 @@ async def login(
         "refresh_token",
         refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.environment == "prod",
         samesite="strict",
         max_age=int(settings.jwt_refresh_token_expire_days * 24 * 60 * 60),
     )
@@ -279,6 +291,8 @@ async def refresh(
             "email": user.email,
             "is_active": user.is_active,
             "totp_enabled": user.totp_secret is not None,
+            "is_admin": user.role == "admin",
+            "is_test_account": user.is_test_account,
         },
         status_code=status.HTTP_200_OK,
     )
@@ -286,7 +300,7 @@ async def refresh(
         "access_token",
         access_token,
         httponly=True,
-        secure=True,
+        secure=settings.environment == "prod",
         samesite="strict",
         max_age=settings.jwt_access_token_expire_minutes * 60,
     )
@@ -294,7 +308,7 @@ async def refresh(
         "refresh_token",
         new_refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.environment == "prod",
         samesite="strict",
         max_age=int(settings.jwt_refresh_token_expire_days * 24 * 60 * 60),
     )
@@ -340,6 +354,8 @@ async def get_me(user: User = Depends(get_current_user)) -> UserResponse:
         email=user.email,
         is_active=user.is_active,
         totp_enabled=user.totp_secret is not None,
+        is_admin=user.role == "admin",
+        is_test_account=user.is_test_account,
     )
 
 
@@ -390,6 +406,8 @@ async def update_profile(
         email=user.email,
         is_active=user.is_active,
         totp_enabled=user.totp_secret is not None,
+        is_admin=user.role == "admin",
+        is_test_account=user.is_test_account,
     )
 
 
@@ -400,6 +418,11 @@ async def change_password(
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
     """Change password. Revokes all other sessions."""
+    if user.is_test_account or user.role == "testing":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account cannot change its own password. Contact an admin.",
+        )
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -422,11 +445,16 @@ async def change_password(
 
 
 @router.post("/totp/setup", response_model=TOTPSetupResponse)
-async def setup_totp(user: User = Depends(get_current_user)) -> TOTPSetupResponse:
-    """Get TOTP setup URI for 2FA."""
+async def setup_totp(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> TOTPSetupResponse:
+    """Generate and store a TOTP secret, returning the provisioning URI."""
     secret = generate_totp_secret()
+    user.totp_secret = secret
+    await session.commit()
     uri = get_totp_uri(user.email, secret)
-    return TOTPSetupResponse(uri=uri)
+    return TOTPSetupResponse(uri=uri, secret=secret)
 
 
 @router.post("/totp/verify")
@@ -435,23 +463,49 @@ async def verify_totp_code(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
-    """Verify TOTP code and enable 2FA."""
-    # For MVP, we don't store the secret yet
-    # This would be Phase 2 when we add encryption
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="TOTP verification coming in Phase 2",
-    )
+    """Verify a TOTP code against the stored secret to confirm 2FA is working."""
+    if not user.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="TOTP not set up yet. Call /totp/setup first.",
+        )
+    if not verify_totp(user.totp_secret, payload.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid TOTP code",
+        )
+    # Secret is already stored; this endpoint confirms the user can generate
+    # valid codes (ensures the authenticator app was configured correctly).
+    return None
 
 
 @router.post("/totp/disable")
 async def disable_totp(
+    payload: TOTPDisableRequest,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
-    """Disable 2FA."""
-    # For MVP, we don't support this yet
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="TOTP disable coming in Phase 2",
-    )
+    """Disable 2FA by verifying the current password and a valid TOTP code."""
+    if not user.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="TOTP is not enabled",
+        )
+
+    # Confirm password
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password",
+        )
+
+    # Confirm TOTP code
+    if not verify_totp(user.totp_secret, payload.code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid TOTP code",
+        )
+
+    user.totp_secret = None
+    await session.commit()
+    return None

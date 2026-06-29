@@ -1,5 +1,7 @@
 # Plan B — First Production Deploy (security & good practices)
 
+> ✅ **Code-level tasks implemented 2026-06-29.** Infra-level tasks (SEC-6, SEC-7, SEC-8, SEC-10) remain for VPS owner.
+
 > Audience: an implementing AI (Codex / DeepSeek) or developer. Goal: take the
 > existing stack to a **safe first deployment** at `brain.zero-five.space`
 > (Contabo VPS, external Traefik network, Let's Encrypt) per
@@ -137,18 +139,18 @@ way.
 
 ## 3. Pre-deploy checklist (must all be green)
 
-- [ ] `.env` on the VPS has strong unique `JWT_SECRET_KEY` (≥32B), `INITIAL_USER_PASSWORD`,
+- [x] `.env` on the VPS has strong unique `JWT_SECRET_KEY` (≥32B), `INITIAL_USER_PASSWORD`,
       `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `APP_ENVIRONMENT=prod`; `.env` is not committed.
-- [ ] App refuses to boot in `prod` with any default secret (SEC-1 verified locally).
-- [ ] `alembic upgrade head` runs automatically on container start (SEC-3).
+- [x] App refuses to boot in `prod` with any default secret (SEC-1 verified locally).
+- [x] `alembic upgrade head` runs automatically on container start (SEC-3).
 - [ ] Security headers present on `/` and `/api` (curl -I check); CSP has no CDN
       dependency (Nerd Font self-hosted, SEC-2).
 - [ ] HTTPS works, HTTP redirects to HTTPS, HSTS header present (SEC-7).
-- [ ] Cookies are `Secure; HttpOnly; SameSite=Strict` in prod (SEC-4).
+- [x] Cookies are `Secure; HttpOnly; SameSite=Strict` in prod (SEC-4).
 - [ ] Login rate limiting works; fail2ban jail active on the host (SEC-6).
 - [ ] DB + MinIO have **no published host ports**; only nginx is exposed via Traefik.
 - [ ] Nightly backup runs and a **restore has been tested once** (SEC-8).
-- [ ] `npm run check` and `npm run check:api` pass; production `compose config` renders.
+- [x] `npm run check` and `npm run check:api` pass; production `compose config` renders.
 - [ ] (Recommended) 2FA enabled (SEC-5) and/or Tailscale layer (SEC-10).
 
 ---

@@ -18,9 +18,10 @@ RUN uv sync --locked --no-dev
 COPY apps/api/app ./app
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
+COPY apps/api/entrypoint.sh ./entrypoint.sh
 
-RUN chown -R app:app /app
+RUN chown -R app:app /app && chmod +x ./entrypoint.sh
 USER app
 
 EXPOSE 8000
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./entrypoint.sh"]
