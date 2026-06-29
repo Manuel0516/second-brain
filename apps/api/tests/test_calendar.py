@@ -18,6 +18,7 @@ async def authenticated_client(client: AsyncClient, test_db_session: AsyncSessio
     # Create test user
     user = User(
         id=str(uuid4()),
+        username="testuser",
         email="testuser@example.com",
         password_hash=hash_password("testpassword123"),
         is_active=True,
@@ -48,6 +49,7 @@ async def user_with_events(
     """Create a user with calendars and events."""
     user = User(
         id=str(uuid4()),
+        username="eventuser",
         email="eventuser@example.com",
         password_hash=hash_password("testpassword123"),
         is_active=True,
@@ -98,6 +100,7 @@ async def test_get_calendars(client: AsyncClient, test_db_session: AsyncSession)
 
     user = User(
         id=str(uuid4()),
+        username="caluser",
         email="caluser@example.com",
         password_hash=hash_password("testpassword123"),
         is_active=True,

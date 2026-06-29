@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { apiCall } from '../../lib/api'
-import { COLOR_PRESETS, onColor } from './colors'
+import { useSettings } from '../../context/SettingsContext'
+import { onColor } from './colors'
 import type { CalendarData } from './types'
 
 function ColorField({
@@ -10,14 +11,19 @@ function ColorField({
   value: string
   onChange: (color: string) => void
 }) {
-  const custom = !COLOR_PRESETS.some(
+  const { settings } = useSettings()
+  const colorPresets =
+    settings.favorite_colors.length > 0
+      ? settings.favorite_colors
+      : ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F']
+  const custom = !colorPresets.some(
     (preset) => preset.toLowerCase() === value.toLowerCase(),
   )
   return (
     <div className="cal-field">
       <span>Color</span>
       <div className="color-swatches">
-        {COLOR_PRESETS.map((preset) => {
+        {colorPresets.map((preset) => {
           const active = value.toLowerCase() === preset.toLowerCase()
           return (
             <button

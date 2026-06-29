@@ -9,6 +9,7 @@ import { apiCall } from '../lib/api'
 
 interface User {
   id: string
+  username: string
   email: string
 }
 
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const data = await response.json()
           setUser({
             id: data.id,
+            username: data.username,
             email: data.email,
           })
           setIsAuthenticated(true)
@@ -107,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await response.json()
     setUser({
       id: data.id,
+      username: data.username,
       email: data.email,
     })
     setIsAuthenticated(true)

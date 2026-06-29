@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Segmented } from '../../components/Segmented'
 import { apiCall } from '../../lib/api'
-import { COLOR_PRESETS, onColor } from './colors'
+import { useSettings } from '../../context/SettingsContext'
+import { onColor } from './colors'
 import type { CalendarData, CalendarEvent, EventConnections } from './types'
-
-const ICON_PRESETS = ['📅', '💼', '☕', '🏃', '🍽️', '📝', '🎧', '🎯']
 const MIN_SAVE_SPINNER_MS = 145
 
 type Freq = '' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
@@ -78,6 +78,16 @@ export function EventEditor({
   onSaved,
   onDraftChange,
 }: Props) {
+  const { settings } = useSettings()
+  const iconPresets =
+    settings.favorite_emojis.length > 0
+      ? settings.favorite_emojis
+      : ['📅', '💼', '☕', '🏃', '🍽️', '📝', '🎧', '🎯']
+  const colorPresets =
+    settings.favorite_colors.length > 0
+      ? settings.favorite_colors
+      : ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F']
+
   const [icon, setIcon] = useState(event.icon ?? '')
   const [form, setForm] = useState({
     title: event.title ?? '',
@@ -146,6 +156,7 @@ export function EventEditor({
   const errorFrame = useRef(0)
   const errorTimer = useRef(0)
   const iconPickerRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<HTMLElement>(null)
 
   const closeWithAnimation = useCallback((complete: () => void) => {
     if (closingRef.current) return
@@ -450,6 +461,8 @@ export function EventEditor({
 
   const openRepeat = () => {
     repeatSnapshot.current = recurrence
+    // Scroll to top synchronously before the locked class disables overflow.
+    if (editorRef.current) editorRef.current.scrollTop = 0
     setRecurrence((r) =>
       r.freq
         ? r
@@ -481,6 +494,7 @@ export function EventEditor({
       onKeyDown={(e) => e.key === 'Escape' && closeWithAnimation(onClose)}
     >
       <aside
+        ref={editorRef}
         className={`event-editor ${closing ? 'closing' : ''} ${repeatOpen || scopePrompt ? 'locked' : ''}`}
         aria-label={event.id ? 'Edit event' : 'New event'}
       >
@@ -545,7 +559,7 @@ export function EventEditor({
                   aria-label="Event icon"
                 >
                   <div className="editor-icon-grid">
-                    {ICON_PRESETS.map((preset) => (
+                    {iconPresets.map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -726,7 +740,7 @@ export function EventEditor({
           <fieldset className="editor-group">
             <legend>Color</legend>
             <div className="color-swatches">
-              {COLOR_PRESETS.map((preset) => {
+              {colorPresets.map((preset) => {
                 const active =
                   form.color_override.toLowerCase() === preset.toLowerCase()
                 return (
@@ -749,7 +763,7 @@ export function EventEditor({
               <label
                 className={`color-custom ${
                   form.color_override &&
-                  !COLOR_PRESETS.some(
+                  !colorPresets.some(
                     (preset) =>
                       preset.toLowerCase() ===
                       form.color_override.toLowerCase(),
@@ -1175,24 +1189,28 @@ export function EventEditor({
                   </select>
                 </div>
               </div>
-              {recurrence.freq === 'WEEKLY' && (
-                <div className="repeat-section">
-                  <span className="repeat-label">Repeat on</span>
-                  <div className="repeat-days">
-                    {WEEKDAYS.map((day) => (
-                      <button
-                        key={day.code}
-                        type="button"
-                        className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
-                        aria-pressed={recurrence.byday.includes(day.code)}
-                        onClick={() => toggleByday(day.code)}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
+              <div
+                className={`repeat-collapse ${recurrence.freq === 'WEEKLY' ? 'open' : ''}`}
+              >
+                <div className="repeat-collapse-inner">
+                  <div className="repeat-section">
+                    <span className="repeat-label">Repeat on</span>
+                    <div className="repeat-days">
+                      {WEEKDAYS.map((day) => (
+                        <button
+                          key={day.code}
+                          type="button"
+                          className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
+                          aria-pressed={recurrence.byday.includes(day.code)}
+                          onClick={() => toggleByday(day.code)}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
               <div className="repeat-section">
                 <label className="toggle-row">
                   <span>Ends</span>
@@ -1213,69 +1231,54 @@ export function EventEditor({
                     }
                   />
                 </label>
-                {recurrence.ends !== 'never' && (
-                  <div className="repeat-end-options">
-                    <div
-                      className="repeat-segmented"
-                      role="radiogroup"
-                      aria-label="End condition"
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={recurrence.ends === 'on'}
-                        className={recurrence.ends === 'on' ? 'active' : ''}
-                        onClick={() =>
-                          setRecurrence((r) => ({ ...r, ends: 'on' }))
-                        }
-                      >
-                        On date
-                      </button>
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={recurrence.ends === 'after'}
-                        className={recurrence.ends === 'after' ? 'active' : ''}
-                        onClick={() =>
-                          setRecurrence((r) => ({ ...r, ends: 'after' }))
-                        }
-                      >
-                        After count
-                      </button>
-                    </div>
-                    {recurrence.ends === 'on' ? (
-                      <input
-                        type="date"
-                        aria-label="End date"
-                        value={recurrence.until}
-                        onChange={(e) =>
-                          setRecurrence((r) => ({
-                            ...r,
-                            until: e.target.value,
-                          }))
+                <div
+                  className={`repeat-collapse ${recurrence.ends !== 'never' ? 'open' : ''}`}
+                >
+                  <div className="repeat-collapse-inner">
+                    <div className="repeat-end-options repeat-reveal">
+                      <Segmented
+                        value={recurrence.ends === 'after' ? 'after' : 'on'}
+                        options={['on', 'after']}
+                        labels={{ on: 'On date', after: 'After count' }}
+                        ariaLabel="End condition"
+                        onChange={(v) =>
+                          setRecurrence((r) => ({ ...r, ends: v }))
                         }
                       />
-                    ) : (
-                      <div className="repeat-line">
+                      {recurrence.ends === 'on' ? (
                         <input
-                          type="number"
-                          min={1}
-                          max={730}
-                          aria-label="Occurrence count"
-                          className="repeat-count"
-                          value={recurrence.count}
+                          type="date"
+                          aria-label="End date"
+                          value={recurrence.until}
                           onChange={(e) =>
                             setRecurrence((r) => ({
                               ...r,
-                              count: Math.max(1, Number(e.target.value) || 1),
+                              until: e.target.value,
                             }))
                           }
                         />
-                        <span className="repeat-times">times</span>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="repeat-line">
+                          <input
+                            type="number"
+                            min={1}
+                            max={730}
+                            aria-label="Occurrence count"
+                            className="repeat-count"
+                            value={recurrence.count}
+                            onChange={(e) =>
+                              setRecurrence((r) => ({
+                                ...r,
+                                count: Math.max(1, Number(e.target.value) || 1),
+                              }))
+                            }
+                          />
+                          <span className="repeat-times">times</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
               <div className="repeat-actions">
                 <button type="button" className="ghost" onClick={cancelRepeat}>

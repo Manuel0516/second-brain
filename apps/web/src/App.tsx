@@ -1,8 +1,34 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom'
 import { Login } from './pages/Login'
 import { Calendar } from './pages/Calendar'
+import { SettingsLayout } from './modules/settings/SettingsLayout'
+import { GeneralSettings } from './modules/settings/GeneralSettings'
+import { CalendarSettings } from './modules/settings/CalendarSettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
+import { SettingsProvider } from './context/SettingsContext'
+
+function PageTransition({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+  const section = location.pathname.split('/')[1] || 'root'
+  return (
+    <div
+      key={section}
+      style={{
+        height: '100%',
+        animation: 'pageEnter 0.32s cubic-bezier(.16,1,.3,1) both',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
 function AppRoutes() {
   const { isAuthenticated, loading } = useAuth()
@@ -19,27 +45,45 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/calendar"
-        element={
-          <ProtectedRoute>
-            <Calendar />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          isAuthenticated ? (
-            <Navigate to="/calendar" replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
-      />
-    </Routes>
+    <PageTransition>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/calendar"
+          element={
+            <ProtectedRoute>
+              <SettingsProvider>
+                <Calendar />
+              </SettingsProvider>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsProvider>
+                <SettingsLayout />
+              </SettingsProvider>
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="/settings/general" replace />} />
+          <Route path="general" element={<GeneralSettings />} />
+          <Route path="calendar" element={<CalendarSettings />} />
+        </Route>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/calendar" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+      </Routes>
+    </PageTransition>
   )
 }
 

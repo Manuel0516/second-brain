@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import get_settings
 from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
-from app.routes import auth, calendar
+from app.routes import auth, calendar, settings
 from app.security import hash_password
 
 
@@ -26,6 +26,7 @@ app = FastAPI(title="Second Brain API", version="0.1.0")
 # Include routers
 app.include_router(auth.router)
 app.include_router(calendar.router)
+app.include_router(settings.router)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -62,6 +63,7 @@ async def ensure_initial_user() -> None:
 
         # Create initial user
         user = User(
+            username=settings.initial_user_username,
             email=settings.initial_user_email,
             password_hash=hash_password(settings.initial_user_password),
             is_active=True,

@@ -1,7 +1,8 @@
 @import 'tailwindcss';
 
 /* ── Design canvas: warm dark palette ── */
-:root {
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
   font-family: var(--font-ui);
   font-synthesis: none;
@@ -44,9 +45,28 @@
   --r-xl: 14px;
 }
 
-/* light mode — from DESIGN_SYSTEM.md */
+/* Explicit light theme override (set via SettingsContext) */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-base: #f6f4ef;
+  --bg-elevated: #ffffff;
+  --bg-raised: #fbfaf7;
+  --border: rgba(20, 18, 30, 0.09);
+  --border-strong: rgba(20, 18, 30, 0.16);
+  --border-grid: rgba(20, 18, 30, 0.05);
+  --text-primary: #18171c;
+  --text-secondary: #5c5868;
+  --text-tertiary: #8a8799;
+  --accent: #0c8aa3;
+  --accent-tint: rgba(12, 138, 163, 0.1);
+  --accent-tint-border: rgba(12, 138, 163, 0.2);
+  --shadow-sm: 0 2px 8px rgba(20, 18, 30, 0.08);
+  --shadow-md: 0 4px 16px rgba(20, 18, 30, 0.08);
+}
+
+/* System-preference light mode (when no data-theme is set = "system" mode) */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: light;
     --bg-base: #f6f4ef;
     --bg-elevated: #ffffff;
@@ -69,6 +89,27 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Smooth dark↔light swap: enabled only for ~400ms during a theme change so it
+   eases the colour transition without slowing down every other interaction. */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    fill 0.35s ease,
+    stroke 0.35s ease,
+    box-shadow 0.35s ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transition,
+  html.theme-transition * {
+    transition: none !important;
+  }
 }
 
 html,
@@ -165,6 +206,16 @@ textarea {
     transform: translateY(0);
   }
 }
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 @keyframes slideInL {
   from {
     opacity: 0;
@@ -227,6 +278,49 @@ textarea {
   }
 }
 
+/* Springy per-component entrance — used to stagger regions/cards on load. */
+@keyframes springUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.003);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.enter {
+  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+/* Skeleton placeholder shimmer. */
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.skeleton {
+  background: var(--bg-raised);
+  border-radius: var(--r-sm);
+  animation: skeletonPulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .enter {
+    animation: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+}
+
 /* global hover lift + press feel — matches design canvas */
 button {
   transition:
@@ -258,6 +352,80 @@ button:not(.calendar-event):active {
     color 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+/* Settings nav item active state */
+.settings-nav-item.active {
+  background: var(--accent-tint) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Springy, staggered entrance for the settings header + cards on load. */
+.settings-content > div > * {
+  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.settings-content > div > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.settings-content > div > *:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.settings-content > div > *:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.settings-content > div > *:nth-child(4) {
+  animation-delay: 0.17s;
+}
+.settings-content > div > *:nth-child(5) {
+  animation-delay: 0.22s;
+}
+.settings-content > div > *:nth-child(n + 6) {
+  animation-delay: 0.27s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-content > div > * {
+    animation: none;
+  }
+}
+
+/* Favourite emoji / colour tiles (settings → calendar) */
+.fav-tile {
+  position: relative;
+}
+.fav-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
+}
+.fav-tile:hover .fav-remove,
+.fav-remove:focus-visible {
+  opacity: 1;
+}
+.fav-remove:hover {
+  background: #d9573f; /* Coral (deadlines) — destructive intent */
+  border-color: #d9573f;
+  color: #fff;
+}
+.fav-remove svg {
+  width: 9px;
+  height: 9px;
 }
 
 .calendar-sidebar {
@@ -1233,14 +1401,36 @@ input[type='color'] {
   gap: 10px;
 }
 .repeat-segmented {
+  position: relative;
   display: flex;
-  gap: 4px;
   padding: 3px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--bg-base);
 }
+/* Sliding highlight that glides to the active option. */
+.seg-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-tint-border);
+  pointer-events: none;
+  z-index: 0;
+  transition:
+    left 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .seg-indicator {
+    transition: none;
+  }
+}
 .repeat-segmented button {
+  position: relative;
+  z-index: 1;
   flex: 1;
   height: 30px;
   border: 0;
@@ -1249,15 +1439,12 @@ input[type='color'] {
   color: var(--text-secondary);
   font-size: 12.5px;
   cursor: pointer;
-  transition:
-    background 0.14s,
-    color 0.14s;
+  transition: color 0.15s;
 }
 .repeat-segmented button:hover {
   color: var(--text-primary);
 }
 .repeat-segmented button.active {
-  background: var(--accent-tint);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -1535,7 +1722,6 @@ input[type='color'] {
 .editor-icon-custom {
   width: 100%;
   min-height: 38px;
-  padding: 0 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   background: var(--bg-base);
@@ -1813,7 +1999,7 @@ input[type='color'] {
   margin-top: 6px;
   padding: 12px 0 4px;
   border-top: 1px solid var(--border);
-  animation: connectionOpen 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: connectionOpen 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .connection-options > label {
   min-width: 0;
@@ -1864,6 +2050,43 @@ input[type='color'] {
   from {
     opacity: 0;
     transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Same reveal as connection options — used when the "Ends" options appear. */
+.repeat-reveal {
+  animation: connectionOpen 730ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* Weekday picker collapses smoothly both ways (grid-rows 0fr↔1fr). The negative
+   margin when closed absorbs the parent card's gap so no empty space lingers. */
+.repeat-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: -18px;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    margin-top 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s ease;
+}
+.repeat-collapse.open {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  opacity: 1;
+}
+.repeat-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .repeat-reveal {
+    animation: none;
+  }
+  .repeat-collapse {
+    transition: none;
   }
 }
 
@@ -2104,6 +2327,7 @@ input[type='color'] {
   .sidebar-close {
     display: grid;
   }
+
   .form-row {
     grid-template-columns: 1fr;
   }

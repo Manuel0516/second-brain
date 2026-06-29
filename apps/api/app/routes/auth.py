@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.security import (
     generate_jwt,
     generate_totp_secret,
     get_totp_uri,
+    hash_password,
     verify_password,
     verify_totp,
 )
@@ -30,6 +31,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     id: str
+    username: str
     email: str
     is_active: bool
     totp_enabled: bool
@@ -37,9 +39,22 @@ class LoginResponse(BaseModel):
 
 class UserResponse(BaseModel):
     id: str
+    username: str
     email: str
     is_active: bool
     totp_enabled: bool
+
+
+class ProfileUpdate(BaseModel):
+    username: str | None = Field(
+        default=None, min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.-]+$"
+    )
+    email: EmailStr | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=10)
 
 
 class TOTPSetupResponse(BaseModel):
@@ -146,6 +161,7 @@ async def login(
     response = JSONResponse(
         content={
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "is_active": user.is_active,
             "totp_enabled": user.totp_secret is not None,
@@ -259,6 +275,7 @@ async def refresh(
     response = JSONResponse(
         content={
             "id": user.id,
+            "username": user.username,
             "email": user.email,
             "is_active": user.is_active,
             "totp_enabled": user.totp_secret is not None,
@@ -319,10 +336,89 @@ async def get_me(user: User = Depends(get_current_user)) -> UserResponse:
     """Get current user info."""
     return UserResponse(
         id=user.id,
+        username=user.username,
         email=user.email,
         is_active=user.is_active,
         totp_enabled=user.totp_secret is not None,
     )
+
+
+@router.patch("/profile", response_model=UserResponse)
+async def update_profile(
+    payload: ProfileUpdate,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> UserResponse:
+    """Update username and/or email."""
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+
+    # Check uniqueness
+    if "username" in update_data:
+        existing = await session.execute(
+            select(User).where(User.username == update_data["username"], User.id != user.id)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            )
+
+    if "email" in update_data:
+        existing = await session.execute(
+            select(User).where(User.email == update_data["email"], User.id != user.id)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already taken",
+            )
+
+    for field_name, value in update_data.items():
+        setattr(user, field_name, value)
+
+    await session.commit()
+    await session.refresh(user)
+
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        is_active=user.is_active,
+        totp_enabled=user.totp_secret is not None,
+    )
+
+
+@router.patch("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: PasswordChange,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> None:
+    """Change password. Revokes all other sessions."""
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+
+    # Revoke all other refresh tokens
+    result = await session.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == user.id,
+            RefreshToken.revoked_at.is_(None),
+        )
+    )
+    for token in result.scalars().all():
+        token.revoked_at = datetime.now(UTC)
+
+    await session.commit()
 
 
 @router.post("/totp/setup", response_model=TOTPSetupResponse)

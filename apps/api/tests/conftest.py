@@ -98,6 +98,7 @@ async def test_user(test_db_session: AsyncSession) -> User:
     """Create a test user in the database."""
     user = User(
         id=str(uuid4()),
+        username="testuser",
         email="test@example.com",
         password_hash=hash_password("testpassword123"),
         is_active=True,

@@ -9,6 +9,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EventEditor } from './EventEditor'
 
+vi.mock('../../context/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {
+      favorite_emojis: ['📅', '💼', '☕', '🏃', '🍽️', '📝', '🎧', '🎯'],
+      favorite_colors: ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F'],
+    },
+    loading: false,
+    patch: vi.fn(),
+  }),
+}))
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()

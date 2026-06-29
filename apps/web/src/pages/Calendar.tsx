@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
+import { AppRail } from '../components/AppRail'
 import { Sidebar } from '../modules/calendar/Sidebar'
 import { TimeGrid } from '../modules/calendar/TimeGrid'
 import { MonthView } from '../modules/calendar/MonthView'
@@ -11,6 +12,7 @@ import {
   startOfDay,
   startOfWeekMonday,
 } from '../modules/calendar/time'
+import { useSettings } from '../context/SettingsContext'
 import type { CalendarData, CalendarEvent } from '../modules/calendar/types'
 import { apiCall } from '../lib/api'
 
@@ -44,145 +46,35 @@ function formatTitle(
   }).formatRange(days[0] ?? cursor, days.at(-1) ?? cursor)
 }
 
-// ── Inline SVG icons from design canvas ───────────────────────────
-const IconCalendar = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 20 20"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="3.5" width="14" height="13" rx="2" />
-    <path d="M3 7.5h14M7 2v3M13 2v3" />
-  </svg>
-)
-const IconNotes = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 20 20"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M5 2.5h7.5l3 3v12a.5.5 0 01-.5.5H5a.5.5 0 01-.5-.5v-15A.5.5 0 015 2.5z" />
-    <path d="M12.5 2.5v3h3M7.5 9.5h5M7.5 12.5h5" />
-  </svg>
-)
-const IconFinance = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 20 20"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="10" cy="10" r="7.2" />
-    <path d="M10 6.5v7M12.3 8.3c0-1.1-1.1-1.8-2.3-1.8s-2.3.6-2.3 1.6c0 2.1 4.6 1 4.6 3.1 0 1.1-1.1 1.8-2.3 1.8s-2.4-.7-2.4-1.8" />
-  </svg>
-)
-const IconFitness = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 20 20"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M3 10h2.5M14.5 10H17M5.5 7.5v5M14.5 7.5v5M7.5 10h5" />
-  </svg>
-)
-const IconSettings = () => (
-  <svg
-    width="17"
-    height="17"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-  </svg>
-)
-
-function RailBtn({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active?: boolean
-  onClick?: () => void
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      title={title}
-      onClick={(e) => {
-        e.currentTarget.style.animation = 'none'
-        void e.currentTarget.offsetWidth // reflow to restart
-        e.currentTarget.style.animation =
-          'railPop .35s cubic-bezier(.16,1,.3,1) both'
-        onClick?.()
-      }}
-      style={{
-        width: 40,
-        height: 40,
-        border: 'none',
-        borderRadius: 8,
-        background: active ? 'rgba(255,240,200,0.08)' : 'transparent',
-        color: active ? '#22D3EE' : '#6B6761',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        transition: 'background .2s, color .2s',
-        flexShrink: 0,
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.color = '#F0EDE5'
-          e.currentTarget.style.background = 'rgba(255,240,200,0.06)'
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.color = '#6B6761'
-          e.currentTarget.style.background = 'transparent'
-        }
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
 export function Calendar() {
-  const { logout } = useAuth()
+  const navigate = useNavigate()
+  const { settings } = useSettings()
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
   )
-  const [view, setView] = useState<View>('week')
+  // Use settings.default_view with 'week' as fallback
+  const initialView = (
+    typeof window !== 'undefined' ? settings.default_view : 'week'
+  ) as View
+  const [view, setView] = useState<View>(initialView)
+  // Cursor for the start of the visible range, honouring week-start + mobile.
+  const startCursorFor = useCallback(
+    (mobile: boolean, weekStart: 'monday' | 'sunday') => {
+      if (mobile) return startOfDay(new Date())
+      if (weekStart === 'sunday') {
+        const start = startOfDay(new Date())
+        const offset = start.getDay() === 0 ? 0 : -start.getDay()
+        start.setDate(start.getDate() + offset)
+        return start
+      }
+      return startOfWeekMonday(new Date())
+    },
+    [],
+  )
   const [cursor, setCursor] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth <= 640
-      ? startOfDay(new Date())
-      : startOfWeekMonday(new Date()),
+    typeof window === 'undefined'
+      ? new Date()
+      : startCursorFor(window.innerWidth <= 640, settings.week_start),
   )
   const [rowHeight, setRowHeight] = useState(() => {
     const stored = Number(localStorage.getItem('sb-cal-row-h'))
@@ -198,6 +90,18 @@ export function Calendar() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
+  // Settings load asynchronously. Apply the saved default view + week start when
+  // they arrive (and when changed on the settings page) by adjusting state during
+  // render — guarded so manual navigation isn't reset. (React's recommended
+  // "store previous value" pattern; avoids a cascading effect.)
+  const settingsKey = `${settings.default_view}|${settings.week_start}`
+  const [appliedSettingsKey, setAppliedSettingsKey] = useState(settingsKey)
+  if (appliedSettingsKey !== settingsKey) {
+    setAppliedSettingsKey(settingsKey)
+    setView(settings.default_view as View)
+    setCursor(startCursorFor(window.innerWidth <= 640, settings.week_start))
+  }
+
   const bodyRef = useRef<HTMLDivElement>(null)
   const navDir = useRef(0)
   // Trackpad day-stepping skips the slide so continuous scrolling stays smooth.
@@ -276,8 +180,8 @@ export function Calendar() {
     setCursor(d)
   }
   const goToday = () => {
-    setView('week')
-    setCursor(isMobile ? startOfDay(new Date()) : startOfWeekMonday(new Date()))
+    setView((settings.default_view as View) || 'week')
+    setCursor(startCursorFor(isMobile, settings.week_start))
   }
   const shiftByDays = useCallback((days: number) => {
     setCursor((current) => {
@@ -287,18 +191,13 @@ export function Calendar() {
     })
   }, [])
 
-  const handleLogout = async () => {
-    await logout()
-    window.location.href = '/login'
-  }
-
   const navBtnStyle: React.CSSProperties = {
     width: 26,
     height: 26,
-    background: '#1C1B17',
-    border: '1px solid rgba(255,240,200,0.09)',
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border)',
     borderRadius: 6,
-    color: '#A8A49A',
+    color: 'var(--text-secondary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -313,63 +212,14 @@ export function Calendar() {
         display: 'flex',
         height: '100vh',
         overflow: 'hidden',
-        background: '#131210',
+        background: 'var(--bg-base)',
         animation: 'fadeUp .4s cubic-bezier(.16,1,.3,1) both',
       }}
     >
       {/* ── Rail ── */}
-      <div
-        className={`app-rail ${sidebarOpen ? 'open' : 'closed'}`}
-        style={{
-          width: 64,
-          flexShrink: 0,
-          background: '#131210',
-          borderRight: '1px solid rgba(255,240,200,0.07)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: '14px 0 16px',
-          gap: 5,
-          zIndex: 10,
-        }}
-      >
-        {/* Planet logo */}
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            marginBottom: 14,
-            cursor: 'pointer',
-            animation: 'glow 4s ease-in-out infinite',
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src="/logo-neon-planet.png"
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            alt="Second Brain"
-          />
-        </div>
-
-        <RailBtn active title="Calendar">
-          <IconCalendar />
-        </RailBtn>
-        <RailBtn title="Notes">
-          <IconNotes />
-        </RailBtn>
-        <RailBtn title="Finance">
-          <IconFinance />
-        </RailBtn>
-        <RailBtn title="Fitness">
-          <IconFitness />
-        </RailBtn>
-
-        <div style={{ flex: 1 }} />
-
-        <RailBtn title="Settings" onClick={handleLogout}>
-          <IconSettings />
-        </RailBtn>
-      </div>
+      {(!isMobile || sidebarOpen) && (
+        <AppRail active="calendar" onNavigate={navigate} />
+      )}
 
       {/* ── Sidebar + Main ── */}
       <div
@@ -408,13 +258,14 @@ export function Calendar() {
         >
           {/* Topbar */}
           <div
-            className="cal-topbar"
+            className="cal-topbar enter"
             style={{
+              ['--enter-delay' as string]: '50ms',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '18px 28px 14px',
-              borderBottom: '1px solid rgba(255,240,200,0.07)',
+              borderBottom: '1px solid var(--border)',
               flexShrink: 0,
               gap: 12,
               flexWrap: 'wrap',
@@ -432,10 +283,10 @@ export function Calendar() {
                 aria-pressed={sidebarOpen}
                 style={navBtnStyle}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = '#252420')
+                  (e.currentTarget.style.background = 'var(--bg-raised)')
                 }
                 onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = '#1C1B17')
+                  (e.currentTarget.style.background = 'var(--bg-elevated)')
                 }
               >
                 <svg
@@ -457,7 +308,7 @@ export function Calendar() {
                   fontSize: 17,
                   fontWeight: 700,
                   letterSpacing: '-.01em',
-                  color: '#F0EDE5',
+                  color: 'var(--text-primary)',
                   margin: 0,
                 }}
               >
@@ -469,10 +320,10 @@ export function Calendar() {
                   onClick={() => shift(-1)}
                   aria-label="Previous"
                   onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = '#252420')
+                    (e.currentTarget.style.background = 'var(--bg-raised)')
                   }
                   onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = '#1C1B17')
+                    (e.currentTarget.style.background = 'var(--bg-elevated)')
                   }
                 >
                   ‹
@@ -482,10 +333,10 @@ export function Calendar() {
                   onClick={() => shift(1)}
                   aria-label="Next"
                   onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = '#252420')
+                    (e.currentTarget.style.background = 'var(--bg-raised)')
                   }
                   onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = '#1C1B17')
+                    (e.currentTarget.style.background = 'var(--bg-elevated)')
                   }
                 >
                   ›
@@ -496,19 +347,22 @@ export function Calendar() {
                 style={{
                   height: 26,
                   padding: '0 10px',
-                  background: 'rgba(255,240,200,0.07)',
+                  background:
+                    'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
                   border: 'none',
                   borderRadius: 6,
                   fontSize: 11.5,
-                  color: '#A8A49A',
+                  color: 'var(--text-secondary)',
                   cursor: 'pointer',
                   transition: 'background .15s',
                 }}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = 'rgba(255,240,200,0.10)')
+                  (e.currentTarget.style.background =
+                    'color-mix(in srgb, var(--text-tertiary) 18%, transparent)')
                 }
                 onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'rgba(255,240,200,0.07)')
+                  (e.currentTarget.style.background =
+                    'color-mix(in srgb, var(--text-tertiary) 12%, transparent)')
                 }
               >
                 Today
@@ -520,8 +374,8 @@ export function Calendar() {
               style={{
                 position: 'relative',
                 display: 'flex',
-                background: '#1C1B17',
-                border: '1px solid rgba(255,240,200,0.09)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
                 padding: 3,
               }}
@@ -533,7 +387,7 @@ export function Calendar() {
                   left: 3 + VIEWS.indexOf(view) * PILL_WIDTH,
                   width: PILL_WIDTH,
                   height: 'calc(100% - 6px)',
-                  background: '#252420',
+                  background: 'var(--bg-raised)',
                   borderRadius: 6,
                   transition:
                     'left .22s cubic-bezier(.16,1,.3,1), width .22s cubic-bezier(.16,1,.3,1)',
@@ -561,7 +415,10 @@ export function Calendar() {
                     textTransform: 'capitalize',
                     cursor: 'pointer',
                     transition: 'color .2s',
-                    color: view === v ? '#F0EDE5' : '#6B6761',
+                    color:
+                      view === v
+                        ? 'var(--text-primary)'
+                        : 'var(--text-tertiary)',
                   }}
                 >
                   {v}
@@ -577,10 +434,10 @@ export function Calendar() {
               style={{
                 height: 34,
                 padding: '0 14px',
-                background: 'rgba(34,211,238,0.10)',
-                border: '1px solid rgba(34,211,238,0.2)',
+                background: 'var(--accent-tint)',
+                border: '1px solid var(--accent-tint-border)',
                 borderRadius: 8,
-                color: '#22D3EE',
+                color: 'var(--accent)',
                 fontSize: 12.5,
                 display: 'flex',
                 alignItems: 'center',
@@ -590,10 +447,11 @@ export function Calendar() {
                 transition: 'background .15s',
               }}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.background = 'rgba(34,211,238,0.16)')
+                (e.currentTarget.style.background =
+                  'color-mix(in srgb, var(--accent) 18%, transparent)')
               }
               onMouseLeave={(e) =>
-                (e.currentTarget.style.background = 'rgba(34,211,238,0.10)')
+                (e.currentTarget.style.background = 'var(--accent-tint)')
               }
             >
               <svg
@@ -614,7 +472,9 @@ export function Calendar() {
           {/* View body */}
           <div
             ref={bodyRef}
+            className="enter"
             style={{
+              ['--enter-delay' as string]: '120ms',
               flex: 1,
               display: 'flex',
               minHeight: 0,

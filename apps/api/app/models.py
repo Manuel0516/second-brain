@@ -25,6 +25,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
     )
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     totp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -43,6 +44,9 @@ class User(Base):
         "RefreshToken", back_populates="user"
     )
     calendars: Mapped[list["Calendar"]] = relationship("Calendar", back_populates="user")
+    settings: Mapped["UserSettings | None"] = relationship(
+        "UserSettings", back_populates="user", uselist=False
+    )
 
 
 class LoginAttempt(Base):
@@ -167,6 +171,38 @@ class CalendarEvent(Base):
     )
 
     calendar: Mapped["Calendar"] = relationship("Calendar", back_populates="events")
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), primary_key=True
+    )
+    # Appearance / general
+    theme: Mapped[str] = mapped_column(String(10), default="system", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(63), default="Europe/Stockholm", nullable=False)
+    week_start: Mapped[str] = mapped_column(String(8), default="monday", nullable=False)
+    default_view: Mapped[str] = mapped_column(String(8), default="week", nullable=False)
+    time_format: Mapped[str] = mapped_column(String(3), default="24h", nullable=False)
+    # Calendar
+    favorite_emojis: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    favorite_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    default_event_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    default_calendar_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("calendars.id", ondelete="SET NULL"), nullable=True
+    )
+    default_reminder_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    show_weekends: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    dim_past_events: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="settings")
 
 
 class Link(Base):
