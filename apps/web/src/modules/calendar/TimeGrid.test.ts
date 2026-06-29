@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   clampRowHeight,
+  eventSegmentForDay,
   minuteAtPointer,
   resizeIsoRange,
   shiftIsoRange,
@@ -32,6 +33,32 @@ describe('clampRowHeight', () => {
     expect(clampRowHeight(10)).toBe(28)
     expect(clampRowHeight(48)).toBe(48)
     expect(clampRowHeight(500)).toBe(110)
+  })
+})
+
+describe('eventSegmentForDay', () => {
+  it('splits a cross-midnight event between its two day columns', () => {
+    const startAt = new Date(2026, 5, 27, 23).toISOString()
+    const endAt = new Date(2026, 5, 28, 2).toISOString()
+
+    expect(eventSegmentForDay(startAt, endAt, new Date(2026, 5, 27))).toEqual({
+      start: new Date(2026, 5, 27, 23),
+      end: new Date(2026, 5, 28, 0),
+    })
+    expect(eventSegmentForDay(startAt, endAt, new Date(2026, 5, 28))).toEqual({
+      start: new Date(2026, 5, 28, 0),
+      end: new Date(2026, 5, 28, 2),
+    })
+  })
+
+  it('excludes an event from days it does not overlap', () => {
+    expect(
+      eventSegmentForDay(
+        new Date(2026, 5, 27, 23).toISOString(),
+        new Date(2026, 5, 28, 2).toISOString(),
+        new Date(2026, 5, 29),
+      ),
+    ).toBeNull()
   })
 })
 

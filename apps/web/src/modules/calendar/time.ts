@@ -17,6 +17,17 @@ export function startOfWeekMonday(date: Date) {
   return start
 }
 
+export function eventSegmentForDay(startAt: string, endAt: string, day: Date) {
+  const dayStart = startOfDay(day)
+  const dayEnd = new Date(dayStart)
+  dayEnd.setDate(dayEnd.getDate() + 1)
+  const start = new Date(
+    Math.max(new Date(startAt).getTime(), dayStart.getTime()),
+  )
+  const end = new Date(Math.min(new Date(endAt).getTime(), dayEnd.getTime()))
+  return start < end ? { start, end } : null
+}
+
 export function daysOf(view: 'day' | 'week' | 'month', cursor: Date) {
   if (view === 'day') return [startOfDay(cursor)]
   const start = startOfDay(cursor)

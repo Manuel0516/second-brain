@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { apiCall } from '../../lib/api'
 import {
   clampRowHeight,
+  eventSegmentForDay,
   minuteAtPointer,
   resizeIsoRange,
   shiftIsoRange,
@@ -76,11 +77,17 @@ function dateAtMinute(day: Date, minute: number) {
 // ponytail: O(n²) per day column; day columns rarely hold enough events to matter.
 // For each event, count overlapping events that are longer — that count becomes its
 // horizontal offset level so the shorter event sits slightly right and on top.
-function overlapOffsets(events: CalendarEvent[]) {
-  const meta = events.map((event) => ({
+interface TimedEventSegment {
+  event: CalendarEvent
+  start: Date
+  end: Date
+}
+
+function overlapOffsets(segments: TimedEventSegment[]) {
+  const meta = segments.map(({ event, start, end }) => ({
     id: occurrenceKey(event),
-    start: new Date(event.start_at).getTime(),
-    end: new Date(event.end_at).getTime(),
+    start: start.getTime(),
+    end: end.getTime(),
   }))
   const offsets = new Map<string, number>()
   for (const a of meta) {
@@ -748,14 +755,18 @@ export function TimeGrid({
                 )
               })()}
             {(() => {
-              const dayEvents = visibleEvents.filter(
-                (event) =>
-                  sameDay(new Date(event.start_at), day) && !event.all_day,
-              )
+              const dayEvents = visibleEvents.flatMap((event) => {
+                if (event.all_day) return []
+                const segment = eventSegmentForDay(
+                  event.start_at,
+                  event.end_at,
+                  day,
+                )
+                return segment ? [{ event, ...segment }] : []
+              })
               const offsets = overlapOffsets(dayEvents)
-              return dayEvents.map((event) => {
-                const start = new Date(event.start_at)
-                const end = new Date(event.end_at)
+              return dayEvents.map(({ event, start, end }) => {
+                const eventEnd = new Date(event.end_at)
                 const color = colorFor(event)
                 const key = occurrenceKey(event)
                 const offset = offsets.get(key) ?? 0
@@ -770,8 +781,7 @@ export function TimeGrid({
                 const showTime = height >= 34
                 // Dim only events that already ended earlier today.
                 const isPast =
-                  sameDay(day, today) &&
-                  end.getHours() * 60 + end.getMinutes() <= nowMinute
+                  sameDay(day, today) && end.getTime() <= Date.now()
                 const isSelected = selectedKeys.has(key)
                 const isMoving =
                   gesture?.mode === 'move' &&
@@ -845,21 +855,22 @@ export function TimeGrid({
                         })}
                       </span>
                     )}
-                    {durationMinutes >= 15 && (
-                      <span
-                        className="event-resize-handle"
-                        aria-hidden="true"
-                        onPointerDown={(pointer) => {
-                          pointer.stopPropagation()
-                          startEventGesture(pointer, event, 'resize')
-                        }}
-                        onPointerMove={moveEventGesture}
-                        onPointerUp={(pointer) =>
-                          void finishEventGesture(pointer, event)
-                        }
-                        onPointerCancel={() => setCurrentGesture(null)}
-                      />
-                    )}
+                    {durationMinutes >= 15 &&
+                      end.getTime() === eventEnd.getTime() && (
+                        <span
+                          className="event-resize-handle"
+                          aria-hidden="true"
+                          onPointerDown={(pointer) => {
+                            pointer.stopPropagation()
+                            startEventGesture(pointer, event, 'resize')
+                          }}
+                          onPointerMove={moveEventGesture}
+                          onPointerUp={(pointer) =>
+                            void finishEventGesture(pointer, event)
+                          }
+                          onPointerCancel={() => setCurrentGesture(null)}
+                        />
+                      )}
                   </button>
                 )
               })

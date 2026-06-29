@@ -78,8 +78,8 @@ rows for every future occurrence:
 ### Views
 - **Month** (default landing view), **Week**, **Day**, **Agenda/List**. Keyboard shortcuts:
   `M`/`W`/`D`/`A` to switch, arrows to navigate periods, `T` for today.
-- Multi-day and all-day events render as a banner across the top of the affected days
-  (not squeezed into hourly slots).
+- All-day events render as a banner across the top of the affected days. Timed events
+  crossing midnight are split at `00:00` and continue in the next day's hourly column.
 - Overlapping timed events in Week/Day view stack side-by-side (same algorithm as Google
   Calendar: greedy column assignment).
 
