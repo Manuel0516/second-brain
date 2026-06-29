@@ -766,6 +766,7 @@ export function TimeGrid({
               })
               const offsets = overlapOffsets(dayEvents)
               return dayEvents.map(({ event, start, end }) => {
+                const eventStart = new Date(event.start_at)
                 const eventEnd = new Date(event.end_at)
                 const color = colorFor(event)
                 const key = occurrenceKey(event)
@@ -842,13 +843,13 @@ export function TimeGrid({
                     </strong>
                     {showTime && (
                       <span>
-                        {start.toLocaleTimeString([], {
+                        {eventStart.toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: false,
                         })}
                         –
-                        {end.toLocaleTimeString([], {
+                        {eventEnd.toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: false,
