@@ -14,6 +14,7 @@ import {
 } from '../modules/calendar/time'
 import { useSettings } from '../context/SettingsContext'
 import type { CalendarData, CalendarEvent } from '../modules/calendar/types'
+import { occurrenceKey } from '../modules/calendar/types'
 import { apiCall } from '../lib/api'
 
 type View = 'day' | 'week' | 'month'
@@ -86,6 +87,14 @@ export function Calendar() {
   )
   const [draftPreview, setDraftPreview] =
     useState<Partial<CalendarEvent> | null>(null)
+  // The exact occurrence the editor is previewing — hidden from the grid so it
+  // isn't drawn twice. Stable across edits: editorEvent keeps the original
+  // start_at (only draftPreview moves), so for a recurring event we hide just
+  // this occurrence, not the whole series.
+  const draftReplaceKey =
+    editorEvent?.id && editorEvent.start_at
+      ? occurrenceKey({ id: editorEvent.id, start_at: editorEvent.start_at })
+      : null
   const [refresh, setRefresh] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
@@ -489,6 +498,7 @@ export function Calendar() {
                 onCreate={(start) => createAt(start)}
                 onEdit={setEditorEvent}
                 draftEvent={draftPreview}
+                draftReplaceKey={draftReplaceKey}
               />
             ) : (
               <TimeGrid
@@ -501,6 +511,7 @@ export function Calendar() {
                 onRowHeightChange={changeRowHeight}
                 onHorizontalNavigate={shiftByDays}
                 draftEvent={draftPreview}
+                draftReplaceKey={draftReplaceKey}
               />
             )}
           </div>

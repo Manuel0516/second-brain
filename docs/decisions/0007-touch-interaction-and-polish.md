@@ -407,16 +407,101 @@ event cleanup first.
 
 ---
 
+## 11. Event-editor popups portalled to the document body
+
+### Problem
+
+The recurring-event scope chooser (edit/delete) and the repeat editor are
+`position: fixed; inset: 0` full-screen overlays, but they appeared off-centre —
+shifted toward the top or bottom of the screen depending on where the editor was
+scrolled.
+
+### Root cause
+
+Both overlays were declared inside `editor-drag-wrap`, which always carries
+`style={{ transform: translateY(${dragY}px) }}` (i.e. `translateY(0px)` at
+rest), and `.event-editor` itself keeps a resting `transform` from its
+`animation: editorIn … both`. **Any** non-`none` transform on an ancestor makes
+`position: fixed` resolve against that ancestor instead of the viewport, so the
+"full-screen centred" overlays were actually centred on the editor panel. The
+`height: 105%` in `.scope-prompt` was a band-aid for the same issue.
+
+### Decision
+
+Render both overlays through `createPortal(…, document.body)` so they escape the
+transformed ancestors and `position: fixed` resolves against the viewport. React
+state and handlers are unaffected (the portal keeps the React tree). Removed the
+`height: 105%` hack from `.scope-prompt`.
+
+**Files:** `apps/web/src/modules/calendar/EventEditor.tsx` (`createPortal` for
+the repeat and scope prompts), `apps/web/src/styles.css` (removed `height: 105%`).
+
+---
+
+## 12. Recurring event — siblings stay visible while editing
+
+### Problem
+
+Opening the editor on one occurrence of a repeating event made **all the other
+occurrences of that series disappear** from the grid while the editor was open.
+
+### Root cause
+
+The backend expands a recurring event into occurrences that all share the same
+`id` (differing only by `start_at`). The grid's draft filter hid every event
+matching the draft by `id` (`event.id !== draftId`), which stripped the entire
+series and left only the single live preview.
+
+### Decision
+
+Hide only the **specific occurrence** being previewed, matched by its
+`occurrenceKey` (`id:start_at`) rather than by `id`.
+
+- `Calendar.tsx` derives a stable `draftReplaceKey` from `editorEvent` — which
+  keeps the *original* occurrence's `start_at` (only `draftPreview` moves as the
+  user types) — and passes it to both `TimeGrid` and `MonthView`.
+- Both views filter out only the occurrence whose `occurrenceKey` equals
+  `draftReplaceKey`, then append the live preview. New-event drafts pass a null
+  key, so all events stay visible. Non-recurring behaviour is unchanged (the key
+  is unique anyway). The now-unused `draftId` was removed from `TimeGrid`.
+
+**Files:** `apps/web/src/pages/Calendar.tsx` (`draftReplaceKey`),
+`apps/web/src/modules/calendar/TimeGrid.tsx`,
+`apps/web/src/modules/calendar/MonthView.tsx`.
+
+---
+
+## 13. Grabber hidden on desktop
+
+### Problem
+
+The pull-down-to-close grabber (§7) is a touch-only affordance but was still
+visible (and showed a `grab` cursor) on desktop, where it does nothing — the
+drag handlers already return early for non-touch pointers.
+
+### Decision
+
+Hide the grabber on pointer-fine (mouse) devices with
+`@media (pointer: fine) { .editor-grabber { display: none } }`, mirroring the
+existing `@media (pointer: coarse)` touch-only convention. CSS-only — no JS
+change, and the touch gesture is unaffected.
+
+**Files:** `apps/web/src/styles.css`.
+
+---
+
 ## Files changed
 
 | File | Changes |
 |---|---|
-| `apps/web/src/modules/calendar/TimeGrid.tsx` | `overlapOffsets()` algorithm, `resizingDay` state, touch state machine (`TouchState`, handlers), double-tap detection, time-display overflow clip, day-column touch dispatch, event-chip touch dispatch, resize handle touch guard |
-| `apps/web/src/modules/calendar/EventEditor.tsx` | Pull-down grabber + drag handlers, `closeImmediate()` (skips `editorOut` on grabber close), `mountedAt` close guard |
+| `apps/web/src/modules/calendar/TimeGrid.tsx` | `overlapOffsets()` algorithm, `resizingDay` state, touch state machine (`TouchState`, handlers), double-tap detection, time-display overflow clip, day-column touch dispatch, event-chip touch dispatch, resize handle touch guard, `draftReplaceKey` occurrence-scoped draft filter |
+| `apps/web/src/modules/calendar/MonthView.tsx` | `draftReplaceKey` occurrence-scoped draft filter |
+| `apps/web/src/pages/Calendar.tsx` | Derives `draftReplaceKey` from `editorEvent` and passes it to both views |
+| `apps/web/src/modules/calendar/EventEditor.tsx` | Pull-down grabber + drag handlers, `closeImmediate()` (skips `editorOut` on grabber close), `mountedAt` close guard, repeat/scope prompts rendered via `createPortal` to `document.body` |
 | `apps/web/src/modules/calendar/Sidebar.tsx` | Long-press (375 ms) drag-to-reorder with live reordering + finger re-anchoring, `homeIndex`/`ROW_GAP`, `localStorage` order persistence, delete-calendar confirmation dialog |
 | `apps/web/src/modules/calendar/Sidebar.test.tsx` | Reorder flow assertions (re-anchored `translateY`) |
 | `apps/api/app/routes/calendar.py` | `DELETE /api/calendars/{id}` cascade-deletes events instead of rejecting with 409 |
-| `apps/web/src/styles.css` | `.day-column` `touch-action: pan-y`, calendar colour `::before` dot, `editor-grabber`/`editor-grabber-handle`/`editor-drag-wrap` styles, removed `long-press-active` styles, `.calendar-row.reordering` lifted style, `.cal-card-actions .danger` |
+| `apps/web/src/styles.css` | `.day-column` `touch-action: pan-y`, calendar colour `::before` dot, `editor-grabber`/`editor-grabber-handle`/`editor-drag-wrap` styles, removed `long-press-active` styles, `.calendar-row.reordering` lifted style, `.cal-card-actions .danger`, removed `.scope-prompt { height: 105% }`, `@media (pointer: fine)` grabber hide |
 
 ---
 

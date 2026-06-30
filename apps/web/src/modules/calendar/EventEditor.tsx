@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Segmented } from '../../components/Segmented'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
@@ -1213,222 +1214,226 @@ export function EventEditor({
               </button>
             </footer>
           </form>
-          {repeatOpen && (
-            <div className="scope-prompt" role="dialog" aria-label="Repeat">
-              <div className="repeat-card">
-                <h3>Repeat</h3>
-                <div className="repeat-section">
-                  <span className="repeat-label">Every</span>
-                  <div className="repeat-line">
-                    <input
-                      type="number"
-                      min={1}
-                      max={365}
-                      className="repeat-interval"
-                      aria-label="Interval"
-                      value={recurrence.interval}
-                      onChange={(e) =>
-                        setRecurrence((r) => ({
-                          ...r,
-                          interval: Math.max(1, Number(e.target.value) || 1),
-                        }))
-                      }
-                    />
-                    <select
-                      className="repeat-unit"
-                      aria-label="Frequency"
-                      value={recurrence.freq || 'WEEKLY'}
-                      onChange={(e) =>
-                        setRecurrence((r) => ({
-                          ...r,
-                          freq: e.target.value as Freq,
-                        }))
-                      }
-                    >
-                      <option value="DAILY">
-                        {recurrence.interval > 1 ? 'days' : 'day'}
-                      </option>
-                      <option value="WEEKLY">
-                        {recurrence.interval > 1 ? 'weeks' : 'week'}
-                      </option>
-                      <option value="MONTHLY">
-                        {recurrence.interval > 1 ? 'months' : 'month'}
-                      </option>
-                      <option value="YEARLY">
-                        {recurrence.interval > 1 ? 'years' : 'year'}
-                      </option>
-                    </select>
+          {repeatOpen &&
+            createPortal(
+              <div className="scope-prompt" role="dialog" aria-label="Repeat">
+                <div className="repeat-card">
+                  <h3>Repeat</h3>
+                  <div className="repeat-section">
+                    <span className="repeat-label">Every</span>
+                    <div className="repeat-line">
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        className="repeat-interval"
+                        aria-label="Interval"
+                        value={recurrence.interval}
+                        onChange={(e) =>
+                          setRecurrence((r) => ({
+                            ...r,
+                            interval: Math.max(1, Number(e.target.value) || 1),
+                          }))
+                        }
+                      />
+                      <select
+                        className="repeat-unit"
+                        aria-label="Frequency"
+                        value={recurrence.freq || 'WEEKLY'}
+                        onChange={(e) =>
+                          setRecurrence((r) => ({
+                            ...r,
+                            freq: e.target.value as Freq,
+                          }))
+                        }
+                      >
+                        <option value="DAILY">
+                          {recurrence.interval > 1 ? 'days' : 'day'}
+                        </option>
+                        <option value="WEEKLY">
+                          {recurrence.interval > 1 ? 'weeks' : 'week'}
+                        </option>
+                        <option value="MONTHLY">
+                          {recurrence.interval > 1 ? 'months' : 'month'}
+                        </option>
+                        <option value="YEARLY">
+                          {recurrence.interval > 1 ? 'years' : 'year'}
+                        </option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div
-                  className={`repeat-collapse ${recurrence.freq === 'WEEKLY' ? 'open' : ''}`}
-                >
-                  <div className="repeat-collapse-inner">
-                    <div className="repeat-section">
-                      <span className="repeat-label">Repeat on</span>
-                      <div className="repeat-days">
-                        {WEEKDAYS.map((day) => (
-                          <button
-                            key={day.code}
-                            type="button"
-                            className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
-                            aria-pressed={recurrence.byday.includes(day.code)}
-                            onClick={() => toggleByday(day.code)}
-                          >
-                            {day.label}
-                          </button>
-                        ))}
+                  <div
+                    className={`repeat-collapse ${recurrence.freq === 'WEEKLY' ? 'open' : ''}`}
+                  >
+                    <div className="repeat-collapse-inner">
+                      <div className="repeat-section">
+                        <span className="repeat-label">Repeat on</span>
+                        <div className="repeat-days">
+                          {WEEKDAYS.map((day) => (
+                            <button
+                              key={day.code}
+                              type="button"
+                              className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
+                              aria-pressed={recurrence.byday.includes(day.code)}
+                              onClick={() => toggleByday(day.code)}
+                            >
+                              {day.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                <div className="repeat-section">
-                  <label className="toggle-row">
-                    <span>Ends</span>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label="Ends"
-                      checked={recurrence.ends !== 'never'}
-                      onChange={(e) =>
-                        setRecurrence((r) => ({
-                          ...r,
-                          ends: e.target.checked
-                            ? r.ends === 'never'
-                              ? 'on'
-                              : r.ends
-                            : 'never',
-                        }))
-                      }
-                    />
-                  </label>
-                  <div
-                    className={`repeat-collapse ${recurrence.ends !== 'never' ? 'open' : ''}`}
-                  >
-                    <div className="repeat-collapse-inner">
-                      <div className="repeat-end-options repeat-reveal">
-                        <Segmented
-                          value={recurrence.ends === 'after' ? 'after' : 'on'}
-                          options={['on', 'after']}
-                          labels={{ on: 'On date', after: 'After count' }}
-                          ariaLabel="End condition"
-                          onChange={(v) =>
-                            setRecurrence((r) => ({ ...r, ends: v }))
-                          }
-                        />
-                        {recurrence.ends === 'on' ? (
-                          <input
-                            type="date"
-                            aria-label="End date"
-                            value={recurrence.until}
-                            onChange={(e) =>
-                              setRecurrence((r) => ({
-                                ...r,
-                                until: e.target.value,
-                              }))
+                  <div className="repeat-section">
+                    <label className="toggle-row">
+                      <span>Ends</span>
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label="Ends"
+                        checked={recurrence.ends !== 'never'}
+                        onChange={(e) =>
+                          setRecurrence((r) => ({
+                            ...r,
+                            ends: e.target.checked
+                              ? r.ends === 'never'
+                                ? 'on'
+                                : r.ends
+                              : 'never',
+                          }))
+                        }
+                      />
+                    </label>
+                    <div
+                      className={`repeat-collapse ${recurrence.ends !== 'never' ? 'open' : ''}`}
+                    >
+                      <div className="repeat-collapse-inner">
+                        <div className="repeat-end-options repeat-reveal">
+                          <Segmented
+                            value={recurrence.ends === 'after' ? 'after' : 'on'}
+                            options={['on', 'after']}
+                            labels={{ on: 'On date', after: 'After count' }}
+                            ariaLabel="End condition"
+                            onChange={(v) =>
+                              setRecurrence((r) => ({ ...r, ends: v }))
                             }
                           />
-                        ) : (
-                          <div className="repeat-line">
+                          {recurrence.ends === 'on' ? (
                             <input
-                              type="number"
-                              min={1}
-                              max={730}
-                              aria-label="Occurrence count"
-                              className="repeat-count"
-                              value={recurrence.count}
+                              type="date"
+                              aria-label="End date"
+                              value={recurrence.until}
                               onChange={(e) =>
                                 setRecurrence((r) => ({
                                   ...r,
-                                  count: Math.max(
-                                    1,
-                                    Number(e.target.value) || 1,
-                                  ),
+                                  until: e.target.value,
                                 }))
                               }
                             />
-                            <span className="repeat-times">times</span>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="repeat-line">
+                              <input
+                                type="number"
+                                min={1}
+                                max={730}
+                                aria-label="Occurrence count"
+                                className="repeat-count"
+                                value={recurrence.count}
+                                onChange={(e) =>
+                                  setRecurrence((r) => ({
+                                    ...r,
+                                    count: Math.max(
+                                      1,
+                                      Number(e.target.value) || 1,
+                                    ),
+                                  }))
+                                }
+                              />
+                              <span className="repeat-times">times</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
+                  <div className="repeat-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={cancelRepeat}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => setRepeatOpen(false)}
+                    >
+                      Done
+                    </button>
+                  </div>
                 </div>
-                <div className="repeat-actions">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={cancelRepeat}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => setRepeatOpen(false)}
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          {scopePrompt && (
-            <div
-              className="scope-prompt"
-              role="dialog"
-              aria-label="Repeating event"
-            >
-              <div className="scope-card">
-                <h3>
-                  {scopePrompt === 'delete'
-                    ? 'Delete repeating event'
-                    : 'Edit repeating event'}
-                </h3>
-                <p>This event repeats. Apply your change to:</p>
-                <div className="scope-options">
-                  <button
-                    type="button"
-                    className="scope-option"
-                    onClick={() =>
-                      scopePrompt === 'delete'
-                        ? void performDelete('this')
-                        : void commitSave('this')
-                    }
-                  >
-                    This event
-                  </button>
-                  {scopePrompt === 'delete' && (
+              </div>,
+              document.body,
+            )}
+          {scopePrompt &&
+            createPortal(
+              <div
+                className="scope-prompt"
+                role="dialog"
+                aria-label="Repeating event"
+              >
+                <div className="scope-card">
+                  <h3>
+                    {scopePrompt === 'delete'
+                      ? 'Delete repeating event'
+                      : 'Edit repeating event'}
+                  </h3>
+                  <p>This event repeats. Apply your change to:</p>
+                  <div className="scope-options">
                     <button
                       type="button"
                       className="scope-option"
-                      onClick={() => void performDelete('following')}
+                      onClick={() =>
+                        scopePrompt === 'delete'
+                          ? void performDelete('this')
+                          : void commitSave('this')
+                      }
                     >
-                      This and following events
+                      This event
                     </button>
-                  )}
+                    {scopePrompt === 'delete' && (
+                      <button
+                        type="button"
+                        className="scope-option"
+                        onClick={() => void performDelete('following')}
+                      >
+                        This and following events
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="scope-option"
+                      onClick={() =>
+                        scopePrompt === 'delete'
+                          ? void performDelete('all')
+                          : void commitSave('all')
+                      }
+                    >
+                      All events
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="scope-option"
-                    onClick={() =>
-                      scopePrompt === 'delete'
-                        ? void performDelete('all')
-                        : void commitSave('all')
-                    }
+                    className="scope-cancel"
+                    onClick={() => setScopePrompt(null)}
                   >
-                    All events
+                    Cancel
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="scope-cancel"
-                  onClick={() => setScopePrompt(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+              </div>,
+              document.body,
+            )}
         </div>
         {/* /editor-drag-wrap */}
       </aside>

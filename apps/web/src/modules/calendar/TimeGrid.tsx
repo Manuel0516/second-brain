@@ -67,6 +67,7 @@ interface Props {
   onRowHeightChange: (value: number) => void
   onHorizontalNavigate: (days: number) => void
   draftEvent?: Partial<CalendarEvent> | null
+  draftReplaceKey?: string | null
 }
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
@@ -171,6 +172,7 @@ export function TimeGrid({
   onRowHeightChange,
   onHorizontalNavigate,
   draftEvent,
+  draftReplaceKey,
 }: Props) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [newSelection, setNewSelection] = useState<NewSelection | null>(null)
@@ -961,7 +963,6 @@ export function TimeGrid({
     return calendar?.color || '#5B8AFD'
   }
   const draft = draftEvent
-  const draftId = draft?.id
   const draftStart = draft?.start_at ? new Date(draft.start_at) : null
   const previewDraft: CalendarEvent | null =
     draft && draftStart && !Number.isNaN(draftStart.getTime())
@@ -980,7 +981,11 @@ export function TimeGrid({
       : null
   const visibleEvents = previewDraft
     ? [
-        ...events.filter((event) => !draftId || event.id !== draftId),
+        // Hide only the single occurrence being previewed (matched by its
+        // original key), so a recurring event's other occurrences stay visible.
+        ...events.filter((event) =>
+          draftReplaceKey ? occurrenceKey(event) !== draftReplaceKey : true,
+        ),
         previewDraft,
       ]
     : events

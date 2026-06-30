@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiCall } from '../../lib/api'
 import type { CalendarData, CalendarEvent } from './types'
+import { occurrenceKey } from './types'
 
 interface Props {
   monthDate: Date
@@ -9,6 +10,7 @@ interface Props {
   onCreate: (start: Date) => void
   onEdit: (event: CalendarEvent) => void
   draftEvent?: Partial<CalendarEvent> | null
+  draftReplaceKey?: string | null
 }
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
@@ -35,6 +37,7 @@ export function MonthView({
   onCreate,
   onEdit,
   draftEvent,
+  draftReplaceKey,
 }: Props) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const cells = useMemo(() => monthGrid(monthDate), [monthDate])
@@ -59,8 +62,9 @@ export function MonthView({
 
   const previewEvents = draftEvent?.start_at
     ? [
-        ...events.filter(
-          (event) => !draftEvent.id || event.id !== draftEvent.id,
+        // Hide only the previewed occurrence, not a recurring event's siblings.
+        ...events.filter((event) =>
+          draftReplaceKey ? occurrenceKey(event) !== draftReplaceKey : true,
         ),
         {
           ...draftEvent,
