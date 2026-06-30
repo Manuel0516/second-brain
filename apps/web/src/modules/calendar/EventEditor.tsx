@@ -128,6 +128,10 @@ export function EventEditor({
   )
   const [saveErrorPulse, setSaveErrorPulse] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [dragY, setDragY] = useState(0) // pull-down gesture offset
+  const [isDragging, setIsDragging] = useState(false)
+  const dragYRef = useRef(0)
+  const dragStartRef = useRef(0)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   // When set, a recurring event needs the user to choose an edit/delete scope.
   const [scopePrompt, setScopePrompt] = useState<'save' | 'delete' | null>(null)
@@ -170,6 +174,38 @@ export function EventEditor({
     setClosing(true)
     closeTimer.current = window.setTimeout(complete, 240)
   }, [])
+
+  // ── Pull-down-to-close gesture ────────────────────────────────
+  const onGrabberPointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragStartRef.current = e.clientY
+    setIsDragging(true)
+    dragYRef.current = 0
+    setDragY(0)
+  }, [])
+
+  const onGrabberPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging || e.pointerType !== 'touch') return
+      const delta = Math.max(0, e.clientY - dragStartRef.current)
+      dragYRef.current = delta
+      setDragY(delta)
+    },
+    [isDragging],
+  )
+
+  const onGrabberPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging || e.pointerType !== 'touch') return
+      setIsDragging(false)
+      if (dragYRef.current > 80) {
+        closeWithAnimation(onClose)
+      }
+      setDragY(0)
+    },
+    [closeWithAnimation, isDragging, onClose],
+  )
 
   useEffect(() => {
     const escape = (e: KeyboardEvent) =>
@@ -494,6 +530,7 @@ export function EventEditor({
     <div
       className={`calendar-backdrop ${closing ? 'closing' : ''}`}
       role="presentation"
+      style={{ opacity: dragY ? Math.max(0, 1 - dragY / 200) : undefined }}
       onMouseDown={(e) =>
         e.target === e.currentTarget &&
         e.timeStamp - mountedAt.current > 300 &&
@@ -506,210 +543,314 @@ export function EventEditor({
         className={`event-editor ${closing ? 'closing' : ''} ${repeatOpen || scopePrompt ? 'locked' : ''}`}
         aria-label={event.id ? 'Edit event' : 'New event'}
       >
-        <header>
-          <h2>{event.id ? 'Edit event' : 'New event'}</h2>
-          <button
-            type="button"
-            className="editor-close"
-            onClick={() => closeWithAnimation(onClose)}
-            aria-label="Close"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
+        {/* Pull-down grabber */}
+        <div
+          className="editor-grabber"
+          onPointerDown={onGrabberPointerDown}
+          onPointerMove={onGrabberPointerMove}
+          onPointerUp={onGrabberPointerUp}
+          onPointerCancel={() => {
+            setIsDragging(false)
+            setDragY(0)
+          }}
+        >
+          <span className="editor-grabber-handle" />
+        </div>
+        <div
+          className={`editor-drag-wrap${isDragging ? ' no-transition' : ''}`}
+          style={{ transform: `translateY(${dragY}px)` }}
+        >
+          <header>
+            <h2>{event.id ? 'Edit event' : 'New event'}</h2>
+            <button
+              type="button"
+              className="editor-close"
+              onClick={() => closeWithAnimation(onClose)}
+              aria-label="Close"
             >
-              <path d="M5 5l10 10M15 5L5 15" />
-            </svg>
-          </button>
-        </header>
-        <form onSubmit={save} noValidate>
-          <div className="editor-title-row">
-            <div className="editor-icon-picker" ref={iconPickerRef}>
-              <button
-                type="button"
-                className="editor-icon-trigger"
-                aria-label="Choose event icon"
-                aria-haspopup="menu"
-                aria-expanded={iconPickerOpen}
-                onClick={() => setIconPickerOpen((current) => !current)}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
               >
-                {icon ? (
-                  <span className="event-icon-glyph" aria-hidden="true">
-                    {icon}
-                  </span>
-                ) : (
-                  <svg
-                    className="editor-icon-empty"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M8.5 14.5a4 4 0 0 0 7 0" />
-                    <path d="M9 9.5h.01M15 9.5h.01" />
-                  </svg>
-                )}
-              </button>
-              {iconPickerOpen && (
-                <div
-                  className="editor-icon-popover"
-                  role="dialog"
-                  aria-label="Event icon"
+                <path d="M5 5l10 10M15 5L5 15" />
+              </svg>
+            </button>
+          </header>
+          <form onSubmit={save} noValidate>
+            <div className="editor-title-row">
+              <div className="editor-icon-picker" ref={iconPickerRef}>
+                <button
+                  type="button"
+                  className="editor-icon-trigger"
+                  aria-label="Choose event icon"
+                  aria-haspopup="menu"
+                  aria-expanded={iconPickerOpen}
+                  onClick={() => setIconPickerOpen((current) => !current)}
                 >
-                  <div className="editor-icon-grid">
-                    {iconPresets.map((preset) => (
+                  {icon ? (
+                    <span className="event-icon-glyph" aria-hidden="true">
+                      {icon}
+                    </span>
+                  ) : (
+                    <svg
+                      className="editor-icon-empty"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M8.5 14.5a4 4 0 0 0 7 0" />
+                      <path d="M9 9.5h.01M15 9.5h.01" />
+                    </svg>
+                  )}
+                </button>
+                {iconPickerOpen && (
+                  <div
+                    className="editor-icon-popover"
+                    role="dialog"
+                    aria-label="Event icon"
+                  >
+                    <div className="editor-icon-grid">
+                      {iconPresets.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={`editor-icon-choice ${icon === preset ? 'active' : ''}`}
+                          aria-pressed={icon === preset}
+                          onClick={() => {
+                            setIcon(preset)
+                            setIconPickerOpen(false)
+                          }}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      className="editor-icon-custom"
+                      aria-label="Custom icon — type or paste any emoji or Nerd Font glyph"
+                      placeholder="Type or paste emoji / glyph…"
+                      inputMode="text"
+                      title="macOS: Ctrl+Cmd+Space for emoji picker"
+                      value={icon}
+                      onChange={(e) => setIcon(e.target.value.slice(0, 32))}
+                    />
+                    {icon && (
                       <button
-                        key={preset}
                         type="button"
-                        className={`editor-icon-choice ${icon === preset ? 'active' : ''}`}
-                        aria-pressed={icon === preset}
+                        className="editor-icon-clear"
                         onClick={() => {
-                          setIcon(preset)
+                          setIcon('')
                           setIconPickerOpen(false)
                         }}
                       >
-                        {preset}
+                        Remove icon
                       </button>
-                    ))}
+                    )}
                   </div>
+                )}
+              </div>
+              <input
+                className="editor-title"
+                required
+                placeholder="Event title"
+                aria-label="Title"
+                value={form.title}
+                onChange={(e) => set('title', e.target.value)}
+              />
+            </div>
+
+            <fieldset className="editor-group">
+              <legend>Calendar</legend>
+              <div
+                className="calendar-chips"
+                role="radiogroup"
+                aria-label="Calendar"
+              >
+                {calendars.map((calendar) => {
+                  const active = calendar.id === selectedCalendarId
+                  return (
+                    <button
+                      key={calendar.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={`calendar-chip ${active ? 'active' : ''}`}
+                      onClick={() => set('calendar_id', calendar.id)}
+                    >
+                      <span
+                        className="chip-dot"
+                        style={{ background: calendar.color }}
+                      />
+                      {calendar.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className="editor-group">
+              <legend>When</legend>
+              <label className="toggle-row">
+                <span>All day</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={form.all_day}
+                  onChange={(e) => set('all_day', e.target.checked)}
+                />
+              </label>
+              <label className="dt-row">
+                <span>Starts</span>
+                <div className="dt-field">
+                  {!form.all_day && (
+                    <input
+                      type="time"
+                      step={300}
+                      aria-label="Start time"
+                      value={timePart(form.start_at)}
+                      onChange={(e) => setTimePart('start_at', e.target.value)}
+                    />
+                  )}
                   <input
-                    className="editor-icon-custom"
-                    aria-label="Custom icon — type or paste any emoji or Nerd Font glyph"
-                    placeholder="Type or paste emoji / glyph…"
-                    inputMode="text"
-                    title="macOS: Ctrl+Cmd+Space for emoji picker"
-                    value={icon}
-                    onChange={(e) => setIcon(e.target.value.slice(0, 32))}
+                    required
+                    type="date"
+                    aria-label="Start date"
+                    value={datePart(form.start_at)}
+                    onChange={(e) => setDatePart('start_at', e.target.value)}
                   />
-                  {icon && (
+                </div>
+              </label>
+              <label className="dt-row">
+                <span>Ends</span>
+                <div className="dt-field">
+                  {!form.all_day && (
+                    <input
+                      type="time"
+                      step={300}
+                      aria-label="End time"
+                      value={timePart(form.end_at)}
+                      onChange={(e) => setTimePart('end_at', e.target.value)}
+                    />
+                  )}
+                  <input
+                    required
+                    type="date"
+                    aria-label="End date"
+                    value={datePart(form.end_at)}
+                    onChange={(e) => setDatePart('end_at', e.target.value)}
+                  />
+                </div>
+              </label>
+              <label>
+                Repeats
+                <div className="repeat-field-row">
+                  <button
+                    type="button"
+                    className="repeat-field"
+                    onClick={openRepeat}
+                  >
+                    {recurrenceSummary(recurrence)}
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 7.5l5 5 5-5" />
+                    </svg>
+                  </button>
+                  {recurrence.freq && (
                     <button
                       type="button"
-                      className="editor-icon-clear"
-                      onClick={() => {
-                        setIcon('')
-                        setIconPickerOpen(false)
-                      }}
+                      className="repeat-clear"
+                      aria-label="Remove repeat"
+                      onClick={() => setRecurrence((r) => ({ ...r, freq: '' }))}
                     >
-                      Remove icon
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 5l10 10M15 5L5 15" />
+                      </svg>
                     </button>
                   )}
                 </div>
-              )}
-            </div>
-            <input
-              className="editor-title"
-              required
-              placeholder="Event title"
-              aria-label="Title"
-              value={form.title}
-              onChange={(e) => set('title', e.target.value)}
-            />
-          </div>
+              </label>
+            </fieldset>
 
-          <fieldset className="editor-group">
-            <legend>Calendar</legend>
-            <div
-              className="calendar-chips"
-              role="radiogroup"
-              aria-label="Calendar"
-            >
-              {calendars.map((calendar) => {
-                const active = calendar.id === selectedCalendarId
-                return (
-                  <button
-                    key={calendar.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`calendar-chip ${active ? 'active' : ''}`}
-                    onClick={() => set('calendar_id', calendar.id)}
-                  >
-                    <span
-                      className="chip-dot"
-                      style={{ background: calendar.color }}
+            <fieldset className="editor-group">
+              <legend>Color</legend>
+              <div className="color-swatches">
+                {colorPresets.map((preset) => {
+                  const active =
+                    form.color_override.toLowerCase() === preset.toLowerCase()
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`color-swatch ${active ? 'active' : ''}`}
+                      aria-label={`Use color ${preset}`}
+                      aria-pressed={active}
+                      style={
+                        {
+                          background: preset,
+                          '--cc-on': onColor(preset),
+                        } as React.CSSProperties
+                      }
+                      onClick={() => set('color_override', preset)}
                     />
-                    {calendar.name}
-                  </button>
-                )
-              })}
-            </div>
-          </fieldset>
-
-          <fieldset className="editor-group">
-            <legend>When</legend>
-            <label className="toggle-row">
-              <span>All day</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={form.all_day}
-                onChange={(e) => set('all_day', e.target.checked)}
-              />
-            </label>
-            <label className="dt-row">
-              <span>Starts</span>
-              <div className="dt-field">
-                {!form.all_day && (
-                  <input
-                    type="time"
-                    step={300}
-                    aria-label="Start time"
-                    value={timePart(form.start_at)}
-                    onChange={(e) => setTimePart('start_at', e.target.value)}
-                  />
-                )}
-                <input
-                  required
-                  type="date"
-                  aria-label="Start date"
-                  value={datePart(form.start_at)}
-                  onChange={(e) => setDatePart('start_at', e.target.value)}
-                />
-              </div>
-            </label>
-            <label className="dt-row">
-              <span>Ends</span>
-              <div className="dt-field">
-                {!form.all_day && (
-                  <input
-                    type="time"
-                    step={300}
-                    aria-label="End time"
-                    value={timePart(form.end_at)}
-                    onChange={(e) => setTimePart('end_at', e.target.value)}
-                  />
-                )}
-                <input
-                  required
-                  type="date"
-                  aria-label="End date"
-                  value={datePart(form.end_at)}
-                  onChange={(e) => setDatePart('end_at', e.target.value)}
-                />
-              </div>
-            </label>
-            <label>
-              Repeats
-              <div className="repeat-field-row">
-                <button
-                  type="button"
-                  className="repeat-field"
-                  onClick={openRepeat}
+                  )
+                })}
+                <label
+                  className={`color-custom ${
+                    form.color_override &&
+                    !colorPresets.some(
+                      (preset) =>
+                        preset.toLowerCase() ===
+                        form.color_override.toLowerCase(),
+                    )
+                      ? 'active'
+                      : ''
+                  }`}
+                  title="Custom color"
+                  style={
+                    {
+                      background: form.color_override || selectedCalendarColor,
+                      '--cc-on': onColor(
+                        form.color_override || selectedCalendarColor,
+                      ),
+                    } as React.CSSProperties
+                  }
                 >
-                  {recurrenceSummary(recurrence)}
+                  <input
+                    type="color"
+                    aria-label="Custom event color"
+                    value={form.color_override || selectedCalendarColor}
+                    onChange={(e) => set('color_override', e.target.value)}
+                  />
                   <svg
-                    width="14"
-                    height="14"
+                    className="color-custom-icon"
                     viewBox="0 0 20 20"
                     fill="none"
                     stroke="currentColor"
@@ -718,647 +859,571 @@ export function EventEditor({
                     strokeLinejoin="round"
                     aria-hidden="true"
                   >
-                    <path d="M5 7.5l5 5 5-5" />
+                    <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                    <path d="M12.5 5.5l2 2" />
                   </svg>
+                </label>
+                <button
+                  type="button"
+                  className="color-clear"
+                  aria-pressed={!form.color_override}
+                  onClick={() => set('color_override', '')}
+                >
+                  Use calendar color
                 </button>
-                {recurrence.freq && (
-                  <button
-                    type="button"
-                    className="repeat-clear"
-                    aria-label="Remove repeat"
-                    onClick={() => setRecurrence((r) => ({ ...r, freq: '' }))}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    >
-                      <path d="M5 5l10 10M15 5L5 15" />
-                    </svg>
-                  </button>
-                )}
               </div>
-            </label>
-          </fieldset>
+            </fieldset>
 
-          <fieldset className="editor-group">
-            <legend>Color</legend>
-            <div className="color-swatches">
-              {colorPresets.map((preset) => {
-                const active =
-                  form.color_override.toLowerCase() === preset.toLowerCase()
-                return (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`color-swatch ${active ? 'active' : ''}`}
-                    aria-label={`Use color ${preset}`}
-                    aria-pressed={active}
-                    style={
-                      {
-                        background: preset,
-                        '--cc-on': onColor(preset),
-                      } as React.CSSProperties
-                    }
-                    onClick={() => set('color_override', preset)}
-                  />
-                )
-              })}
-              <label
-                className={`color-custom ${
-                  form.color_override &&
-                  !colorPresets.some(
-                    (preset) =>
-                      preset.toLowerCase() ===
-                      form.color_override.toLowerCase(),
-                  )
-                    ? 'active'
-                    : ''
-                }`}
-                title="Custom color"
-                style={
-                  {
-                    background: form.color_override || selectedCalendarColor,
-                    '--cc-on': onColor(
-                      form.color_override || selectedCalendarColor,
-                    ),
-                  } as React.CSSProperties
-                }
-              >
-                <input
-                  type="color"
-                  aria-label="Custom event color"
-                  value={form.color_override || selectedCalendarColor}
-                  onChange={(e) => set('color_override', e.target.value)}
-                />
-                <svg
-                  className="color-custom-icon"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+            <fieldset className="editor-group">
+              <legend>Connections</legend>
+              <p className="connection-help">
+                Prepare related records that will live in the other modules.
+              </p>
+              <div className="connection-list">
+                <div
+                  className={`connection-card ${form.connect_notes ? 'active' : ''}`}
                 >
-                  <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
-                  <path d="M12.5 5.5l2 2" />
-                </svg>
-              </label>
-              <button
-                type="button"
-                className="color-clear"
-                aria-pressed={!form.color_override}
-                onClick={() => set('color_override', '')}
-              >
-                Use calendar color
-              </button>
-            </div>
-          </fieldset>
+                  <label className="toggle-row">
+                    <span>Notes</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={form.connect_notes}
+                      onChange={(e) => {
+                        set('connect_notes', e.target.checked)
+                        if (e.target.checked && !form.note_title)
+                          set('note_title', form.title)
+                      }}
+                    />
+                  </label>
+                  {form.connect_notes && (
+                    <div className="connection-options">
+                      <label>
+                        Note title
+                        <input
+                          value={form.note_title}
+                          placeholder={form.title || 'Related note'}
+                          onChange={(e) => set('note_title', e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
 
-          <fieldset className="editor-group">
-            <legend>Connections</legend>
-            <p className="connection-help">
-              Prepare related records that will live in the other modules.
-            </p>
-            <div className="connection-list">
-              <div
-                className={`connection-card ${form.connect_notes ? 'active' : ''}`}
-              >
-                <label className="toggle-row">
-                  <span>Notes</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={form.connect_notes}
-                    onChange={(e) => {
-                      set('connect_notes', e.target.checked)
-                      if (e.target.checked && !form.note_title)
-                        set('note_title', form.title)
-                    }}
-                  />
-                </label>
-                {form.connect_notes && (
-                  <div className="connection-options">
-                    <label>
-                      Note title
-                      <input
-                        value={form.note_title}
-                        placeholder={form.title || 'Related note'}
-                        onChange={(e) => set('note_title', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`connection-card ${form.connect_finance ? 'active' : ''}`}
-              >
-                <label className="toggle-row">
-                  <span>Finance</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={form.connect_finance}
-                    onChange={(e) => set('connect_finance', e.target.checked)}
-                  />
-                </label>
-                {form.connect_finance && (
-                  <div className="connection-options two-column">
-                    <label>
-                      Type
-                      <select
-                        value={form.finance_type}
-                        onChange={(e) => set('finance_type', e.target.value)}
-                      >
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
-                      </select>
-                    </label>
-                    <label>
-                      Amount
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={form.finance_amount}
-                        onChange={(e) => set('finance_amount', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Currency
-                      <input
-                        maxLength={3}
-                        value={form.finance_currency}
-                        onChange={(e) =>
-                          set('finance_currency', e.target.value)
-                        }
-                      />
-                    </label>
-                    <label>
-                      Category
-                      <input
-                        value={form.finance_category}
-                        onChange={(e) =>
-                          set('finance_category', e.target.value)
-                        }
-                      />
-                    </label>
-                    <label className="connection-wide">
-                      Counterparty
-                      <input
-                        value={form.finance_counterparty}
-                        onChange={(e) =>
-                          set('finance_counterparty', e.target.value)
-                        }
-                      />
-                    </label>
-                    <label className="connection-check connection-wide">
-                      <input
-                        type="checkbox"
-                        checked={form.finance_tax_relevant}
-                        onChange={(e) =>
-                          set('finance_tax_relevant', e.target.checked)
-                        }
-                      />
-                      Tax relevant
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`connection-card ${form.connect_fitness ? 'active' : ''}`}
-              >
-                <label className="toggle-row">
-                  <span>Fitness</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={form.connect_fitness}
-                    onChange={(e) => set('connect_fitness', e.target.checked)}
-                  />
-                </label>
-                {form.connect_fitness && (
-                  <div className="connection-options">
-                    <label>
-                      Workout type
-                      <input
-                        placeholder="Strength, run, mobility…"
-                        value={form.workout_type}
-                        onChange={(e) => set('workout_type', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Workout notes
-                      <textarea
-                        rows={2}
-                        value={form.workout_notes}
-                        onChange={(e) => set('workout_notes', e.target.value)}
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`connection-card ${form.connect_food ? 'active' : ''}`}
-              >
-                <label className="toggle-row">
-                  <span>Food</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={form.connect_food}
-                    onChange={(e) => set('connect_food', e.target.checked)}
-                  />
-                </label>
-                {form.connect_food && (
-                  <div className="connection-options two-column">
-                    <label>
-                      Meal
-                      <select
-                        value={form.meal_type}
-                        onChange={(e) => set('meal_type', e.target.value)}
-                      >
-                        <option value="breakfast">Breakfast</option>
-                        <option value="lunch">Lunch</option>
-                        <option value="dinner">Dinner</option>
-                        <option value="snack">Snack</option>
-                      </select>
-                    </label>
-                    <label>
-                      Food or meal
-                      <input
-                        value={form.food_name}
-                        onChange={(e) => set('food_name', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Quantity
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={form.food_quantity}
-                        onChange={(e) => set('food_quantity', e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Unit
-                      <input
-                        value={form.food_unit}
-                        onChange={(e) => set('food_unit', e.target.value)}
-                      />
-                    </label>
-                    {(['calories', 'protein', 'carbs', 'fat'] as const).map(
-                      (macro) => (
-                        <label key={macro}>
-                          {macro[0].toUpperCase() + macro.slice(1)}
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={form[`food_${macro}`]}
-                            onChange={(e) =>
-                              set(`food_${macro}`, e.target.value)
-                            }
-                          />
-                        </label>
-                      ),
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </fieldset>
-
-          <fieldset className="editor-group">
-            <legend>Details</legend>
-            <label>
-              Location
-              <input
-                placeholder="Add a place"
-                value={form.location}
-                onChange={(e) => set('location', e.target.value)}
-              />
-            </label>
-            <label>
-              Link
-              <input
-                type="url"
-                placeholder="https://"
-                value={form.link}
-                onChange={(e) => set('link', e.target.value)}
-              />
-            </label>
-            <label>
-              Reminder
-              <select
-                value={form.reminder_minutes}
-                onChange={(e) => set('reminder_minutes', e.target.value)}
-              >
-                <option value="">None</option>
-                <option value="5">5 minutes before</option>
-                <option value="15">15 minutes before</option>
-                <option value="30">30 minutes before</option>
-                <option value="60">1 hour before</option>
-                <option value="1440">1 day before</option>
-              </select>
-            </label>
-            <label>
-              Notes
-              <textarea
-                rows={4}
-                placeholder="Add notes"
-                value={form.description}
-                onChange={(e) => set('description', e.target.value)}
-              />
-            </label>
-          </fieldset>
-
-          <footer>
-            {event.id && (
-              <button className="danger" type="button" onClick={remove}>
-                Delete
-              </button>
-            )}
-            {error && (
-              <div className="editor-alert" role="alert">
-                <svg
-                  className="editor-alert-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  aria-hidden="true"
+                <div
+                  className={`connection-card ${form.connect_finance ? 'active' : ''}`}
                 >
-                  <circle cx="10" cy="10" r="7.5" />
-                  <path d="M10 6.2v4.8M10 14h.01" />
-                </svg>
-                <p>{error}</p>
-              </div>
-            )}
-            <span />
-            <button type="button" onClick={() => closeWithAnimation(onClose)}>
-              Cancel
-            </button>
-            <button
-              className={`primary ${saveState} ${saveErrorPulse ? 'save-error' : ''}`}
-              type="submit"
-              disabled={saveState !== 'idle'}
-              aria-label={
-                saveState === 'saving'
-                  ? 'Saving event'
-                  : saveState === 'saved'
-                    ? 'Event saved'
-                    : 'Save'
-              }
-            >
-              {saveState === 'saving' && (
-                <span className="event-save-spinner" />
-              )}
-              {saveState === 'saved' && (
-                <svg
-                  className="event-save-check"
-                  width="15"
-                  height="15"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
+                  <label className="toggle-row">
+                    <span>Finance</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={form.connect_finance}
+                      onChange={(e) => set('connect_finance', e.target.checked)}
+                    />
+                  </label>
+                  {form.connect_finance && (
+                    <div className="connection-options two-column">
+                      <label>
+                        Type
+                        <select
+                          value={form.finance_type}
+                          onChange={(e) => set('finance_type', e.target.value)}
+                        >
+                          <option value="expense">Expense</option>
+                          <option value="income">Income</option>
+                        </select>
+                      </label>
+                      <label>
+                        Amount
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={form.finance_amount}
+                          onChange={(e) =>
+                            set('finance_amount', e.target.value)
+                          }
+                        />
+                      </label>
+                      <label>
+                        Currency
+                        <input
+                          maxLength={3}
+                          value={form.finance_currency}
+                          onChange={(e) =>
+                            set('finance_currency', e.target.value)
+                          }
+                        />
+                      </label>
+                      <label>
+                        Category
+                        <input
+                          value={form.finance_category}
+                          onChange={(e) =>
+                            set('finance_category', e.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="connection-wide">
+                        Counterparty
+                        <input
+                          value={form.finance_counterparty}
+                          onChange={(e) =>
+                            set('finance_counterparty', e.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="connection-check connection-wide">
+                        <input
+                          type="checkbox"
+                          checked={form.finance_tax_relevant}
+                          onChange={(e) =>
+                            set('finance_tax_relevant', e.target.checked)
+                          }
+                        />
+                        Tax relevant
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`connection-card ${form.connect_fitness ? 'active' : ''}`}
                 >
-                  <path
-                    d="M3 8.5L6.5 12L13 4"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeDasharray="20"
-                    strokeDashoffset="20"
-                  />
-                </svg>
-              )}
-              {saveState === 'idle' && 'Save'}
-            </button>
-          </footer>
-        </form>
-        {repeatOpen && (
-          <div className="scope-prompt" role="dialog" aria-label="Repeat">
-            <div className="repeat-card">
-              <h3>Repeat</h3>
-              <div className="repeat-section">
-                <span className="repeat-label">Every</span>
-                <div className="repeat-line">
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    className="repeat-interval"
-                    aria-label="Interval"
-                    value={recurrence.interval}
-                    onChange={(e) =>
-                      setRecurrence((r) => ({
-                        ...r,
-                        interval: Math.max(1, Number(e.target.value) || 1),
-                      }))
-                    }
-                  />
-                  <select
-                    className="repeat-unit"
-                    aria-label="Frequency"
-                    value={recurrence.freq || 'WEEKLY'}
-                    onChange={(e) =>
-                      setRecurrence((r) => ({
-                        ...r,
-                        freq: e.target.value as Freq,
-                      }))
-                    }
-                  >
-                    <option value="DAILY">
-                      {recurrence.interval > 1 ? 'days' : 'day'}
-                    </option>
-                    <option value="WEEKLY">
-                      {recurrence.interval > 1 ? 'weeks' : 'week'}
-                    </option>
-                    <option value="MONTHLY">
-                      {recurrence.interval > 1 ? 'months' : 'month'}
-                    </option>
-                    <option value="YEARLY">
-                      {recurrence.interval > 1 ? 'years' : 'year'}
-                    </option>
-                  </select>
+                  <label className="toggle-row">
+                    <span>Fitness</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={form.connect_fitness}
+                      onChange={(e) => set('connect_fitness', e.target.checked)}
+                    />
+                  </label>
+                  {form.connect_fitness && (
+                    <div className="connection-options">
+                      <label>
+                        Workout type
+                        <input
+                          placeholder="Strength, run, mobility…"
+                          value={form.workout_type}
+                          onChange={(e) => set('workout_type', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Workout notes
+                        <textarea
+                          rows={2}
+                          value={form.workout_notes}
+                          onChange={(e) => set('workout_notes', e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={`connection-card ${form.connect_food ? 'active' : ''}`}
+                >
+                  <label className="toggle-row">
+                    <span>Food</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={form.connect_food}
+                      onChange={(e) => set('connect_food', e.target.checked)}
+                    />
+                  </label>
+                  {form.connect_food && (
+                    <div className="connection-options two-column">
+                      <label>
+                        Meal
+                        <select
+                          value={form.meal_type}
+                          onChange={(e) => set('meal_type', e.target.value)}
+                        >
+                          <option value="breakfast">Breakfast</option>
+                          <option value="lunch">Lunch</option>
+                          <option value="dinner">Dinner</option>
+                          <option value="snack">Snack</option>
+                        </select>
+                      </label>
+                      <label>
+                        Food or meal
+                        <input
+                          value={form.food_name}
+                          onChange={(e) => set('food_name', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Quantity
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={form.food_quantity}
+                          onChange={(e) => set('food_quantity', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Unit
+                        <input
+                          value={form.food_unit}
+                          onChange={(e) => set('food_unit', e.target.value)}
+                        />
+                      </label>
+                      {(['calories', 'protein', 'carbs', 'fat'] as const).map(
+                        (macro) => (
+                          <label key={macro}>
+                            {macro[0].toUpperCase() + macro.slice(1)}
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={form[`food_${macro}`]}
+                              onChange={(e) =>
+                                set(`food_${macro}`, e.target.value)
+                              }
+                            />
+                          </label>
+                        ),
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div
-                className={`repeat-collapse ${recurrence.freq === 'WEEKLY' ? 'open' : ''}`}
+            </fieldset>
+
+            <fieldset className="editor-group">
+              <legend>Details</legend>
+              <label>
+                Location
+                <input
+                  placeholder="Add a place"
+                  value={form.location}
+                  onChange={(e) => set('location', e.target.value)}
+                />
+              </label>
+              <label>
+                Link
+                <input
+                  type="url"
+                  placeholder="https://"
+                  value={form.link}
+                  onChange={(e) => set('link', e.target.value)}
+                />
+              </label>
+              <label>
+                Reminder
+                <select
+                  value={form.reminder_minutes}
+                  onChange={(e) => set('reminder_minutes', e.target.value)}
+                >
+                  <option value="">None</option>
+                  <option value="5">5 minutes before</option>
+                  <option value="15">15 minutes before</option>
+                  <option value="30">30 minutes before</option>
+                  <option value="60">1 hour before</option>
+                  <option value="1440">1 day before</option>
+                </select>
+              </label>
+              <label>
+                Notes
+                <textarea
+                  rows={4}
+                  placeholder="Add notes"
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                />
+              </label>
+            </fieldset>
+
+            <footer>
+              {event.id && (
+                <button className="danger" type="button" onClick={remove}>
+                  Delete
+                </button>
+              )}
+              {error && (
+                <div className="editor-alert" role="alert">
+                  <svg
+                    className="editor-alert-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="10" cy="10" r="7.5" />
+                    <path d="M10 6.2v4.8M10 14h.01" />
+                  </svg>
+                  <p>{error}</p>
+                </div>
+              )}
+              <span />
+              <button type="button" onClick={() => closeWithAnimation(onClose)}>
+                Cancel
+              </button>
+              <button
+                className={`primary ${saveState} ${saveErrorPulse ? 'save-error' : ''}`}
+                type="submit"
+                disabled={saveState !== 'idle'}
+                aria-label={
+                  saveState === 'saving'
+                    ? 'Saving event'
+                    : saveState === 'saved'
+                      ? 'Event saved'
+                      : 'Save'
+                }
               >
-                <div className="repeat-collapse-inner">
-                  <div className="repeat-section">
-                    <span className="repeat-label">Repeat on</span>
-                    <div className="repeat-days">
-                      {WEEKDAYS.map((day) => (
-                        <button
-                          key={day.code}
-                          type="button"
-                          className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
-                          aria-pressed={recurrence.byday.includes(day.code)}
-                          onClick={() => toggleByday(day.code)}
-                        >
-                          {day.label}
-                        </button>
-                      ))}
+                {saveState === 'saving' && (
+                  <span className="event-save-spinner" />
+                )}
+                {saveState === 'saved' && (
+                  <svg
+                    className="event-save-check"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3 8.5L6.5 12L13 4"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray="20"
+                      strokeDashoffset="20"
+                    />
+                  </svg>
+                )}
+                {saveState === 'idle' && 'Save'}
+              </button>
+            </footer>
+          </form>
+          {repeatOpen && (
+            <div className="scope-prompt" role="dialog" aria-label="Repeat">
+              <div className="repeat-card">
+                <h3>Repeat</h3>
+                <div className="repeat-section">
+                  <span className="repeat-label">Every</span>
+                  <div className="repeat-line">
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      className="repeat-interval"
+                      aria-label="Interval"
+                      value={recurrence.interval}
+                      onChange={(e) =>
+                        setRecurrence((r) => ({
+                          ...r,
+                          interval: Math.max(1, Number(e.target.value) || 1),
+                        }))
+                      }
+                    />
+                    <select
+                      className="repeat-unit"
+                      aria-label="Frequency"
+                      value={recurrence.freq || 'WEEKLY'}
+                      onChange={(e) =>
+                        setRecurrence((r) => ({
+                          ...r,
+                          freq: e.target.value as Freq,
+                        }))
+                      }
+                    >
+                      <option value="DAILY">
+                        {recurrence.interval > 1 ? 'days' : 'day'}
+                      </option>
+                      <option value="WEEKLY">
+                        {recurrence.interval > 1 ? 'weeks' : 'week'}
+                      </option>
+                      <option value="MONTHLY">
+                        {recurrence.interval > 1 ? 'months' : 'month'}
+                      </option>
+                      <option value="YEARLY">
+                        {recurrence.interval > 1 ? 'years' : 'year'}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <div
+                  className={`repeat-collapse ${recurrence.freq === 'WEEKLY' ? 'open' : ''}`}
+                >
+                  <div className="repeat-collapse-inner">
+                    <div className="repeat-section">
+                      <span className="repeat-label">Repeat on</span>
+                      <div className="repeat-days">
+                        {WEEKDAYS.map((day) => (
+                          <button
+                            key={day.code}
+                            type="button"
+                            className={`repeat-day ${recurrence.byday.includes(day.code) ? 'active' : ''}`}
+                            aria-pressed={recurrence.byday.includes(day.code)}
+                            onClick={() => toggleByday(day.code)}
+                          >
+                            {day.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="repeat-section">
-                <label className="toggle-row">
-                  <span>Ends</span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    aria-label="Ends"
-                    checked={recurrence.ends !== 'never'}
-                    onChange={(e) =>
-                      setRecurrence((r) => ({
-                        ...r,
-                        ends: e.target.checked
-                          ? r.ends === 'never'
-                            ? 'on'
-                            : r.ends
-                          : 'never',
-                      }))
-                    }
-                  />
-                </label>
-                <div
-                  className={`repeat-collapse ${recurrence.ends !== 'never' ? 'open' : ''}`}
-                >
-                  <div className="repeat-collapse-inner">
-                    <div className="repeat-end-options repeat-reveal">
-                      <Segmented
-                        value={recurrence.ends === 'after' ? 'after' : 'on'}
-                        options={['on', 'after']}
-                        labels={{ on: 'On date', after: 'After count' }}
-                        ariaLabel="End condition"
-                        onChange={(v) =>
-                          setRecurrence((r) => ({ ...r, ends: v }))
-                        }
-                      />
-                      {recurrence.ends === 'on' ? (
-                        <input
-                          type="date"
-                          aria-label="End date"
-                          value={recurrence.until}
-                          onChange={(e) =>
-                            setRecurrence((r) => ({
-                              ...r,
-                              until: e.target.value,
-                            }))
+                <div className="repeat-section">
+                  <label className="toggle-row">
+                    <span>Ends</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label="Ends"
+                      checked={recurrence.ends !== 'never'}
+                      onChange={(e) =>
+                        setRecurrence((r) => ({
+                          ...r,
+                          ends: e.target.checked
+                            ? r.ends === 'never'
+                              ? 'on'
+                              : r.ends
+                            : 'never',
+                        }))
+                      }
+                    />
+                  </label>
+                  <div
+                    className={`repeat-collapse ${recurrence.ends !== 'never' ? 'open' : ''}`}
+                  >
+                    <div className="repeat-collapse-inner">
+                      <div className="repeat-end-options repeat-reveal">
+                        <Segmented
+                          value={recurrence.ends === 'after' ? 'after' : 'on'}
+                          options={['on', 'after']}
+                          labels={{ on: 'On date', after: 'After count' }}
+                          ariaLabel="End condition"
+                          onChange={(v) =>
+                            setRecurrence((r) => ({ ...r, ends: v }))
                           }
                         />
-                      ) : (
-                        <div className="repeat-line">
+                        {recurrence.ends === 'on' ? (
                           <input
-                            type="number"
-                            min={1}
-                            max={730}
-                            aria-label="Occurrence count"
-                            className="repeat-count"
-                            value={recurrence.count}
+                            type="date"
+                            aria-label="End date"
+                            value={recurrence.until}
                             onChange={(e) =>
                               setRecurrence((r) => ({
                                 ...r,
-                                count: Math.max(1, Number(e.target.value) || 1),
+                                until: e.target.value,
                               }))
                             }
                           />
-                          <span className="repeat-times">times</span>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="repeat-line">
+                            <input
+                              type="number"
+                              min={1}
+                              max={730}
+                              aria-label="Occurrence count"
+                              className="repeat-count"
+                              value={recurrence.count}
+                              onChange={(e) =>
+                                setRecurrence((r) => ({
+                                  ...r,
+                                  count: Math.max(
+                                    1,
+                                    Number(e.target.value) || 1,
+                                  ),
+                                }))
+                              }
+                            />
+                            <span className="repeat-times">times</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="repeat-actions">
-                <button type="button" className="ghost" onClick={cancelRepeat}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => setRepeatOpen(false)}
-                >
-                  Done
-                </button>
+                <div className="repeat-actions">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={cancelRepeat}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => setRepeatOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-        {scopePrompt && (
-          <div
-            className="scope-prompt"
-            role="dialog"
-            aria-label="Repeating event"
-          >
-            <div className="scope-card">
-              <h3>
-                {scopePrompt === 'delete'
-                  ? 'Delete repeating event'
-                  : 'Edit repeating event'}
-              </h3>
-              <p>This event repeats. Apply your change to:</p>
-              <div className="scope-options">
-                <button
-                  type="button"
-                  className="scope-option"
-                  onClick={() =>
-                    scopePrompt === 'delete'
-                      ? void performDelete('this')
-                      : void commitSave('this')
-                  }
-                >
-                  This event
-                </button>
-                {scopePrompt === 'delete' && (
+          )}
+          {scopePrompt && (
+            <div
+              className="scope-prompt"
+              role="dialog"
+              aria-label="Repeating event"
+            >
+              <div className="scope-card">
+                <h3>
+                  {scopePrompt === 'delete'
+                    ? 'Delete repeating event'
+                    : 'Edit repeating event'}
+                </h3>
+                <p>This event repeats. Apply your change to:</p>
+                <div className="scope-options">
                   <button
                     type="button"
                     className="scope-option"
-                    onClick={() => void performDelete('following')}
+                    onClick={() =>
+                      scopePrompt === 'delete'
+                        ? void performDelete('this')
+                        : void commitSave('this')
+                    }
                   >
-                    This and following events
+                    This event
                   </button>
-                )}
+                  {scopePrompt === 'delete' && (
+                    <button
+                      type="button"
+                      className="scope-option"
+                      onClick={() => void performDelete('following')}
+                    >
+                      This and following events
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="scope-option"
+                    onClick={() =>
+                      scopePrompt === 'delete'
+                        ? void performDelete('all')
+                        : void commitSave('all')
+                    }
+                  >
+                    All events
+                  </button>
+                </div>
                 <button
                   type="button"
-                  className="scope-option"
-                  onClick={() =>
-                    scopePrompt === 'delete'
-                      ? void performDelete('all')
-                      : void commitSave('all')
-                  }
+                  className="scope-cancel"
+                  onClick={() => setScopePrompt(null)}
                 >
-                  All events
+                  Cancel
                 </button>
               </div>
-              <button
-                type="button"
-                className="scope-cancel"
-                onClick={() => setScopePrompt(null)}
-              >
-                Cancel
-              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        {/* /editor-drag-wrap */}
       </aside>
     </div>
   )

@@ -1556,6 +1556,42 @@ input[type='color'] {
     transform: translateX(52px) scale(0.93);
   }
 }
+
+/* ── Pull-down-to-close grabber ─────────────────────────────── */
+.editor-grabber {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 28px;
+  touch-action: none;
+  cursor: grab;
+  background: inherit;
+}
+.editor-grabber-handle {
+  display: block;
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.editor-drag-wrap {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.editor-drag-wrap.no-transition {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .editor-drag-wrap,
+  .editor-drag-wrap.no-transition {
+    transition: none;
+  }
+}
+
 .event-editor header {
   position: sticky;
   top: 0;
