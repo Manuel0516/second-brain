@@ -157,6 +157,12 @@ export function EventEditor({
   const errorTimer = useRef(0)
   const iconPickerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLElement>(null)
+  // Guard: ignore close-requests fired within 300ms of mount (e.g. synthetic
+  // mousedown from the touch double-tap that opened the editor).
+  const mountedAt = useRef(0)
+  useEffect(() => {
+    mountedAt.current = Math.floor(performance.now())
+  }, [])
 
   const closeWithAnimation = useCallback((complete: () => void) => {
     if (closingRef.current) return
@@ -489,7 +495,9 @@ export function EventEditor({
       className={`calendar-backdrop ${closing ? 'closing' : ''}`}
       role="presentation"
       onMouseDown={(e) =>
-        e.target === e.currentTarget && closeWithAnimation(onClose)
+        e.target === e.currentTarget &&
+        e.timeStamp - mountedAt.current > 300 &&
+        closeWithAnimation(onClose)
       }
       onKeyDown={(e) => e.key === 'Escape' && closeWithAnimation(onClose)}
     >
