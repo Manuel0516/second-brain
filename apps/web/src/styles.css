@@ -1045,12 +1045,6 @@ input[type='color'] {
   cursor: grabbing;
   box-shadow: var(--shadow-md);
 }
-/* Mobile long-press visual feedback — brightens at ~500ms hold */
-.calendar-event.long-press-active,
-.day-column.long-press-active {
-  filter: brightness(1.2);
-  transition: filter 200ms ease;
-}
 .event-resize-handle {
   position: absolute;
   right: 0;

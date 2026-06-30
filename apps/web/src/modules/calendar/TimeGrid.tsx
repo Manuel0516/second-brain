@@ -192,7 +192,6 @@ export function TimeGrid({
         x: number
         y: number
         pointerId: number
-        timer: ReturnType<typeof setTimeout>
         target: 'grid' | 'event'
         event?: CalendarEvent
       }
@@ -207,6 +206,15 @@ export function TimeGrid({
     | { phase: 'scroll'; pointerId: number }
 
   const touchStateRef = useRef<TouchState>({ phase: 'idle' })
+  // ── Double-tap detection ──────────────────────────────────────
+  const lastTapRef = useRef<{
+    time: number
+    x: number
+    y: number
+    target: 'grid' | 'event'
+    event?: CalendarEvent
+    timer: ReturnType<typeof setTimeout>
+  } | null>(null)
 
   function onTouchPointerDown(
     e: React.PointerEvent<HTMLElement>,
@@ -223,7 +231,6 @@ export function TimeGrid({
       state.phase === 'swipe' ||
       state.phase === 'scroll'
     ) {
-      if (state.phase === 'pending') clearTimeout(state.timer)
       const col = e.currentTarget.closest('.day-column') as HTMLElement
       if (col) col.style.touchAction = 'none'
       col?.setPointerCapture(e.pointerId)
@@ -246,38 +253,12 @@ export function TimeGrid({
 
     // First finger
     e.currentTarget.setPointerCapture(e.pointerId)
-    const timer = setTimeout(() => {
-      const s = touchStateRef.current
-      if (s.phase !== 'pending') return
-      touchStateRef.current = { phase: 'idle' }
-      e.currentTarget.classList.remove('long-press-active')
-      if (target === 'event' && event) {
-        onEdit(event)
-      } else {
-        const rect = e.currentTarget.getBoundingClientRect()
-        const minute = minuteAtPointer(s.y, rect.top, rowHeight)
-        const col = e.currentTarget.closest('.day-column') as HTMLElement
-        if (col?.dataset.dayIndex !== undefined) {
-          const dayIdx = Number(col.dataset.dayIndex)
-          onCreate(dateAtMinute(days[dayIdx], minute))
-        }
-      }
-    }, 1000)
-
-    // Visual feedback at 500ms
-    setTimeout(() => {
-      const s = touchStateRef.current
-      if (s.phase === 'pending')
-        e.currentTarget.classList.add('long-press-active')
-    }, 500)
-    // But cancel the visual if released before 500ms — handled in pointerup
 
     touchStateRef.current = {
       phase: 'pending',
       x: e.clientX,
       y: e.clientY,
       pointerId: e.pointerId,
-      timer,
       target,
       event,
     }
@@ -292,8 +273,6 @@ export function TimeGrid({
       const dy = Math.abs(e.clientY - state.y)
       const THRESHOLD = 8
       if (dx < THRESHOLD && dy < THRESHOLD) return
-      clearTimeout(state.timer)
-      e.currentTarget.classList.remove('long-press-active')
       if (dx > dy) {
         touchStateRef.current = {
           phase: 'swipe',
@@ -340,8 +319,47 @@ export function TimeGrid({
     const state = touchStateRef.current
 
     if (state.phase === 'pending') {
-      clearTimeout(state.timer)
-      e.currentTarget.classList.remove('long-press-active')
+      // Double-tap detection — use e.timeStamp from pointer events
+      const DOUBLE_TAP_DELAY = 300
+      const DOUBLE_TAP_DIST = 30
+      const last = lastTapRef.current
+      if (
+        last &&
+        e.timeStamp - last.time < DOUBLE_TAP_DELAY &&
+        Math.abs(e.clientX - last.x) < DOUBLE_TAP_DIST &&
+        Math.abs(e.clientY - last.y) < DOUBLE_TAP_DIST &&
+        last.target === state.target
+      ) {
+        clearTimeout(last.timer)
+        lastTapRef.current = null
+        if (state.target === 'event' && state.event) {
+          onEdit(state.event)
+        } else {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const minute = minuteAtPointer(state.y, rect.top, rowHeight)
+          const col = e.currentTarget.closest(
+            '.day-column',
+          ) as HTMLElement | null
+          if (col?.dataset.dayIndex !== undefined) {
+            const dayIdx = Number(col.dataset.dayIndex)
+            onCreate(dateAtMinute(days[dayIdx], minute))
+          }
+        }
+        touchStateRef.current = { phase: 'idle' }
+        return
+      }
+      // First tap — remember it
+      const timer = setTimeout(() => {
+        lastTapRef.current = null
+      }, DOUBLE_TAP_DELAY)
+      lastTapRef.current = {
+        time: e.timeStamp,
+        x: state.x,
+        y: state.y,
+        target: state.target,
+        event: state.event,
+        timer,
+      }
       touchStateRef.current = { phase: 'idle' }
       return
     }
@@ -964,8 +982,6 @@ export function TimeGrid({
             }}
             onPointerCancel={() => {
               if (touchStateRef.current.phase !== 'idle') {
-                const s = touchStateRef.current
-                if (s.phase === 'pending') clearTimeout(s.timer)
                 touchStateRef.current = { phase: 'idle' }
                 return
               }
