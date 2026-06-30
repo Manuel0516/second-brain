@@ -175,6 +175,13 @@ export function EventEditor({
     closeTimer.current = window.setTimeout(complete, 240)
   }, [])
 
+  // Close immediately without the slide-right animation (used by grabber).
+  const closeImmediate = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
+    onClose()
+  }, [onClose])
+
   // ── Pull-down-to-close gesture ────────────────────────────────
   const onGrabberPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType !== 'touch') return
@@ -200,11 +207,11 @@ export function EventEditor({
       if (!isDragging || e.pointerType !== 'touch') return
       setIsDragging(false)
       if (dragYRef.current > 80) {
-        closeWithAnimation(onClose)
+        closeImmediate()
       }
       setDragY(0)
     },
-    [closeWithAnimation, isDragging, onClose],
+    [closeImmediate, isDragging],
   )
 
   useEffect(() => {

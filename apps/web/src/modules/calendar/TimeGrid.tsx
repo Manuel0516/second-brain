@@ -1169,6 +1169,7 @@ export function TimeGrid({
                           className="event-resize-handle"
                           aria-hidden="true"
                           onPointerDown={(pointer) => {
+                            if (pointer.pointerType === 'touch') return
                             pointer.stopPropagation()
                             // FIX-1: record which day's segment is being resized
                             const col = pointer.currentTarget.closest(
