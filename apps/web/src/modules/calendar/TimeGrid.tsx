@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { apiCall } from '../../lib/api'
 import {
@@ -16,6 +22,8 @@ const MINUTES_PER_DAY = 24 * 60
 const DEFAULT_DURATION = 60
 const TIME_COL = 52
 const DRAG_THRESHOLD = 3
+const LONG_PRESS_DELAY = 650
+const TOUCH_RESIZE_EDGE = 18
 
 interface NewSelection {
   day: Date
@@ -183,6 +191,10 @@ export function TimeGrid({
   const didInitialScroll = useRef(false)
   const horizontalWheel = useRef(0)
   const [resizingDay, setResizingDay] = useState<string | null>(null)
+  const setCurrentGesture = (next: Gesture | null) => {
+    gestureRef.current = next
+    setGesture(next)
+  }
 
   // ── Mobile touch state machine ─────────────────────────────────────
   type TouchState =
@@ -194,8 +206,18 @@ export function TimeGrid({
         pointerId: number
         target: 'grid' | 'event'
         event?: CalendarEvent
+        mode?: Gesture['mode']
+        column?: HTMLElement
+        timer?: ReturnType<typeof setTimeout>
       }
-    | { phase: 'swipe'; startX: number; deltaX: number; pointerId: number }
+    | {
+        phase: 'swipe'
+        startX: number
+        deltaX: number
+        x: number
+        y: number
+        pointerId: number
+      }
     | {
         phase: 'pinch'
         ids: [number, number]
@@ -203,9 +225,62 @@ export function TimeGrid({
         baseHeight: number
         baseDist: number
       }
-    | { phase: 'scroll'; pointerId: number }
+    | { phase: 'scroll'; x: number; y: number; pointerId: number }
+    | {
+        phase: 'event-drag'
+        pointerId: number
+        event: CalendarEvent
+        mode: Gesture['mode']
+      }
 
   const touchStateRef = useRef<TouchState>({ phase: 'idle' })
+
+  const clearLongPress = (state: TouchState) => {
+    if (state.phase === 'pending' && state.timer) clearTimeout(state.timer)
+  }
+
+  const cancelTouch = () => {
+    clearLongPress(touchStateRef.current)
+    touchStateRef.current = { phase: 'idle' }
+    setCurrentGesture(null)
+    setResizingDay(null)
+  }
+
+  const startTouchEventGesture = (
+    state: Extract<TouchState, { phase: 'pending' }>,
+  ) => {
+    if (!state.event || !state.mode || !state.column) return
+    const key = occurrenceKey(state.event)
+    const keys = selectedKeys.has(key) ? selectedKeys : new Set([key])
+    setSelectedKeys(keys)
+    setCurrentGesture({
+      mode: state.mode,
+      pointerId: state.pointerId,
+      clientX: state.x,
+      clientY: state.y,
+      columnWidth: state.column.getBoundingClientRect().width,
+      events:
+        state.mode === 'resize'
+          ? [state.event]
+          : events.filter((candidate) => keys.has(occurrenceKey(candidate))),
+      deltaMinutes: 0,
+      deltaDays: 0,
+      rawX: 0,
+      rawY: 0,
+      moved: false,
+      settling: false,
+    })
+    if (state.mode === 'resize') {
+      const dayIndex = Number(state.column.dataset.dayIndex)
+      setResizingDay(days[dayIndex]?.toDateString() ?? null)
+    }
+    touchStateRef.current = {
+      phase: 'event-drag',
+      pointerId: state.pointerId,
+      event: state.event,
+      mode: state.mode,
+    }
+  }
   // ── Double-tap detection ──────────────────────────────────────
   const lastTapRef = useRef<{
     time: number
@@ -224,6 +299,7 @@ export function TimeGrid({
     if (e.pointerType !== 'touch') return
 
     const state = touchStateRef.current
+    if (state.phase === 'event-drag') return
 
     // Second finger arriving → enter pinch
     if (
@@ -231,22 +307,18 @@ export function TimeGrid({
       state.phase === 'swipe' ||
       state.phase === 'scroll'
     ) {
+      clearLongPress(state)
       const col = e.currentTarget.closest('.day-column') as HTMLElement
-      if (col) col.style.touchAction = 'none'
       col?.setPointerCapture(e.pointerId)
-      const firstId =
-        state.phase === 'swipe'
-          ? state.pointerId
-          : (state.pointerId ?? e.pointerId)
       touchStateRef.current = {
         phase: 'pinch',
-        ids: [firstId, e.pointerId],
+        ids: [state.pointerId, e.pointerId],
         pts: [
-          { x: e.clientX, y: e.clientY },
+          { x: state.x, y: state.y },
           { x: e.clientX, y: e.clientY },
         ],
         baseHeight: rowHeight,
-        baseDist: 1,
+        baseDist: Math.hypot(e.clientX - state.x, e.clientY - state.y),
       }
       return
     }
@@ -257,40 +329,75 @@ export function TimeGrid({
     const col = e.currentTarget.closest('.day-column') as HTMLElement | null
     if (col) col.setPointerCapture(e.pointerId)
 
-    touchStateRef.current = {
+    const pending: Extract<TouchState, { phase: 'pending' }> = {
       phase: 'pending',
       x: e.clientX,
       y: e.clientY,
       pointerId: e.pointerId,
       target,
       event,
+      column: col ?? undefined,
     }
+    if (target === 'event' && event && col) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      pending.mode =
+        e.clientY >= rect.bottom - TOUCH_RESIZE_EDGE ? 'resize' : 'move'
+      pending.timer = setTimeout(() => {
+        const current = touchStateRef.current
+        if (current === pending) startTouchEventGesture(current)
+      }, LONG_PRESS_DELAY)
+    }
+    touchStateRef.current = pending
   }
 
   function onTouchPointerMove(e: React.PointerEvent<HTMLElement>) {
     if (e.pointerType !== 'touch') return
     const state = touchStateRef.current
 
+    if (state.phase === 'event-drag') {
+      e.preventDefault()
+      moveEventGesture(e)
+      return
+    }
+
     if (state.phase === 'pending') {
       const dx = Math.abs(e.clientX - state.x)
       const dy = Math.abs(e.clientY - state.y)
       const THRESHOLD = 8
       if (dx < THRESHOLD && dy < THRESHOLD) return
+      clearLongPress(state)
       if (dx > dy) {
         touchStateRef.current = {
           phase: 'swipe',
           startX: state.x,
           deltaX: e.clientX - state.x,
+          x: e.clientX,
+          y: e.clientY,
           pointerId: e.pointerId,
         }
       } else {
-        touchStateRef.current = { phase: 'scroll', pointerId: e.pointerId }
+        touchStateRef.current = {
+          phase: 'scroll',
+          x: e.clientX,
+          y: e.clientY,
+          pointerId: e.pointerId,
+        }
       }
       return
     }
 
     if (state.phase === 'swipe' && e.pointerId === state.pointerId) {
-      touchStateRef.current = { ...state, deltaX: e.clientX - state.startX }
+      touchStateRef.current = {
+        ...state,
+        deltaX: e.clientX - state.startX,
+        x: e.clientX,
+        y: e.clientY,
+      }
+      return
+    }
+
+    if (state.phase === 'scroll' && e.pointerId === state.pointerId) {
+      touchStateRef.current = { ...state, x: e.clientX, y: e.clientY }
       return
     }
 
@@ -300,17 +407,9 @@ export function TimeGrid({
       const pts = [...state.pts] as typeof state.pts
       pts[idx as 0 | 1] = { x: e.clientX, y: e.clientY }
       const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
-      if (state.baseDist === 1) {
-        touchStateRef.current = { ...state, pts, baseDist: dist }
-        return
-      }
+      if (!state.baseDist) return
       const ratio = dist / state.baseDist
-      const MIN_ROW = 40
-      const MAX_ROW = 120
-      const next = Math.min(
-        MAX_ROW,
-        Math.max(MIN_ROW, Math.round(state.baseHeight * ratio)),
-      )
+      const next = clampRowHeight(Math.round(state.baseHeight * ratio))
       onRowHeightChange(next)
       touchStateRef.current = { ...state, pts }
     }
@@ -320,7 +419,20 @@ export function TimeGrid({
     if (e.pointerType !== 'touch') return
     const state = touchStateRef.current
 
+    if (state.phase === 'event-drag') {
+      touchStateRef.current = { phase: 'idle' }
+      setResizingDay(null)
+      void finishEventGesture(e, state.event)
+      return
+    }
+
     if (state.phase === 'pending') {
+      clearLongPress(state)
+      setSelectedKeys(
+        state.target === 'event' && state.event
+          ? new Set([occurrenceKey(state.event)])
+          : new Set(),
+      )
       // Double-tap detection — use e.timeStamp from pointer events
       const DOUBLE_TAP_DELAY = 300
       const DOUBLE_TAP_DIST = 30
@@ -377,12 +489,15 @@ export function TimeGrid({
 
     if (state.phase === 'pinch') {
       const remaining = state.ids.filter((id) => id !== e.pointerId)
-      if (remaining.length === 0) {
-        const col = e.currentTarget.closest('.day-column') as HTMLElement
-        if (col) col.style.touchAction = ''
-        touchStateRef.current = { phase: 'idle' }
+      if (remaining.length) {
+        const index = state.ids.indexOf(remaining[0])
+        touchStateRef.current = {
+          phase: 'scroll',
+          pointerId: remaining[0],
+          ...state.pts[index],
+        }
       } else {
-        touchStateRef.current = { phase: 'scroll', pointerId: e.pointerId }
+        touchStateRef.current = { phase: 'idle' }
       }
       return
     }
@@ -448,6 +563,32 @@ export function TimeGrid({
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
   }, [rowHeight, onRowHeightChange, onHorizontalNavigate])
+
+  useEffect(() => {
+    const element = scrollRef.current
+    if (!element) return
+    const preventScrollDuringEventDrag = (event: TouchEvent) => {
+      if (touchStateRef.current.phase === 'event-drag') event.preventDefault()
+    }
+    element.addEventListener('touchmove', preventScrollDuringEventDrag, {
+      passive: false,
+    })
+    return () => {
+      element.removeEventListener('touchmove', preventScrollDuringEventDrag)
+      const state = touchStateRef.current
+      if (state.phase === 'pending' && state.timer) clearTimeout(state.timer)
+    }
+  }, [])
+
+  const previousRowHeight = useRef(rowHeight)
+  useLayoutEffect(() => {
+    const element = scrollRef.current
+    const previous = previousRowHeight.current
+    previousRowHeight.current = rowHeight
+    if (element && previous !== rowHeight) {
+      element.scrollTop *= rowHeight / previous
+    }
+  }, [rowHeight])
 
   useEffect(() => {
     const element = scrollRef.current
@@ -562,11 +703,6 @@ export function TimeGrid({
 
   const cancelNewSelection = () => {
     updateNewSelection(null)
-  }
-
-  const setCurrentGesture = (next: Gesture | null) => {
-    gestureRef.current = next
-    setGesture(next)
   }
 
   const startEventGesture = (
@@ -984,7 +1120,7 @@ export function TimeGrid({
             }}
             onPointerCancel={() => {
               if (touchStateRef.current.phase !== 'idle') {
-                touchStateRef.current = { phase: 'idle' }
+                cancelTouch()
                 return
               }
               cancelNewSelection()
@@ -1142,7 +1278,10 @@ export function TimeGrid({
                     onPointerUp={(pointer) =>
                       void finishEventGesture(pointer, event)
                     }
-                    onPointerCancel={() => setCurrentGesture(null)}
+                    onPointerCancel={(pointer) => {
+                      if (pointer.pointerType === 'touch') cancelTouch()
+                      else setCurrentGesture(null)
+                    }}
                   >
                     <strong>
                       {event.icon && (
@@ -1190,7 +1329,10 @@ export function TimeGrid({
                             setResizingDay(null)
                             void finishEventGesture(pointer, event)
                           }}
-                          onPointerCancel={() => setCurrentGesture(null)}
+                          onPointerCancel={(pointer) => {
+                            if (pointer.pointerType === 'touch') cancelTouch()
+                            else setCurrentGesture(null)
+                          }}
                         />
                       )}
                   </button>
