@@ -875,7 +875,7 @@ input[type='color'] {
 .day-column {
   border-left: 1px solid var(--border);
   cursor: crosshair;
-  touch-action: none;
+  touch-action: pan-y;
   user-select: none;
 }
 .day-column.today-column {
@@ -973,8 +973,8 @@ input[type='color'] {
 .calendar-event::before {
   content: '';
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: 4px;
+  right: 4px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -982,19 +982,28 @@ input[type='color'] {
   opacity: 0.65;
   pointer-events: none;
 }
-/* Compact events: dot shrinks and tucks into the tighter padding */
+/* Compact events: dot stays at the top (taller compact) */
 .calendar-event.compact::before {
-  top: 2px;
-  right: 3px;
+  right: 4px;
   width: 4px;
   height: 4px;
+  top: 4px;
 }
-/* Tiny events: dot stays top-right but smaller */
-.calendar-event.tiny::before {
+/* Shorter compact events: centre the dot vertically */
+.calendar-event.compact-short::before {
+  right: 4px;
   width: 4px;
   height: 4px;
-  top: 0px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+/* Tiny events: centre the dot vertically since the title is hidden */
+.calendar-event.tiny::before {
+  width: 3px;
+  height: 3px;
+  top: 50%;
   right: 3px;
+  transform: translateY(-50%);
 }
 /* Past/dimmed events get a more faded dot */
 .calendar-event.past:not(.selected)::before {
@@ -1036,6 +1045,12 @@ input[type='color'] {
   cursor: grabbing;
   box-shadow: var(--shadow-md);
 }
+/* Mobile long-press visual feedback — brightens at ~500ms hold */
+.calendar-event.long-press-active,
+.day-column.long-press-active {
+  filter: brightness(1.2);
+  transition: filter 200ms ease;
+}
 .event-resize-handle {
   position: absolute;
   right: 0;
@@ -1065,13 +1080,20 @@ input[type='color'] {
   opacity: 0.98;
   font-size: 11px;
   line-height: 1.25;
+  padding-right: 4px;
   transition: font-size 130ms ease;
 }
-/* Time label only — the title/icon spans live inside <strong>. */
+/* Time label only — the title/icon spans live inside <strong>.
+   If the full time doesn't fit on one line, it clips at the edge — no dashes,
+   no ellipsis. Everything beyond the container's right edge is dropped. */
 .calendar-event > span {
   font: 9px var(--font-mono);
   color: var(--text-primary);
   opacity: 0.86;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: clip;
 }
 /* Short events: tighten padding and shrink the title so it stays visible. */
 .calendar-event.compact {

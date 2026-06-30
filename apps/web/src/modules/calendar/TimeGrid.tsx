@@ -184,6 +184,192 @@ export function TimeGrid({
   const horizontalWheel = useRef(0)
   const [resizingDay, setResizingDay] = useState<string | null>(null)
 
+  // ── Mobile touch state machine ─────────────────────────────────────
+  type TouchState =
+    | { phase: 'idle' }
+    | {
+        phase: 'pending'
+        x: number
+        y: number
+        pointerId: number
+        timer: ReturnType<typeof setTimeout>
+        target: 'grid' | 'event'
+        event?: CalendarEvent
+      }
+    | { phase: 'swipe'; startX: number; deltaX: number; pointerId: number }
+    | {
+        phase: 'pinch'
+        ids: [number, number]
+        pts: [{ x: number; y: number }, { x: number; y: number }]
+        baseHeight: number
+        baseDist: number
+      }
+    | { phase: 'scroll'; pointerId: number }
+
+  const touchStateRef = useRef<TouchState>({ phase: 'idle' })
+
+  function onTouchPointerDown(
+    e: React.PointerEvent<HTMLElement>,
+    target: 'grid' | 'event',
+    event?: CalendarEvent,
+  ) {
+    if (e.pointerType !== 'touch') return
+
+    const state = touchStateRef.current
+
+    // Second finger arriving → enter pinch
+    if (
+      state.phase === 'pending' ||
+      state.phase === 'swipe' ||
+      state.phase === 'scroll'
+    ) {
+      if (state.phase === 'pending') clearTimeout(state.timer)
+      const col = e.currentTarget.closest('.day-column') as HTMLElement
+      if (col) col.style.touchAction = 'none'
+      col?.setPointerCapture(e.pointerId)
+      const firstId =
+        state.phase === 'swipe'
+          ? state.pointerId
+          : (state.pointerId ?? e.pointerId)
+      touchStateRef.current = {
+        phase: 'pinch',
+        ids: [firstId, e.pointerId],
+        pts: [
+          { x: e.clientX, y: e.clientY },
+          { x: e.clientX, y: e.clientY },
+        ],
+        baseHeight: rowHeight,
+        baseDist: 1,
+      }
+      return
+    }
+
+    // First finger
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const timer = setTimeout(() => {
+      const s = touchStateRef.current
+      if (s.phase !== 'pending') return
+      touchStateRef.current = { phase: 'idle' }
+      e.currentTarget.classList.remove('long-press-active')
+      if (target === 'event' && event) {
+        onEdit(event)
+      } else {
+        const rect = e.currentTarget.getBoundingClientRect()
+        const minute = minuteAtPointer(s.y, rect.top, rowHeight)
+        const col = e.currentTarget.closest('.day-column') as HTMLElement
+        if (col?.dataset.dayIndex !== undefined) {
+          const dayIdx = Number(col.dataset.dayIndex)
+          onCreate(dateAtMinute(days[dayIdx], minute))
+        }
+      }
+    }, 1000)
+
+    // Visual feedback at 500ms
+    setTimeout(() => {
+      const s = touchStateRef.current
+      if (s.phase === 'pending')
+        e.currentTarget.classList.add('long-press-active')
+    }, 500)
+    // But cancel the visual if released before 500ms — handled in pointerup
+
+    touchStateRef.current = {
+      phase: 'pending',
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+      timer,
+      target,
+      event,
+    }
+  }
+
+  function onTouchPointerMove(e: React.PointerEvent<HTMLElement>) {
+    if (e.pointerType !== 'touch') return
+    const state = touchStateRef.current
+
+    if (state.phase === 'pending') {
+      const dx = Math.abs(e.clientX - state.x)
+      const dy = Math.abs(e.clientY - state.y)
+      const THRESHOLD = 8
+      if (dx < THRESHOLD && dy < THRESHOLD) return
+      clearTimeout(state.timer)
+      e.currentTarget.classList.remove('long-press-active')
+      if (dx > dy) {
+        touchStateRef.current = {
+          phase: 'swipe',
+          startX: state.x,
+          deltaX: e.clientX - state.x,
+          pointerId: e.pointerId,
+        }
+      } else {
+        touchStateRef.current = { phase: 'scroll', pointerId: e.pointerId }
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+      return
+    }
+
+    if (state.phase === 'swipe' && e.pointerId === state.pointerId) {
+      touchStateRef.current = { ...state, deltaX: e.clientX - state.startX }
+      return
+    }
+
+    if (state.phase === 'pinch') {
+      const idx = state.ids.indexOf(e.pointerId)
+      if (idx === -1) return
+      const pts = [...state.pts] as typeof state.pts
+      pts[idx as 0 | 1] = { x: e.clientX, y: e.clientY }
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
+      if (state.baseDist === 1) {
+        touchStateRef.current = { ...state, pts, baseDist: dist }
+        return
+      }
+      const ratio = dist / state.baseDist
+      const MIN_ROW = 40
+      const MAX_ROW = 120
+      const next = Math.min(
+        MAX_ROW,
+        Math.max(MIN_ROW, Math.round(state.baseHeight * ratio)),
+      )
+      onRowHeightChange(next)
+      touchStateRef.current = { ...state, pts }
+    }
+  }
+
+  function onTouchPointerUp(e: React.PointerEvent<HTMLElement>) {
+    if (e.pointerType !== 'touch') return
+    const state = touchStateRef.current
+
+    if (state.phase === 'pending') {
+      clearTimeout(state.timer)
+      e.currentTarget.classList.remove('long-press-active')
+      touchStateRef.current = { phase: 'idle' }
+      return
+    }
+
+    if (state.phase === 'swipe') {
+      const COMMIT_THRESHOLD = 50
+      if (Math.abs(state.deltaX) >= COMMIT_THRESHOLD) {
+        onHorizontalNavigate(state.deltaX < 0 ? 1 : -1)
+      }
+      touchStateRef.current = { phase: 'idle' }
+      return
+    }
+
+    if (state.phase === 'pinch') {
+      const remaining = state.ids.filter((id) => id !== e.pointerId)
+      if (remaining.length === 0) {
+        const col = e.currentTarget.closest('.day-column') as HTMLElement
+        if (col) col.style.touchAction = ''
+        touchStateRef.current = { phase: 'idle' }
+      } else {
+        touchStateRef.current = { phase: 'scroll', pointerId: e.pointerId }
+      }
+      return
+    }
+
+    touchStateRef.current = { phase: 'idle' }
+  }
+
   const loadEvents = useCallback(() => {
     const from = new Date(days[0])
     from.setHours(0, 0, 0, 0)
@@ -308,32 +494,21 @@ export function TimeGrid({
     setNewSelection(next)
   }
 
-  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const touchMovedRef = useRef(false)
-
   const startNewSelection = (event: React.PointerEvent, day: Date) => {
     if (event.button !== 0) return
-    // FIX-3: on touch devices, gate creation with a 300ms long-press
-    if (event.pointerType === 'touch') {
-      touchMovedRef.current = false
-      touchTimerRef.current = setTimeout(() => {
-        if (!touchMovedRef.current) commitNewSelection(event, day)
-      }, 300)
-      return
-    }
-    commitNewSelection(event, day)
+    const column = event.currentTarget as HTMLElement
+    const minute = minuteAtPointer(
+      event.clientY,
+      column.getBoundingClientRect().top,
+      rowHeight,
+    )
+    pasteTargetRef.current = dateAtMinute(day, minute)
+    setSelectedKeys(new Set())
+    column.setPointerCapture(event.pointerId)
+    updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
   }
 
   const moveNewSelection = (event: React.PointerEvent) => {
-    // FIX-3: cancel touch timer on move
-    if (event.pointerType === 'touch') {
-      touchMovedRef.current = true
-      if (touchTimerRef.current) {
-        clearTimeout(touchTimerRef.current)
-        touchTimerRef.current = null
-      }
-      return
-    }
     const current = selectionRef.current
     if (!current || !event.currentTarget.hasPointerCapture(event.pointerId))
       return
@@ -349,8 +524,6 @@ export function TimeGrid({
   }
 
   const finishNewSelection = (event: React.PointerEvent) => {
-    // FIX-3: touch handled by timer already
-    if (event.pointerType === 'touch') return
     const current = selectionRef.current
     if (!current || !event.currentTarget.hasPointerCapture(event.pointerId))
       return
@@ -367,24 +540,7 @@ export function TimeGrid({
     )
   }
 
-  const commitNewSelection = (event: React.PointerEvent, day: Date) => {
-    const column = event.currentTarget as HTMLElement
-    const minute = minuteAtPointer(
-      event.clientY,
-      column.getBoundingClientRect().top,
-      rowHeight,
-    )
-    pasteTargetRef.current = dateAtMinute(day, minute)
-    setSelectedKeys(new Set())
-    column.setPointerCapture(event.pointerId)
-    updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
-  }
-
   const cancelNewSelection = () => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current)
-      touchTimerRef.current = null
-    }
     updateNewSelection(null)
   }
 
@@ -785,10 +941,36 @@ export function TimeGrid({
             }`}
             key={day.toISOString()}
             data-day-index={dayIndex}
-            onPointerDown={(event) => startNewSelection(event, day)}
-            onPointerMove={moveNewSelection}
-            onPointerUp={finishNewSelection}
-            onPointerCancel={() => cancelNewSelection()}
+            onPointerDown={(event) => {
+              if (event.pointerType === 'touch') {
+                onTouchPointerDown(event, 'grid')
+                return
+              }
+              startNewSelection(event, day)
+            }}
+            onPointerMove={(event) => {
+              if (event.pointerType === 'touch') {
+                onTouchPointerMove(event)
+                return
+              }
+              moveNewSelection(event)
+            }}
+            onPointerUp={(event) => {
+              if (event.pointerType === 'touch') {
+                onTouchPointerUp(event)
+                return
+              }
+              finishNewSelection(event)
+            }}
+            onPointerCancel={() => {
+              if (touchStateRef.current.phase !== 'idle') {
+                const s = touchStateRef.current
+                if (s.phase === 'pending') clearTimeout(s.timer)
+                touchStateRef.current = { phase: 'idle' }
+                return
+              }
+              cancelNewSelection()
+            }}
           >
             {HOURS.map((hour) => (
               <button
@@ -894,7 +1076,7 @@ export function TimeGrid({
                     aria-pressed={isSelected}
                     className={`calendar-event ${event.id === '__draft__' ? 'draft' : ''} ${isSelected ? 'selected' : ''} ${
                       isPast ? 'past' : ''
-                    } ${height < 40 ? 'compact' : ''} ${!showTime && height >= 18 ? 'solo' : ''} ${height < 7 ? 'tiny' : ''} ${
+                    } ${height < 40 ? 'compact' : ''} ${height < 20 && height >= 7 ? 'compact-short' : ''} ${!showTime && height >= 18 ? 'solo' : ''} ${height < 7 ? 'tiny' : ''} ${
                       (isMoving || isResizing) && !gesture?.settling
                         ? 'dragging'
                         : ''
@@ -930,9 +1112,14 @@ export function TimeGrid({
                           : undefined,
                       } as React.CSSProperties
                     }
-                    onPointerDown={(pointer) =>
+                    onPointerDown={(pointer) => {
+                      if (pointer.pointerType === 'touch') {
+                        pointer.stopPropagation()
+                        onTouchPointerDown(pointer, 'event', event)
+                        return
+                      }
                       startEventGesture(pointer, event, 'move')
-                    }
+                    }}
                     onPointerMove={moveEventGesture}
                     onPointerUp={(pointer) =>
                       void finishEventGesture(pointer, event)
