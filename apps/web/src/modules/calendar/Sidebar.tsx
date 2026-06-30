@@ -102,6 +102,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const [color, setColor] = useState('#8B5CF6')
   const [error, setError] = useState('')
   const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<CalendarData | null>(null)
 
   const patch = async (calendar: CalendarData, values: object) => {
     setError('')
@@ -113,6 +114,21 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
     if (response.ok) onChanged()
     else
       setError(await errorMessage(response, 'Could not update the calendar.'))
+  }
+
+  const deleteCalendar = async (calendar: CalendarData) => {
+    setError('')
+    const response = await apiCall(`/api/calendars/${calendar.id}`, {
+      method: 'DELETE',
+    })
+    if (response.ok) {
+      setConfirmDelete(null)
+      setMenuFor(null)
+      onChanged()
+    } else {
+      setConfirmDelete(null)
+      setError(await errorMessage(response, 'Could not delete the calendar.'))
+    }
   }
 
   const create = async (e: React.FormEvent) => {
@@ -303,6 +319,13 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                 <div className="cal-card-actions">
                   <button
                     type="button"
+                    className="danger"
+                    onClick={() => setConfirmDelete(calendar)}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
                     className="primary"
                     onClick={() => setMenuFor(null)}
                   >
@@ -314,6 +337,42 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
           </div>
         ))}
       </div>
+      {confirmDelete && (
+        <div
+          className="scope-prompt"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="del-cal-title"
+        >
+          <div className="scope-card">
+            <h3 id="del-cal-title">Delete "{confirmDelete.name}"?</h3>
+            <p>
+              All events in this calendar will be permanently deleted. This
+              cannot be undone.
+            </p>
+            <div className="cal-card-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setConfirmDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger"
+                style={{
+                  borderColor: 'rgba(217,87,63,0.35)',
+                  background: 'rgba(217,87,63,0.1)',
+                }}
+                onClick={() => deleteCalendar(confirmDelete)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="integration">
         <span className="integration-title">Integrations</span>
         <button

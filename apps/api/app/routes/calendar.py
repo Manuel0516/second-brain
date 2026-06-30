@@ -328,11 +328,7 @@ async def delete_calendar(
     calendar = await owned_calendar(calendar_id, user, session)
     if calendar.source != "local":
         raise HTTPException(status_code=409, detail="Synced calendars cannot be deleted here")
-    has_events = await session.scalar(
-        select(CalendarEvent.id).where(CalendarEvent.calendar_id == calendar.id).limit(1)
-    )
-    if has_events:
-        raise HTTPException(status_code=409, detail="Move or delete this calendar's events first")
+    await session.execute(delete(CalendarEvent).where(CalendarEvent.calendar_id == calendar.id))
     await session.delete(calendar)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

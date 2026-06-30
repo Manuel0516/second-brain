@@ -665,6 +665,11 @@ button:not(.calendar-event):active {
   color: var(--accent);
   font-weight: 600;
 }
+.cal-card-actions .danger {
+  background: transparent;
+  border-color: transparent;
+  color: #d9573f;
+}
 input[type='color'] {
   width: 30px;
   height: 30px;

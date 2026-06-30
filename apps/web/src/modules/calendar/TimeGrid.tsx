@@ -251,8 +251,11 @@ export function TimeGrid({
       return
     }
 
-    // First finger
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // First finger — capture on the day-column so both fingers route to
+    // the same handler for pinch tracking, even if the touch started on an
+    // event chip.
+    const col = e.currentTarget.closest('.day-column') as HTMLElement | null
+    if (col) col.setPointerCapture(e.pointerId)
 
     touchStateRef.current = {
       phase: 'pending',
@@ -282,7 +285,6 @@ export function TimeGrid({
         }
       } else {
         touchStateRef.current = { phase: 'scroll', pointerId: e.pointerId }
-        e.currentTarget.releasePointerCapture(e.pointerId)
       }
       return
     }
