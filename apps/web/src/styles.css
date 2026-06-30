@@ -499,7 +499,18 @@ button:not(.calendar-event):active {
   align-items: center;
   padding: 2px 8px;
   border-radius: 8px;
-  transition: background 0.14s;
+  touch-action: pan-y;
+  transition:
+    background 0.14s,
+    transform 0.14s,
+    box-shadow 0.14s;
+}
+.calendar-row.reordering {
+  z-index: 2;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  cursor: grabbing;
+  transition: none;
 }
 .calendar-row:hover {
   background: rgba(255, 240, 200, 0.04);
@@ -544,11 +555,23 @@ button:not(.calendar-event):active {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  touch-action: pan-y;
   opacity: 0;
   transition:
     opacity 0.14s,
     background 0.14s,
     color 0.14s;
+}
+@media (pointer: coarse) {
+  .calendar-row {
+    min-height: 44px;
+    grid-template-columns: 18px 1fr 44px;
+  }
+  .calendar-menu-btn {
+    width: 44px;
+    height: 44px;
+    opacity: 1;
+  }
 }
 .calendar-row:hover .calendar-menu-btn,
 .calendar-menu-btn[aria-expanded='true'],

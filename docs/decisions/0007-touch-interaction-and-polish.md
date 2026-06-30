@@ -306,13 +306,117 @@ unaffected — the handle continues to work with `pointerType === 'mouse'`.
 
 ---
 
+## 9. Calendar sidebar — long-press drag to reorder
+
+### Problem
+
+Calendars in the sidebar had a fixed order with no way to rearrange them. An
+initial drag attempt behaved poorly: only the held row received a `translateY`
+while the other rows stayed put, and the drop position was guessed on release
+from `round(delta / rowHeight)`. With no live feedback and fragile drop math,
+the drag felt broken.
+
+The desired interaction is a **dual action on the same `⋯` options button**:
+
+- **Single click** → open the calendar's options menu (rename / colour / delete)
+- **Long-press, then drag** → reorder the calendar into a preferred order
+
+### Decision
+
+Keep the long-press gate but rewrite the drag itself to **reorder live**.
+
+**Activation (`startReorder`):**
+- `pointerdown` on the `⋯` button captures the pointer and starts a
+  `LONG_PRESS_DELAY` timer (set to **375 ms** after testing — 650 ms felt
+  sluggish).
+- Any pointer movement greater than 8 px before the timer fires cancels the
+  drag — that movement is a scroll, and a subsequent `click` still opens the
+  menu.
+- When the timer fires, the drag becomes `active`, the options menu is closed,
+  `suppressMenuClickRef` is set so the trailing `click` does not reopen the
+  menu, and the row gains the `.reordering` lifted style.
+
+**Live reordering (`moveReorder`):**
+- The target index is computed **directly** from how far the finger has
+  travelled: `toIndex = clamp(homeIndex + round(rawOffset / rowHeight))`, where
+  `homeIndex` is the row's index captured at drag start.
+- When `toIndex` differs from the row's current index, the order array is
+  spliced and committed in a single `setCalendarOrder`, then persisted to
+  `localStorage`. Other rows shift under the finger immediately — real feedback.
+- The lifted row is **re-anchored** under the finger via
+  `residual = rawOffset − (toIndex − homeIndex) × rowHeight`, so it tracks the
+  finger instead of flying off with the raw delta.
+- This single-update, direct-index approach avoids stale-closure bugs from
+  incremental per-swap state updates and handles large/fast moves correctly.
+
+**Drop (`finishReorder`):** order is already committed live, so the handler
+just clears drag state.
+
+### Details
+
+- `ROW_GAP = 2` constant mirrors the `.calendar-list { gap }` so the per-row
+  pitch (`rowHeight = measuredHeight + ROW_GAP`) matches the rendered layout and
+  the re-anchoring does not drift.
+- Order persists client-side only in `localStorage` under
+  `sb-calendar-order` (no backend `position` column added — not needed yet).
+  `orderedCalendars` is self-healing: calendars missing from the stored order
+  sort to the end.
+- A `touchmove` listener on the list (`passive: false`) calls `preventDefault`
+  while a drag is active so the page does not scroll mid-reorder.
+- Keyboard parity is unchanged: `Alt+ArrowUp/Down` on the `⋯` button reorders
+  via the existing `reorder(id, targetId)` helper.
+
+### Test
+
+`Sidebar.test.tsx` exercises the full flow: single click opens the menu;
+movement before the long-press does **not** start a drag; after the long-press,
+a drag reorders the list and persists to `localStorage`. The one `translateY`
+assertion was updated from the old raw-delta value to the re-anchored residual
+(`translateY(-4px)`), documenting that the lifted row stays under the finger.
+
+**Files:** `apps/web/src/modules/calendar/Sidebar.tsx` (drag handlers, state),
+`apps/web/src/modules/calendar/Sidebar.test.tsx` (assertion update),
+`apps/web/src/styles.css` (`.calendar-row.reordering` lifted style).
+
+---
+
+## 10. Delete calendar with confirmation
+
+### Problem
+
+There was no way to delete a calendar from the UI, and the backend `DELETE`
+route refused to delete any calendar that still had events (409), forcing manual
+event cleanup first.
+
+### Decision
+
+- **Backend** (`apps/api/app/routes/calendar.py`): the `DELETE
+  /api/calendars/{id}` route now cascade-deletes the calendar's events before
+  deleting the calendar. Synced (non-`local`) calendars are still rejected.
+- **Frontend** (`Sidebar.tsx`): a **Delete** action (ghost/danger style) in the
+  calendar edit card opens a confirmation dialog reusing the existing
+  `.scope-prompt` / `.scope-card` overlay pattern. The dialog names the calendar
+  (`Delete "<name>"?`) and warns that all its events are permanently removed.
+  Confirming calls `DELETE`, closes the dialog and the edit menu, and refreshes
+  the list.
+- **CSS**: added `.cal-card-actions .danger` (transparent background, `#d9573f`
+  red text) matching the destructive colour used elsewhere in the app.
+
+**Files:** `apps/api/app/routes/calendar.py`,
+`apps/web/src/modules/calendar/Sidebar.tsx`, `apps/web/src/styles.css`.
+
+---
+
 ## Files changed
 
 | File | Changes |
 |---|---|
 | `apps/web/src/modules/calendar/TimeGrid.tsx` | `overlapOffsets()` algorithm, `resizingDay` state, touch state machine (`TouchState`, handlers), double-tap detection, time-display overflow clip, day-column touch dispatch, event-chip touch dispatch, resize handle touch guard |
 | `apps/web/src/modules/calendar/EventEditor.tsx` | Pull-down grabber + drag handlers, `closeImmediate()` (skips `editorOut` on grabber close), `mountedAt` close guard |
-| `apps/web/src/styles.css` | `.day-column` `touch-action: pan-y`, calendar colour `::before` dot, `editor-grabber`/`editor-grabber-handle`/`editor-drag-wrap` styles, removed `long-press-active` styles |
+| `apps/web/src/modules/calendar/Sidebar.tsx` | Long-press (375 ms) drag-to-reorder with live reordering + finger re-anchoring, `homeIndex`/`ROW_GAP`, `localStorage` order persistence, delete-calendar confirmation dialog |
+| `apps/web/src/modules/calendar/Sidebar.test.tsx` | Reorder flow assertions (re-anchored `translateY`) |
+| `apps/api/app/routes/calendar.py` | `DELETE /api/calendars/{id}` cascade-deletes events instead of rejecting with 409 |
+| `apps/web/src/styles.css` | `.day-column` `touch-action: pan-y`, calendar colour `::before` dot, `editor-grabber`/`editor-grabber-handle`/`editor-drag-wrap` styles, removed `long-press-active` styles, `.calendar-row.reordering` lifted style, `.cal-card-actions .danger` |
 
 ---
 

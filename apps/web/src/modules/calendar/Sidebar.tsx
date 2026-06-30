@@ -1,8 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
 import type { CalendarData } from './types'
+
+const CALENDAR_ORDER_KEY = 'sb-calendar-order'
+const LONG_PRESS_DELAY = 375
+const ROW_GAP = 2 // matches `.calendar-list { gap }` in styles.css
+
+function storedOrder() {
+  try {
+    const order = JSON.parse(localStorage.getItem(CALENDAR_ORDER_KEY) ?? '[]')
+    return Array.isArray(order)
+      ? order.filter((id) => typeof id === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
 
 function ColorField({
   value,
@@ -103,6 +118,143 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const [error, setError] = useState('')
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<CalendarData | null>(null)
+  const [calendarOrder, setCalendarOrder] = useState<string[]>(storedOrder)
+  const [dragging, setDragging] = useState<{ id: string; y: number } | null>(
+    null,
+  )
+  const listRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{
+    id: string
+    pointerId: number
+    startY: number
+    y: number
+    rowHeight: number
+    homeIndex: number
+    active: boolean
+    timer: ReturnType<typeof setTimeout>
+  } | null>(null)
+  const suppressMenuClickRef = useRef<string | null>(null)
+
+  // ponytail: sidebar lists are tiny; replace indexOf with a Map if that changes.
+  const orderedCalendars = [...calendars].sort((a, b) => {
+    const aIndex = calendarOrder.indexOf(a.id)
+    const bIndex = calendarOrder.indexOf(b.id)
+    return (
+      (aIndex < 0 ? calendarOrder.length : aIndex) -
+      (bIndex < 0 ? calendarOrder.length : bIndex)
+    )
+  })
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const preventScrollWhileDragging = (event: TouchEvent) => {
+      if (dragRef.current?.active) event.preventDefault()
+    }
+    list.addEventListener('touchmove', preventScrollWhileDragging, {
+      passive: false,
+    })
+    return () => {
+      list.removeEventListener('touchmove', preventScrollWhileDragging)
+      if (dragRef.current) clearTimeout(dragRef.current.timer)
+    }
+  }, [])
+
+  const reorder = (id: string, targetId: string) => {
+    setCalendarOrder((current) => {
+      const next = [...orderedCalendars]
+      const from = next.findIndex((calendar) => calendar.id === id)
+      const to = next.findIndex((calendar) => calendar.id === targetId)
+      if (from < 0 || to < 0 || from === to) return current
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      const ids = next.map((calendar) => calendar.id)
+      localStorage.setItem(CALENDAR_ORDER_KEY, JSON.stringify(ids))
+      return ids
+    })
+  }
+
+  const startReorder = (
+    pointer: React.PointerEvent<HTMLButtonElement>,
+    calendar: CalendarData,
+  ) => {
+    if (pointer.button !== 0) return
+    pointer.currentTarget.setPointerCapture(pointer.pointerId)
+    const pending = {
+      id: calendar.id,
+      pointerId: pointer.pointerId,
+      startY: pointer.clientY,
+      y: pointer.clientY,
+      rowHeight:
+        ((
+          pointer.currentTarget.closest('.calendar-row') as HTMLElement | null
+        )?.getBoundingClientRect().height || 40) + ROW_GAP,
+      homeIndex: orderedCalendars.findIndex((c) => c.id === calendar.id),
+      active: false,
+      timer: 0 as unknown as ReturnType<typeof setTimeout>,
+    }
+    pending.timer = setTimeout(() => {
+      if (dragRef.current !== pending) return
+      pending.active = true
+      suppressMenuClickRef.current = calendar.id
+      setMenuFor(null)
+      setDragging({ id: calendar.id, y: 0 })
+    }, LONG_PRESS_DELAY)
+    dragRef.current = pending
+  }
+
+  const moveReorder = (pointer: React.PointerEvent<HTMLButtonElement>) => {
+    const current = dragRef.current
+    if (!current || current.pointerId !== pointer.pointerId) return
+    current.y = pointer.clientY
+
+    // Before the long-press fires, any real movement is a scroll — bail out.
+    if (!current.active) {
+      if (Math.abs(current.startY - pointer.clientY) > 8) {
+        clearTimeout(current.timer)
+        dragRef.current = null
+      }
+      return
+    }
+
+    pointer.preventDefault()
+    const ids = orderedCalendars.map((c) => c.id)
+    const rawOffset = current.y - current.startY
+    const fromIndex = ids.indexOf(current.id)
+    // Where the finger has dragged the row, measured in row slots from home.
+    const toIndex = Math.max(
+      0,
+      Math.min(
+        ids.length - 1,
+        current.homeIndex + Math.round(rawOffset / current.rowHeight),
+      ),
+    )
+    if (toIndex !== fromIndex) {
+      ids.splice(fromIndex, 1)
+      ids.splice(toIndex, 0, current.id)
+      setCalendarOrder(ids)
+      localStorage.setItem(CALENDAR_ORDER_KEY, JSON.stringify(ids))
+    }
+    // Keep the lifted row under the finger: subtract the slots it has shifted.
+    const residual =
+      rawOffset - (toIndex - current.homeIndex) * current.rowHeight
+    setDragging({ id: current.id, y: residual })
+  }
+
+  const finishReorder = (pointer: React.PointerEvent<HTMLButtonElement>) => {
+    const current = dragRef.current
+    if (!current || current.pointerId !== pointer.pointerId) return
+    clearTimeout(current.timer)
+    dragRef.current = null
+    setDragging(null)
+    // The order was already committed live during the drag; nothing to do.
+  }
+
+  const cancelReorder = () => {
+    if (dragRef.current) clearTimeout(dragRef.current.timer)
+    dragRef.current = null
+    setDragging(null)
+  }
 
   const patch = async (calendar: CalendarData, values: object) => {
     setError('')
@@ -242,9 +394,19 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
           onClick={() => setMenuFor(null)}
         />
       )}
-      <div className="calendar-list">
-        {calendars.map((calendar) => (
-          <div key={calendar.id} className="calendar-row">
+      <div className="calendar-list" ref={listRef}>
+        {orderedCalendars.map((calendar, index) => (
+          <div
+            key={calendar.id}
+            className={`calendar-row ${dragging?.id === calendar.id ? 'reordering' : ''}`}
+            data-calendar-id={calendar.id}
+            style={{
+              transform:
+                dragging?.id === calendar.id
+                  ? `translateY(${dragging.y}px) scale(1.03)`
+                  : undefined,
+            }}
+          >
             <button
               className="visibility"
               aria-label={`${calendar.is_visible ? 'Hide' : 'Show'} ${calendar.name}`}
@@ -265,11 +427,28 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               aria-label={`${calendar.name} options`}
               aria-haspopup="menu"
               aria-expanded={menuFor === calendar.id}
-              onClick={() =>
+              onPointerDown={(pointer) => startReorder(pointer, calendar)}
+              onPointerMove={moveReorder}
+              onPointerUp={finishReorder}
+              onPointerCancel={cancelReorder}
+              onClick={() => {
+                if (suppressMenuClickRef.current === calendar.id) {
+                  suppressMenuClickRef.current = null
+                  return
+                }
                 setMenuFor((current) =>
                   current === calendar.id ? null : calendar.id,
                 )
-              }
+              }}
+              onKeyDown={(event) => {
+                if (!event.altKey) return
+                const offset = event.key === 'ArrowUp' ? -1 : 1
+                if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+                const target = orderedCalendars[index + offset]
+                if (!target) return
+                event.preventDefault()
+                reorder(calendar.id, target.id)
+              }}
             >
               ⋯
             </button>
