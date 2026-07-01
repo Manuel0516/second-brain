@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
+import { Card } from '../../components/Card'
+import { Field } from '../../components/Field'
+import { IconButton } from '../../components/IconButton'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { onColor } from './colors'
 import {
   CALENDAR_ORDER_KEY,
@@ -28,8 +32,7 @@ function ColorField({
     (preset) => preset.toLowerCase() === value.toLowerCase(),
   )
   return (
-    <div className="cal-field">
-      <span>Color</span>
+    <Field label="Color">
       <div className="color-swatches">
         {colorPresets.map((preset) => {
           const active = value.toLowerCase() === preset.toLowerCase()
@@ -69,7 +72,7 @@ function ColorField({
           <PencilIcon />
         </label>
       </div>
-    </div>
+    </Field>
   )
 }
 
@@ -290,27 +293,31 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
       <div className="sidebar-title">
         <span>Calendars</span>
         <div className="sidebar-title-actions">
-          <button onClick={() => setAdding(!adding)} aria-label="Add calendar">
-            +
-          </button>
-          <button
-            type="button"
-            className="sidebar-close"
-            aria-label="Close navigation"
+          <IconButton
+            icon="+"
+            label="Add calendar"
+            onClick={() => setAdding(!adding)}
+            size="md"
+          />
+          <IconButton
+            icon={
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              >
+                <path d="M5 5l10 10M15 5L5 15" />
+              </svg>
+            }
+            label="Close navigation"
             onClick={() => onClose?.()}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            >
-              <path d="M5 5l10 10M15 5L5 15" />
-            </svg>
-          </button>
+            size="md"
+            className="sidebar-close"
+          />
         </div>
       </div>
       {adding && (
@@ -340,15 +347,14 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               </svg>
             </button>
           </div>
-          <label className="cal-field">
-            Name
+          <Field label="Name">
             <input
               required
               placeholder="Calendar name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </label>
+          </Field>
           <ColorField value={color} onChange={setColor} />
           <div className="cal-card-actions">
             <button
@@ -439,30 +445,29 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               ⋯
             </button>
             {menuFor === calendar.id && (
-              <div className="cal-card calendar-menu" role="menu">
+              <Card className="calendar-menu" animate={false}>
                 <div className="cal-card-head">
                   <h3>Edit calendar</h3>
-                  <button
-                    type="button"
-                    className="cal-card-close"
-                    aria-label="Close"
+                  <IconButton
+                    icon={
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      >
+                        <path d="M5 5l10 10M15 5L5 15" />
+                      </svg>
+                    }
+                    label="Close"
                     onClick={() => setMenuFor(null)}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    >
-                      <path d="M5 5l10 10M15 5L5 15" />
-                    </svg>
-                  </button>
+                    size="sm"
+                  />
                 </div>
-                <label className="cal-field">
-                  Name
+                <Field label="Name">
                   <input
                     aria-label={`${calendar.name} name`}
                     defaultValue={calendar.name}
@@ -476,7 +481,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                       patch(calendar, { name: e.target.value })
                     }
                   />
-                </label>
+                </Field>
                 <ColorField
                   value={calendar.color}
                   onChange={(c) => patch(calendar, { color: c })}
@@ -497,47 +502,20 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                     Done
                   </button>
                 </div>
-              </div>
+              </Card>
             )}
           </div>
         ))}
       </div>
-      {confirmDelete && (
-        <div
-          className="scope-prompt"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="del-cal-title"
-        >
-          <div className="scope-card">
-            <h3 id="del-cal-title">Delete "{confirmDelete.name}"?</h3>
-            <p>
-              All events in this calendar will be permanently deleted. This
-              cannot be undone.
-            </p>
-            <div className="cal-card-actions">
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => setConfirmDelete(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger"
-                style={{
-                  borderColor: 'rgba(217,87,63,0.35)',
-                  background: 'rgba(217,87,63,0.1)',
-                }}
-                onClick={() => deleteCalendar(confirmDelete)}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        message={`Delete "${confirmDelete?.name}"?`}
+        detail="All events in this calendar will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => confirmDelete && void deleteCalendar(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+        danger
+      />
       <div className="integration">
         <span className="integration-title">Integrations</span>
         <button

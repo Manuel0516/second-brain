@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
+import { IconButton } from '../../components/IconButton'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 
@@ -116,24 +117,25 @@ export function SettingsLayout() {
           <div className="sidebar-title" style={{ paddingLeft: 4 }}>
             <span>Settings</span>
             <div className="sidebar-title-actions">
-              <button
-                type="button"
-                className="sidebar-close"
-                aria-label="Close settings navigation"
+              <IconButton
+                icon={
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  >
+                    <path d="M5 5l10 10M15 5L5 15" />
+                  </svg>
+                }
+                label="Close settings navigation"
                 onClick={() => setSidebarOpen(false)}
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                >
-                  <path d="M5 5l10 10M15 5L5 15" />
-                </svg>
-              </button>
+                size="sm"
+                className="sidebar-close"
+              />
             </div>
           </div>
 

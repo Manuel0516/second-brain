@@ -1,4 +1,4 @@
-// Calendar category palette (DESIGN_SYSTEM.md §4) — events, tags, calendars.
+// Calendar category palette — events, tags, calendars. See docs/design/STYLE_GUIDE.md.
 export const COLOR_PRESETS = [
   '#3B6FE0',
   '#2E9E6E',

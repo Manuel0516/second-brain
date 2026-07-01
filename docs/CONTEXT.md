@@ -1,25 +1,37 @@
 # Context map
 
-Load this index first. Open only the row that matches the task, plus the nearest scoped `AGENTS.md`.
+Load this index first. Open only the row that matches the task.
 
-| Task | Required specification |
+## Always read first
+- `AGENTS.md` (repo root) — universal rules for every AI on this project
+- For any UI work: `docs/design/STYLE_GUIDE.md` — mandatory, no exceptions
+
+## Task → spec mapping
+
+| Task | Read this |
 |---|---|
-| Repository structure, shared graph, or phase boundaries | `product/ARCHITECTURE.md` |
-| Login, sessions, 2FA, network exposure, or secrets | `product/AUTH_AND_SECURITY.md` |
-| Theme, layout, responsive behavior, or visual components | `product/DESIGN_SYSTEM.md`; add `design/mockup-v3/` only when visual evidence is needed |
-| Calendar or recurrence | `product/CALENDAR_MODULE.md` |
-| Notes, blocks, pages, backlinks, or generic linking | `product/NOTES_MODULE.md` |
-| Transactions, banking, tax, or imports | `product/FINANCE_MODULE.md` |
-| Stocks, crypto, or futures | `product/INVESTMENTS_MODULE.md` |
-| Workouts or wearable imports | `product/FITNESS_MODULE.md` |
-| Meals, nutrition, water, or recipes | `product/FOOD_MODULE.md` |
-| AI capture, tools, provider behavior, or write confirmation | `product/AI_ASSISTANT_MODULE.md` |
-| Reminders, account settings, theme preferences, or exports | `product/SETTINGS_MODULE.md` |
+| Full project scope or phase plan | `docs/product/ARCHITECTURE.md` |
+| Login, sessions, 2FA, network, or secrets | `docs/product/AUTH_AND_SECURITY.md` |
+| Any UI, layout, visual, or styling work | `docs/design/STYLE_GUIDE.md` |
+| Calendar or recurrence | `docs/product/CALENDAR_MODULE.md` |
+| Notes, blocks, pages, backlinks, or generic linking | `docs/product/NOTES_MODULE.md` |
+| Transactions, banking, tax, or imports | `docs/product/FINANCE_MODULE.md` |
+| Stocks, crypto, or futures | `docs/product/INVESTMENTS_MODULE.md` |
+| Workouts or wearable imports | `docs/product/FITNESS_MODULE.md` |
+| Meals, nutrition, water, or recipes | `docs/product/FOOD_MODULE.md` |
+| AI capture, tools, or provider behavior | `docs/product/AI_ASSISTANT_MODULE.md` |
+| Settings, preferences, or exports | `docs/product/SETTINGS_MODULE.md` |
+| Backend / API architecture | `docs/architecture/BACKEND.md` |
+| Database tables or migrations | `docs/architecture/DATABASE.md` |
+| Frontend structure or routing | `docs/architecture/FRONTEND.md` |
+| What is currently being built | `docs/work/NOW.md` |
+| Known bugs | `docs/work/FIXES.md` |
+| How a past feature was implemented | `docs/history/CHANGELOG.md` → find the entry |
 
-Cross-cutting exceptions:
+## Cross-cutting rules
 
-- Generic graph/link changes: architecture plus the Notes linking section.
-- Authenticated UI: auth/security plus the one affected module spec.
-- Deployment: architecture and auth/security; do not load feature-module specs.
-
-The raw Design Canvas source under `design/design-canvas/` is archival input, not application code.
+- Generic graph/link changes: `DATABASE.md` + the affected module spec.
+- Authenticated UI: `AUTH_AND_SECURITY.md` + the module spec.
+- Deployment: `BACKEND.md` + `AUTH_AND_SECURITY.md` — do not load feature specs.
+- The raw Design Canvas at `design/design-canvas/` is archival — read it only for
+  explicit visual design work, not for code tasks.

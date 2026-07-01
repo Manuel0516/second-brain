@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { notesApi } from './api'
 import { PageTree } from './PageTree'
 import { PageView } from './PageView'
@@ -192,37 +193,15 @@ export function Notes() {
           )}
         </section>
       </div>
-      {pendingDelete && (
-        <div
-          className="scope-prompt"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-note-title"
-        >
-          <div className="scope-card">
-            <h3 id="delete-note-title">
-              Move “{pendingDelete.title}” to trash?
-            </h3>
-            <p>Nested pages will also be moved to trash.</p>
-            <div className="scope-options">
-              <button
-                type="button"
-                className="scope-option"
-                onClick={() => void remove()}
-              >
-                Move to trash
-              </button>
-              <button
-                type="button"
-                className="scope-cancel"
-                onClick={() => setPendingDelete(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        message={`Move \u201c${pendingDelete?.title}\u201d to trash?`}
+        detail="Nested pages will also be moved to trash."
+        confirmLabel="Move to trash"
+        onConfirm={() => void remove()}
+        onCancel={() => setPendingDelete(null)}
+        danger={false}
+      />
     </div>
   )
 }

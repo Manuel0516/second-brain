@@ -2,7 +2,7 @@
 
 A private, self-hosted life OS for calendar, notes, finances, fitness, food, and AI-assisted capture.
 
-This repository is the canonical implementation. Product specifications and the approved design references live under `docs/`.
+This repository is the canonical implementation. Product specifications and design references live under `docs/`.
 
 ## Prerequisites
 
@@ -57,14 +57,15 @@ docker compose config
 docker compose build web api
 ```
 
-Do not deploy this scaffold publicly. Authentication and security hardening are the next milestone.
-
 ## Project navigation
 
-- [Context map](docs/CONTEXT.md) — load only the specification relevant to a task.
-- [Roadmap](docs/ROADMAP.md) — milestone status and acceptance gates.
-- [Architecture](docs/product/ARCHITECTURE.md) — product architecture and phased plan.
-- [Decisions](docs/decisions/README.md) — durable, cross-cutting decisions only.
+- [Agent guide](AGENTS.md) — universal rules for every AI working on this project.
+- [Context map](docs/CONTEXT.md) — which spec to read for each type of task.
+- [What's being built now](docs/work/NOW.md) — current active work and bug queue.
+- [Architecture overview](docs/architecture/OVERVIEW.md) — system map and dev setup.
+- [Style guide](docs/design/STYLE_GUIDE.md) — UI rules and design tokens.
+- [History](docs/history/CHANGELOG.md) — log of every significant change.
+- [Roadmap](docs/ROADMAP.md) — milestone status.
 
 ## Coding agents
 
@@ -77,6 +78,6 @@ claude plugin marketplace add DietrichGebert/ponytail --scope project
 claude plugin install ponytail@ponytail --scope project
 ```
 
-Start a new Codex session, open `/hooks`, and trust Ponytail's reviewed session and subagent hooks. Restart Claude Code after plugin changes. The root rules preserve the same simplicity contract if a plugin is temporarily unavailable.
+Start a new Codex session, open `/hooks`, and trust Ponytail's reviewed session and subagent hooks. Restart Claude Code after plugin changes.
 
-Specialists are explicit: request `frontend`, `backend`, `data`, `infrastructure`, `testing`, or `security` by name. Do not run multiple writers against the same subtree.
+All AI tools (Claude Code, Codex, GitHub Copilot) follow the same rules defined in `AGENTS.md`.

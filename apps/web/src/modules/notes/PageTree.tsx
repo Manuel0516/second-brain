@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { IconButton } from '../../components/IconButton'
 import type { Page } from './types'
 
 export interface PageTreeProps {
@@ -338,21 +339,19 @@ export function PageTree({
       <div className="notes-sidebar-heading">
         <span>Pages</span>
         <span>
-          <button
-            type="button"
-            aria-label="New page"
+          <IconButton
+            icon="+"
+            label="New page"
             onClick={() => onCreate(null)}
-          >
-            +
-          </button>
+            size="md"
+          />
           {onClose && (
-            <button
-              type="button"
-              aria-label="Close page navigation"
+            <IconButton
+              icon="×"
+              label="Close page navigation"
               onClick={onClose}
-            >
-              ×
-            </button>
+              size="md"
+            />
           )}
         </span>
       </div>

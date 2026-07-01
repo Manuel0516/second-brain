@@ -3,7 +3,7 @@
 > Audience: implementing AI or developer. Self-contained build spec for the
 > first Notes phase. Read order: this plan → `docs/product/NOTES_MODULE.md`,
 > `docs/product/CALENDAR_MODULE.md §3`, `docs/product/ARCHITECTURE.md §4` →
-> `docs/product/DESIGN_SYSTEM.md` + the Design Canvas
+> `docs/design/STYLE_GUIDE.md` + the Design Canvas
 > (`docs/design/design-canvas/Second Brain.dc.html`) for the visual pass →
 > nearest `AGENTS.md`. Run `npm run check` (web) and `npm run check:api` before
 > any task is "done". Reuse the tokens/components already in
@@ -209,7 +209,7 @@ view and the event split-view.
 
 ### 5.4 Design & visual rules (required)
 
-- Follow `DESIGN_SYSTEM.md` tokens (already in `styles.css`): Inter/JetBrains
+- Follow `docs/design/STYLE_GUIDE.md` tokens (already in `styles.css`): Inter/JetBrains
   Mono, 4px spacing, 2–12px radius, 120–200ms motion, **shadows only on
   overlays**, cyan accent for interactive states only.
 - Match the **Design Canvas** (`docs/design/design-canvas/Second Brain.dc.html`)

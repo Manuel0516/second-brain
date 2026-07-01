@@ -81,7 +81,6 @@ secondbrain/
     ├── CALENDAR_MODULE.md
     ├── NOTES_MODULE.md
     ├── FINANCE_MODULE.md       # next up
-    ├── DESIGN_SYSTEM.md
     └── AUTH_AND_SECURITY.md
 ```
 

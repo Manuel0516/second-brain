@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Segmented } from '../../components/Segmented'
 import { EmojiPicker } from '../../components/EmojiPicker'
+import { IconButton } from '../../components/IconButton'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
@@ -706,24 +707,25 @@ export function EventEditor({
         >
           <header>
             <h2>{event.id ? 'Edit event' : 'New event'}</h2>
-            <button
-              type="button"
-              className="editor-close"
+            <IconButton
+              icon={
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                >
+                  <path d="M5 5l10 10M15 5L5 15" />
+                </svg>
+              }
+              label="Close"
               onClick={() => closeWithAnimation(onClose)}
-              aria-label="Close"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              >
-                <path d="M5 5l10 10M15 5L5 15" />
-              </svg>
-            </button>
+              size="md"
+              className="editor-close"
+            />
           </header>
           <form onSubmit={save} noValidate>
             <div className="editor-title-row">

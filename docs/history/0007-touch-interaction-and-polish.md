@@ -7,7 +7,7 @@ Date: 2026-06-30
 
 After the initial calendar implementation (ADR 0004, ADR 0005, ADR 0006) a
 set of bug fixes and mobile interaction improvements were tracked as
-implementation plans in `docs/plans/`. This ADR consolidates all of them into
+implementation plans in `docs/work/plans/`. This ADR consolidates all of them into
 a single record and supersedes the individual plan files.
 
 Three categories of work were addressed:
@@ -595,7 +595,7 @@ Snap the **result**, not just the delta, to a 5-minute grid.
 
 ## Superseded documents
 
-The following plan files in `docs/plans/` are superseded by this ADR and have
+The following plan files in `docs/work/plans/` are superseded by this ADR and have
 been removed:
 
 - `FIXES.md` — bug-fix backlog (multi-day drag, overlap, mobile, colour dot)

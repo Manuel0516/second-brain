@@ -1846,16 +1846,18 @@ input[type='color'] {
 }
 /* Custom freeform field — identical to the editor's text inputs. */
 .editor-icon-custom {
-width: 100%;
+  width: 100%;
   min-width: 0;
   min-height: 38px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: var(--bg-elevated);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
   color: var(--text-primary);
   font-size: 13px;
   padding: 8px 10px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .editor-icon-custom::placeholder {
   color: var(--text-tertiary);
