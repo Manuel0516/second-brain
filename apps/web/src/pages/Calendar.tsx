@@ -15,6 +15,7 @@ import {
 import { useSettings } from '../context/SettingsContext'
 import type { CalendarData, CalendarEvent } from '../modules/calendar/types'
 import { occurrenceKey } from '../modules/calendar/types'
+import { orderCalendars } from '../modules/calendar/order'
 import { apiCall } from '../lib/api'
 
 type View = 'day' | 'week' | 'month'
@@ -160,10 +161,15 @@ export function Calendar() {
 
   const createAt = (start: Date, selectedEnd?: Date) => {
     const end = selectedEnd ?? new Date(start.getTime() + 60 * 60 * 1000)
+    // Prefer the calendar chosen in settings, if it still exists; otherwise the
+    // first calendar in the saved order.
+    const defaultCalendar =
+      calendars.find((c) => c.id === settings.default_calendar_id) ??
+      orderCalendars(calendars)[0]
     const draft = {
       start_at: start.toISOString(),
       end_at: end.toISOString(),
-      calendar_id: calendars[0]?.id,
+      calendar_id: defaultCalendar?.id,
     }
     setEditorEvent(draft)
     setDraftPreview(draft)

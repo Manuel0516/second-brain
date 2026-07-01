@@ -2,22 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
+import {
+  CALENDAR_ORDER_KEY,
+  orderCalendars,
+  storedCalendarOrder,
+} from './order'
 import type { CalendarData } from './types'
 
-const CALENDAR_ORDER_KEY = 'sb-calendar-order'
 const LONG_PRESS_DELAY = 375
 const ROW_GAP = 2 // matches `.calendar-list { gap }` in styles.css
-
-function storedOrder() {
-  try {
-    const order = JSON.parse(localStorage.getItem(CALENDAR_ORDER_KEY) ?? '[]')
-    return Array.isArray(order)
-      ? order.filter((id) => typeof id === 'string')
-      : []
-  } catch {
-    return []
-  }
-}
 
 function ColorField({
   value,
@@ -118,7 +111,8 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const [error, setError] = useState('')
   const [menuFor, setMenuFor] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<CalendarData | null>(null)
-  const [calendarOrder, setCalendarOrder] = useState<string[]>(storedOrder)
+  const [calendarOrder, setCalendarOrder] =
+    useState<string[]>(storedCalendarOrder)
   const [dragging, setDragging] = useState<{ id: string; y: number } | null>(
     null,
   )
@@ -135,15 +129,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   } | null>(null)
   const suppressMenuClickRef = useRef<string | null>(null)
 
-  // ponytail: sidebar lists are tiny; replace indexOf with a Map if that changes.
-  const orderedCalendars = [...calendars].sort((a, b) => {
-    const aIndex = calendarOrder.indexOf(a.id)
-    const bIndex = calendarOrder.indexOf(b.id)
-    return (
-      (aIndex < 0 ? calendarOrder.length : aIndex) -
-      (bIndex < 0 ? calendarOrder.length : bIndex)
-    )
-  })
+  const orderedCalendars = orderCalendars(calendars, calendarOrder)
 
   useEffect(() => {
     const list = listRef.current

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Segmented } from '../../components/Segmented'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
+import { orderCalendars } from './order'
 import type { CalendarData, CalendarEvent, EventConnections } from './types'
 const MIN_SAVE_SPINNER_MS = 145
 
@@ -88,11 +89,14 @@ export function EventEditor({
     settings.favorite_colors.length > 0
       ? settings.favorite_colors
       : ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F']
+  // Match the sidebar's saved calendar order in the picker and defaults.
+  // Memoised so derived values (selectedCalendarId) stay stable across renders.
+  const orderedCalendars = useMemo(() => orderCalendars(calendars), [calendars])
 
   const [icon, setIcon] = useState(event.icon ?? '')
   const [form, setForm] = useState({
     title: event.title ?? '',
-    calendar_id: event.calendar_id ?? calendars[0]?.id ?? '',
+    calendar_id: event.calendar_id ?? orderedCalendars[0]?.id ?? '',
     start_at: localValue(event.start_at ?? ''),
     end_at: localValue(event.end_at ?? event.start_at ?? ''),
     all_day: event.all_day ?? false,
@@ -271,10 +275,10 @@ export function EventEditor({
   const setTimePart = (key: TimeKey, time: string) =>
     set(key, `${datePart(form[key])}T${time}`)
 
-  const selectedCalendarId = form.calendar_id || calendars[0]?.id || ''
+  const selectedCalendarId = form.calendar_id || orderedCalendars[0]?.id || ''
   const selectedCalendarColor =
-    calendars.find((calendar) => calendar.id === selectedCalendarId)?.color ||
-    '#3B6FE0'
+    orderedCalendars.find((calendar) => calendar.id === selectedCalendarId)
+      ?.color || '#3B6FE0'
 
   useEffect(() => {
     if (!onDraftChange) return
@@ -685,7 +689,7 @@ export function EventEditor({
                 role="radiogroup"
                 aria-label="Calendar"
               >
-                {calendars.map((calendar) => {
+                {orderedCalendars.map((calendar) => {
                   const active = calendar.id === selectedCalendarId
                   return (
                     <button
