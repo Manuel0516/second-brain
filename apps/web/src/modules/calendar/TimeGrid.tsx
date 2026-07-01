@@ -38,6 +38,9 @@ interface Gesture {
   clientY: number
   columnWidth: number
   events: CalendarEvent[]
+  // Minute-of-day of the dragged edge (start for move, end for resize) — the
+  // result is snapped to a 5-minute grid relative to this anchor.
+  anchorMinute: number
   deltaMinutes: number
   deltaDays: number
   // Snapped pixel offset used by the live drag preview.
@@ -81,6 +84,13 @@ function dateAtMinute(day: Date, minute: number) {
   const date = new Date(day)
   date.setHours(0, minute, 0, 0)
   return date
+}
+
+// Move/resize snap granularity, in minutes.
+const SNAP_MINUTES = 5
+const minuteOfDay = (iso: string) => {
+  const d = new Date(iso)
+  return d.getHours() * 60 + d.getMinutes()
 }
 
 // ponytail: O(n²) per day column; day columns rarely hold enough events to matter.
@@ -265,6 +275,9 @@ export function TimeGrid({
         state.mode === 'resize'
           ? [state.event]
           : events.filter((candidate) => keys.has(occurrenceKey(candidate))),
+      anchorMinute: minuteOfDay(
+        state.mode === 'resize' ? state.event.end_at : state.event.start_at,
+      ),
       deltaMinutes: 0,
       deltaDays: 0,
       rawX: 0,
@@ -742,6 +755,9 @@ export function TimeGrid({
       clientY: pointer.clientY,
       columnWidth: column?.getBoundingClientRect().width ?? 0,
       events: selectedEvents,
+      anchorMinute: minuteOfDay(
+        mode === 'resize' ? event.end_at : event.start_at,
+      ),
       deltaMinutes: 0,
       deltaDays: 0,
       rawX: 0,
@@ -765,8 +781,13 @@ export function TimeGrid({
       current.moved ||
       Math.abs(deltaX) >= DRAG_THRESHOLD ||
       Math.abs(deltaY) >= DRAG_THRESHOLD
-    // Keep the live preview on the same 5-minute and day grid committed on drop.
-    const deltaMinutes = moved ? Math.round((deltaY / rowHeight) * 12) * 5 : 0
+    // Snap the dragged edge to a 5-minute grid: land the result on a boundary
+    // (:00, :05, …) rather than shifting by the event's arbitrary start offset.
+    const rawMinutes = (deltaY / rowHeight) * 60
+    const target =
+      Math.round((current.anchorMinute + rawMinutes) / SNAP_MINUTES) *
+      SNAP_MINUTES
+    const deltaMinutes = moved ? target - current.anchorMinute : 0
     const deltaDays =
       moved && current.mode === 'move' && current.columnWidth
         ? Math.round(deltaX / current.columnWidth)

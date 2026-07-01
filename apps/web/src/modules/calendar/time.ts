@@ -1,4 +1,5 @@
 const MINUTES_PER_DAY = 24 * 60
+const SNAP_MINUTES = 5
 
 export const MIN_ROW_HEIGHT = 28
 export const MAX_ROW_HEIGHT = 110
@@ -47,13 +48,10 @@ export function minuteAtPointer(
   top: number,
   rowHeight: number,
 ) {
-  return Math.max(
-    0,
-    Math.min(
-      MINUTES_PER_DAY - 1,
-      Math.floor(((clientY - top) / rowHeight) * 60),
-    ),
-  )
+  const minute =
+    Math.round((((clientY - top) / rowHeight) * 60) / SNAP_MINUTES) *
+    SNAP_MINUTES
+  return Math.max(0, Math.min(MINUTES_PER_DAY - SNAP_MINUTES, minute))
 }
 
 export function shiftIsoRange(

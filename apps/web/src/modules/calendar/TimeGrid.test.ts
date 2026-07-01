@@ -20,11 +20,13 @@ describe('occurrenceKey', () => {
 })
 
 describe('minuteAtPointer', () => {
-  it('maps the pointer to a precise minute and clamps it to the day', () => {
+  it('snaps the pointer to the nearest 5 minutes and clamps it to the day', () => {
     expect(minuteAtPointer(24, 0, 48)).toBe(30)
     expect(minuteAtPointer(48 + 12, 0, 48)).toBe(75)
+    // 34px → ~42.5 min, snaps to the nearest 5-minute block.
+    expect(minuteAtPointer(34, 0, 48)).toBe(45)
     expect(minuteAtPointer(-10, 0, 48)).toBe(0)
-    expect(minuteAtPointer(24 * 48 + 10, 0, 48)).toBe(1439)
+    expect(minuteAtPointer(24 * 48 + 10, 0, 48)).toBe(1435)
   })
 })
 
