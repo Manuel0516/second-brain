@@ -1,4 +1,4 @@
-export type ActiveRail = 'calendar' | 'settings'
+export type ActiveRail = 'calendar' | 'notes' | 'settings'
 
 const IconCalendar = () => (
   <svg
@@ -179,7 +179,11 @@ export function AppRail({ active, onNavigate }: Props) {
       >
         <IconCalendar />
       </RailBtn>
-      <RailBtn title="Notes">
+      <RailBtn
+        active={active === 'notes'}
+        title="Notes"
+        onClick={() => nav('/notes')}
+      >
         <IconNotes />
       </RailBtn>
       <RailBtn title="Finance">

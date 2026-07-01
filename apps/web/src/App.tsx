@@ -5,6 +5,7 @@ import {
   Navigate,
   useLocation,
 } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { Login } from './pages/Login'
 import { Calendar } from './pages/Calendar'
 import { SettingsLayout } from './modules/settings/SettingsLayout'
@@ -14,6 +15,10 @@ import { AdminSettings } from './modules/settings/AdminSettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
+
+const Notes = lazy(() =>
+  import('./modules/notes/Notes').then((module) => ({ default: module.Notes })),
+)
 
 function PageTransition({ children }: { children: React.ReactNode }) {
   const location = useLocation()
@@ -55,6 +60,20 @@ function AppRoutes() {
             <ProtectedRoute>
               <SettingsProvider>
                 <Calendar />
+              </SettingsProvider>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notes/:pageId?"
+          element={
+            <ProtectedRoute>
+              <SettingsProvider>
+                <Suspense
+                  fallback={<main className="route-loading">Loading…</main>}
+                >
+                  <Notes />
+                </Suspense>
               </SettingsProvider>
             </ProtectedRoute>
           }

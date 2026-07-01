@@ -1,0 +1,762 @@
+/* Notes module — reuses the calendar shell language: rail → contextual sidebar
+   → canvas, the same tokens, popovers in the .cal-card style, no new visuals. */
+
+.notes-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+.notes-workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Sidebar (matches .calendar-sidebar) ─────────────────────────── */
+.notes-sidebar {
+  width: 230px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-base);
+  overflow: hidden;
+}
+.notes-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--text-tertiary);
+  font: 600 11px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.notes-sidebar-heading > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.notes-sidebar-heading button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-sidebar-heading button:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* ── Page tree ───────────────────────────────────────────────────── */
+.notes-tree {
+  flex: 1;
+  overflow: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.notes-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding-right: 4px;
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.notes-tree-row:hover {
+  background: rgba(255, 240, 200, 0.04);
+  color: var(--text-primary);
+}
+.notes-tree-row.selected {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 var(--accent);
+}
+/* Lifted look while touch-dragging to reorder. */
+.notes-tree-row[style*='translateY'] {
+  z-index: 2;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  transition: none;
+}
+.notes-tree-toggle {
+  width: 18px;
+  height: 26px;
+  flex: 0 0 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.notes-tree-toggle:disabled {
+  cursor: default;
+}
+.notes-tree-row > span[aria-hidden] {
+  font-size: 13px;
+  opacity: 0.85;
+}
+.notes-tree-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 7px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.notes-tree-action {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-tree-row:hover .notes-tree-action,
+.notes-tree-action:focus-visible {
+  opacity: 1;
+}
+.notes-tree-action:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-tree-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.notes-empty {
+  padding: 6px 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.notes-trash-link {
+  margin-top: 8px;
+  padding: 10px 8px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+.notes-trash-link:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Canvas + page ───────────────────────────────────────────────── */
+.notes-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background: var(--bg-base);
+}
+.notes-page {
+  width: min(720px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 40px 0 96px;
+}
+.notes-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+  font-size: 12px;
+}
+.notes-breadcrumbs button {
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+.notes-breadcrumbs button:hover {
+  color: var(--accent);
+}
+.notes-breadcrumbs button:not(:last-child)::after {
+  content: '/';
+  margin-left: 6px;
+  color: var(--text-tertiary);
+}
+/* Icon picker + title: grid with an optional icon slot on the left.
+   When an icon is set, a 56×56 input shows it. When no icon, the
+   EmojiPicker trigger matches that same 56×56 size. */
+.notes-page-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0;
+  margin: 12px 0 20px;
+}
+.notes-icon-input {
+  width: 56px;
+  height: 56px;
+  border: 0;
+  outline: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 34px;
+  text-align: center;
+  transition: background 0.14s ease;
+  margin-right: 12px;
+}
+.notes-icon-input:hover {
+  background: var(--bg-elevated);
+}
+.notes-icon-input::placeholder {
+  color: var(--text-tertiary);
+}
+/* Match the EmojiPicker trigger to the icon input size. */
+.notes-page-head .editor-icon-trigger {
+  width: 56px;
+  height: 56px;
+  margin-right: 12px;
+}
+.notes-page-head .editor-icon-picker {
+  margin-right: 0;
+}
+/* No icon: collapse the first column so the title sits flush left.
+   On hover (or when the EmojiPicker popover is open), show the trigger. */
+.notes-page-head.no-icon:not(:hover):not(.icon-picker-open)
+  .editor-icon-picker {
+  display: none;
+}
+.notes-page-head.no-icon:not(:hover):not(.icon-picker-open) .notes-title-input {
+  grid-column: 1 / -1;
+}
+/* Hide the trigger when no icon and not interacting, but the grid
+   cell reserves space so the title stays aligned. */
+.notes-page-head.no-icon .editor-icon-trigger {
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    border-color 0.15s,
+    background 0.15s;
+}
+.notes-page-head.no-icon:hover .editor-icon-trigger,
+.notes-page-head.no-icon.icon-picker-open .editor-icon-trigger {
+  opacity: 1;
+}
+/* The popover already provides a container border, so remove the input's
+   visible border to avoid a double-border effect. The accent focus glow
+   is preserved. */
+.notes-page-head .editor-icon-popover .editor-icon-custom {
+  border-color: transparent;
+  background: var(--bg-raised);
+}
+.notes-title-input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: clamp(26px, 4vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.notes-title-input::placeholder {
+  color: var(--text-tertiary);
+}
+.notes-save-state {
+  position: absolute;
+  top: -20px;
+  right: 0;
+  color: var(--text-tertiary);
+  font: 10px var(--font-mono);
+  letter-spacing: 0.03em;
+}
+.notes-save-state.error,
+.notes-error {
+  color: #d9573f;
+}
+.notes-error {
+  position: sticky;
+  top: 8px;
+  z-index: 3;
+  width: fit-content;
+  margin: 8px auto;
+  padding: 8px 12px;
+  border: 1px solid rgba(217, 87, 63, 0.4);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+}
+
+/* ── Block editor typography ─────────────────────────────────────── */
+.notes-editor {
+  position: relative;
+  min-height: 320px;
+}
+.notes-editor .tiptap {
+  min-height: 320px;
+  outline: none;
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: var(--text-primary);
+}
+.notes-editor .tiptap > * {
+  margin: 0.5em 0;
+}
+.notes-editor .tiptap h1 {
+  font-size: 1.7em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0.7em 0 0.25em;
+}
+.notes-editor .tiptap h2 {
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0.6em 0 0.2em;
+}
+.notes-editor .tiptap h3 {
+  font-size: 1.18em;
+  font-weight: 600;
+  margin: 0.5em 0 0.2em;
+}
+.notes-editor .tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.notes-editor .tiptap ul,
+.notes-editor .tiptap ol {
+  padding-left: 1.4em;
+}
+.notes-editor .tiptap blockquote {
+  margin-left: 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+.notes-editor .tiptap code {
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  font: 0.88em var(--font-mono);
+}
+.notes-editor .tiptap pre {
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  font: 13px var(--font-mono);
+  line-height: 1.6;
+}
+.notes-editor .tiptap pre code {
+  padding: 0;
+  background: none;
+}
+.notes-editor .tiptap hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+.notes-editor .tiptap table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6em 0;
+}
+.notes-editor .tiptap th,
+.notes-editor .tiptap td {
+  min-width: 80px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-grid);
+  vertical-align: top;
+}
+.notes-editor .tiptap th {
+  background: var(--bg-raised);
+  font-weight: 600;
+  text-align: left;
+}
+.notes-editor .tiptap ul[data-type='taskList'] {
+  padding: 0;
+  list-style: none;
+}
+.notes-editor .tiptap li[data-type='taskItem'] {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.notes-editor .tiptap li[data-type='taskItem'] > label {
+  margin-top: 0.35em;
+}
+.notes-mention {
+  display: inline;
+  padding: 1px 6px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: var(--r-sm);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ── Editor popovers — .cal-card language ────────────────────────── */
+.notes-slash-menu,
+.notes-selection-toolbar {
+  z-index: 4;
+  display: flex;
+  width: max-content;
+  max-width: min(320px, 90vw);
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+.notes-slash-menu {
+  position: absolute;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 280px;
+  overflow: auto;
+  animation: popIn 120ms ease-out both;
+}
+.notes-slash-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notes-slash-menu button small {
+  color: var(--text-tertiary);
+  text-transform: capitalize;
+}
+.notes-selection-toolbar {
+  gap: 1px;
+  animation: popIn 120ms ease-out both;
+}
+.notes-selection-toolbar button {
+  min-width: 30px;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ── Notion-style block gutter (drag handle + add) ───────────────── */
+.notes-block-gutter {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 4px;
+}
+.notes-block-add,
+.notes-block-grip {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: grab;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.notes-block-add {
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.notes-block-add:hover,
+.notes-block-grip:hover {
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+}
+.notes-slash-menu button,
+.notes-selection-toolbar button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.notes-slash-menu button[aria-selected='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.notes-selection-toolbar button:hover,
+.notes-selection-toolbar button[aria-pressed='true'] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* ── Linked / backlinks panel ────────────────────────────────────── */
+.notes-linked {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.notes-linked h2 {
+  margin: 0 0 10px;
+  color: var(--text-tertiary);
+  font: 600 11px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.notes-linked p {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.notes-linked-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.notes-linked-list button {
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: var(--r-md);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.notes-linked-list button:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* ── Trash + empty states + generic buttons ──────────────────────── */
+.notes-trash h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.notes-trash ul {
+  padding: 0;
+  list-style: none;
+}
+.notes-trash li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-trash button,
+.notes-empty-page button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+.notes-trash button:hover,
+.notes-empty-page button:hover {
+  border-color: var(--accent-tint-border);
+}
+.notes-back {
+  min-height: 32px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+.notes-back:hover {
+  color: var(--text-primary);
+}
+.notes-empty-page {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  height: 100%;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.notes-empty-page h1 {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.notes-empty-page p {
+  color: var(--text-tertiary);
+  font-size: 13.5px;
+}
+
+/* ── Split-view note pane (opened beside the calendar grid) ──────── */
+.notes-pane {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-base);
+  border-left: 1px solid var(--border);
+}
+.notes-pane-close {
+  position: sticky;
+  top: 12px;
+  left: calc(100% - 50px);
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-pane-close:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-pane-loading {
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.notes-sidebar-open {
+  display: none;
+}
+/* The editor's caret is the focus indicator — no outline on the contenteditable. */
+.notes-editor .tiptap:focus,
+.notes-editor .tiptap:focus-visible {
+  outline: none;
+}
+.notes-shell button:focus-visible,
+.notes-shell input:focus-visible,
+.notes-slash-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.katex {
+  color: var(--text-primary);
+}
+
+/* ── Mobile: sidebar becomes an overlay drawer (matches calendar) ── */
+@media (max-width: 800px) {
+  .notes-shell > .app-rail {
+    display: none;
+  }
+  .notes-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 8;
+    width: min(300px, 86vw);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-md);
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .notes-sidebar.open {
+    transform: translateX(0);
+  }
+  .notes-page {
+    width: min(100% - 32px, 720px);
+    padding-top: 60px;
+  }
+  .notes-sidebar-open {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  /* Larger touch targets on mobile only. */
+  .notes-sidebar-heading button {
+    width: 40px;
+    height: 40px;
+  }
+  .notes-tree-row {
+    min-height: 40px;
+  }
+  .notes-tree-action {
+    opacity: 1;
+  }
+}

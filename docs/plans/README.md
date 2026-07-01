@@ -10,4 +10,4 @@ task done. Reuse existing design tokens and components in
 
 | Plan | Scope | Status |
 |---|---|---|
-| — | No active plans. Completed plans → [docs/decisions/](../decisions/) | — |
+| [NOTES_MODULE_PLAN.md](NOTES_MODULE_PLAN.md) | Phase 2 Notes/Pages, calendar-first: Tiptap block editor (tables + LaTeX + `[[` mentions), standalone nested page tree, event→note linking with a calendar/editor **split view** (full-screen on mobile), and backlink panels over the existing `Link` graph. Databases/spreadsheets/uploads deferred. | ready to implement |

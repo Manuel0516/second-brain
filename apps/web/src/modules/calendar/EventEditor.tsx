@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Segmented } from '../../components/Segmented'
+import { EmojiPicker } from '../../components/EmojiPicker'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
@@ -63,7 +64,18 @@ interface Props {
   event: Partial<CalendarEvent>
   onClose: () => void
   onSaved: () => void
+  onOpenNote?: (pageId: string) => void
   onDraftChange?: (event: Partial<CalendarEvent>) => void
+}
+
+interface EventLink {
+  id: string
+  target_type: 'page' | 'event'
+  target_id: string
+  relation: string
+  direction: 'incoming' | 'outgoing'
+  title: string
+  icon?: string | null
 }
 
 function localValue(value: string) {
@@ -78,6 +90,7 @@ export function EventEditor({
   event,
   onClose,
   onSaved,
+  onOpenNote,
   onDraftChange,
 }: Props) {
   const { settings } = useSettings()
@@ -132,12 +145,16 @@ export function EventEditor({
     'idle',
   )
   const [saveErrorPulse, setSaveErrorPulse] = useState(false)
+  const [eventLinks, setEventLinks] = useState<EventLink[]>([])
+  const [noteQuery, setNoteQuery] = useState('')
+  const [noteResults, setNoteResults] = useState<
+    { id: string; title: string; type: string; icon?: string | null }[]
+  >([])
   const [closing, setClosing] = useState(false)
   const [dragY, setDragY] = useState(0) // pull-down gesture offset
   const [isDragging, setIsDragging] = useState(false)
   const dragYRef = useRef(0)
   const dragStartRef = useRef(0)
-  const [iconPickerOpen, setIconPickerOpen] = useState(false)
   // When set, a recurring event needs the user to choose an edit/delete scope.
   const [scopePrompt, setScopePrompt] = useState<'save' | 'delete' | null>(null)
   const [recurrence, setRecurrence] = useState<Recurrence>({
@@ -164,7 +181,6 @@ export function EventEditor({
   const saveStateTimer = useRef(0)
   const errorFrame = useRef(0)
   const errorTimer = useRef(0)
-  const iconPickerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLElement>(null)
   // Guard: ignore close-requests fired within 300ms of mount (e.g. synthetic
   // mousedown from the touch double-tap that opened the editor).
@@ -172,6 +188,92 @@ export function EventEditor({
   useEffect(() => {
     mountedAt.current = Math.floor(performance.now())
   }, [])
+
+  const refreshLinks = async () => {
+    if (!event.id) return
+    try {
+      const response = await apiCall(`/api/events/${event.id}/links`)
+      if (!response.ok) return
+      const links = await response.json()
+      if (Array.isArray(links)) setEventLinks(links)
+    } catch {
+      /* non-critical */
+    }
+  }
+  useEffect(() => {
+    if (!event.id) return
+    let active = true
+    void (async () => {
+      try {
+        const response = await apiCall(`/api/events/${event.id}/links`)
+        if (!response.ok || !active) return
+        const links = await response.json()
+        if (Array.isArray(links) && active) setEventLinks(links)
+      } catch {
+        /* non-critical */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [event.id])
+
+  // Link an existing note (page) to this event — the same note can be linked
+  // to many events, and an event can link many notes (generic Link edges).
+  const linkExistingNote = async (pageId: string) => {
+    if (!event.id) return
+    const response = await apiCall('/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'event',
+        source_id: event.id,
+        target_type: 'page',
+        target_id: pageId,
+        relation: 'note',
+      }),
+    })
+    if (response.ok || response.status === 409) {
+      setNoteQuery('')
+      setNoteResults([])
+      await refreshLinks()
+    }
+  }
+
+  const unlinkItem = async (linkId: string) => {
+    const response = await apiCall(`/api/links/${linkId}`, { method: 'DELETE' })
+    if (response.ok) await refreshLinks()
+  }
+
+  useEffect(() => {
+    let active = true
+    const query = noteQuery.trim()
+    const timer = setTimeout(async () => {
+      if (!query) {
+        if (active) setNoteResults([])
+        return
+      }
+      try {
+        const response = await apiCall(
+          `/api/search?q=${encodeURIComponent(query)}`,
+        )
+        if (!response.ok || !active) return
+        const results = await response.json()
+        const linkedIds = new Set(eventLinks.map((link) => link.target_id))
+        setNoteResults(
+          (Array.isArray(results) ? results : [])
+            .filter((item) => item.type === 'page' && !linkedIds.has(item.id))
+            .slice(0, 6),
+        )
+      } catch {
+        if (active) setNoteResults([])
+      }
+    }, 200)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [noteQuery, eventLinks])
 
   const closeWithAnimation = useCallback((complete: () => void) => {
     if (closingRef.current) return
@@ -231,20 +333,6 @@ export function EventEditor({
       window.clearTimeout(errorTimer.current)
     }
   }, [closeWithAnimation, onClose])
-
-  useEffect(() => {
-    if (!iconPickerOpen) return
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (
-        iconPickerRef.current &&
-        !iconPickerRef.current.contains(event.target as Node)
-      ) {
-        setIconPickerOpen(false)
-      }
-    }
-    window.addEventListener('mousedown', closeOnOutsideClick)
-    return () => window.removeEventListener('mousedown', closeOnOutsideClick)
-  }, [iconPickerOpen])
 
   const showSaveError = useCallback((message: string) => {
     setError(message)
@@ -308,7 +396,7 @@ export function EventEditor({
   const persist = useCallback(
     async (scope: 'all' | 'this' = 'all') => {
       setError('')
-      const fail = (message: string) => {
+      const fail = (message: string): false => {
         setSaveState('idle')
         showSaveError(message)
         return false
@@ -443,13 +531,31 @@ export function EventEditor({
         return fail('Could not connect to save the event.')
       }
       if (response.ok) {
+        const savedEvent = await response.json().catch(() => null)
+        let notePageId: string | undefined
+        if (form.connect_notes && savedEvent?.id) {
+          const noteResponse = await apiCall(
+            `/api/events/${savedEvent.id}/note`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: form.note_title.trim() || form.title.trim(),
+                icon: icon || undefined,
+              }),
+            },
+          ).catch(() => null)
+          if (!noteResponse?.ok) return fail('Could not create the event note.')
+          const page = await noteResponse.json()
+          notePageId = page.id
+        }
         const remaining =
           MIN_SAVE_SPINNER_MS - (performance.now() - saveStartedAt)
         if (remaining > 0) {
           await new Promise((resolve) => window.setTimeout(resolve, remaining))
         }
         setSaveState('saved')
-        return true
+        return { notePageId }
       } else {
         const data = await response.json().catch(() => ({}))
         const message =
@@ -472,10 +578,15 @@ export function EventEditor({
 
   const commitSave = async (scope: 'all' | 'this') => {
     setScopePrompt(null)
-    if (await persist(scope)) {
+    const result = await persist(scope)
+    if (result) {
       window.clearTimeout(saveStateTimer.current)
       saveStateTimer.current = window.setTimeout(
-        () => closeWithAnimation(onSaved),
+        () =>
+          closeWithAnimation(() => {
+            onSaved()
+            if (result.notePageId) onOpenNote?.(result.notePageId)
+          }),
         450,
       )
     }
@@ -511,6 +622,27 @@ export function EventEditor({
       return
     }
     if (window.confirm('Delete this event?')) void performDelete('all')
+  }
+
+  const openEventNote = async () => {
+    if (!event.id) {
+      showSaveError('Save the event before opening its note.')
+      return
+    }
+    const response = await apiCall(`/api/events/${event.id}/note`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: form.note_title.trim() || form.title.trim() || 'Untitled',
+        icon: icon || undefined,
+      }),
+    }).catch(() => null)
+    if (!response?.ok) {
+      showSaveError('Could not open the event note.')
+      return
+    }
+    const page = await response.json()
+    closeWithAnimation(() => onOpenNote?.(page.id))
   }
 
   const openRepeat = () => {
@@ -595,83 +727,12 @@ export function EventEditor({
           </header>
           <form onSubmit={save} noValidate>
             <div className="editor-title-row">
-              <div className="editor-icon-picker" ref={iconPickerRef}>
-                <button
-                  type="button"
-                  className="editor-icon-trigger"
-                  aria-label="Choose event icon"
-                  aria-haspopup="menu"
-                  aria-expanded={iconPickerOpen}
-                  onClick={() => setIconPickerOpen((current) => !current)}
-                >
-                  {icon ? (
-                    <span className="event-icon-glyph" aria-hidden="true">
-                      {icon}
-                    </span>
-                  ) : (
-                    <svg
-                      className="editor-icon-empty"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M8.5 14.5a4 4 0 0 0 7 0" />
-                      <path d="M9 9.5h.01M15 9.5h.01" />
-                    </svg>
-                  )}
-                </button>
-                {iconPickerOpen && (
-                  <div
-                    className="editor-icon-popover"
-                    role="dialog"
-                    aria-label="Event icon"
-                  >
-                    <div className="editor-icon-grid">
-                      {iconPresets.map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          className={`editor-icon-choice ${icon === preset ? 'active' : ''}`}
-                          aria-pressed={icon === preset}
-                          onClick={() => {
-                            setIcon(preset)
-                            setIconPickerOpen(false)
-                          }}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className="editor-icon-custom"
-                      aria-label="Custom icon — type or paste any emoji or Nerd Font glyph"
-                      placeholder="Type or paste emoji / glyph…"
-                      inputMode="text"
-                      title="macOS: Ctrl+Cmd+Space for emoji picker"
-                      value={icon}
-                      onChange={(e) => setIcon(e.target.value.slice(0, 32))}
-                    />
-                    {icon && (
-                      <button
-                        type="button"
-                        className="editor-icon-clear"
-                        onClick={() => {
-                          setIcon('')
-                          setIconPickerOpen(false)
-                        }}
-                      >
-                        Remove icon
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+              <EmojiPicker
+                icon={icon}
+                onChange={setIcon}
+                presets={iconPresets}
+                label="event icon"
+              />
               <input
                 className="editor-title"
                 required
@@ -710,6 +771,74 @@ export function EventEditor({
                 })}
               </div>
             </fieldset>
+
+            {event.id && (
+              <fieldset className="editor-group">
+                <legend>Linked</legend>
+                <div className="event-linked-list">
+                  {eventLinks.map((link) => (
+                    <div key={link.id} className="event-linked-item">
+                      <span aria-hidden="true">{link.icon || '↗'}</span>
+                      <button
+                        type="button"
+                        className="event-linked-open"
+                        disabled={link.target_type !== 'page'}
+                        onClick={() =>
+                          link.target_type === 'page' &&
+                          closeWithAnimation(() => onOpenNote?.(link.target_id))
+                        }
+                      >
+                        <span className="event-linked-title">{link.title}</span>
+                        <small>{link.relation}</small>
+                      </button>
+                      <button
+                        type="button"
+                        className="event-linked-unlink"
+                        aria-label={`Unlink ${link.title}`}
+                        title="Unlink"
+                        onClick={() => void unlinkItem(link.id)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {!eventLinks.length && (
+                    <p className="connection-help">No linked items yet.</p>
+                  )}
+                  <div className="event-link-search">
+                    <input
+                      type="text"
+                      placeholder="Link an existing note…"
+                      value={noteQuery}
+                      onChange={(e) => setNoteQuery(e.target.value)}
+                    />
+                    {noteResults.length > 0 && (
+                      <div className="event-link-results" role="listbox">
+                        {noteResults.map((result) => (
+                          <button
+                            key={result.id}
+                            type="button"
+                            role="option"
+                            aria-selected={false}
+                            onClick={() => void linkExistingNote(result.id)}
+                          >
+                            <span aria-hidden="true">{result.icon || '▧'}</span>
+                            <span>{result.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost connection-open-note"
+                    onClick={() => void openEventNote()}
+                  >
+                    Create new note
+                  </button>
+                </div>
+              </fieldset>
+            )}
 
             <fieldset className="editor-group">
               <legend>When</legend>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppRail } from '../components/AppRail'
 import { Sidebar } from '../modules/calendar/Sidebar'
@@ -21,6 +21,11 @@ import { apiCall } from '../lib/api'
 type View = 'day' | 'week' | 'month'
 const VIEWS: View[] = ['day', 'week', 'month']
 const PILL_WIDTH = 62
+const NotesPagePane = lazy(() =>
+  import('../modules/notes/NotesPagePane').then((module) => ({
+    default: module.NotesPagePane,
+  })),
+)
 
 function formatTitle(
   view: View,
@@ -100,6 +105,11 @@ export function Calendar() {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
+  const [openNotePageId, setOpenNotePageId] = useState<string | null>(null)
+  const [notePaneWidth, setNotePaneWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('sb-note-pane-width'))
+    return stored || 420
+  })
   // Settings load asynchronously. Apply the saved default view + week start when
   // they arrive (and when changed on the settings page) by adjusting state during
   // render — guarded so manual navigation isn't reset. (React's recommended
@@ -116,6 +126,44 @@ export function Calendar() {
   const navDir = useRef(0)
   // Trackpad day-stepping skips the slide so continuous scrolling stays smooth.
   const animateNav = useRef(false)
+  const dividerDrag = useRef<{
+    pointerId: number
+    startX: number
+    startWidth: number
+  } | null>(null)
+
+  const moveDivider = (pointer: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dividerDrag.current
+    if (!drag || drag.pointerId !== pointer.pointerId) return
+    const max = Math.max(320, window.innerWidth * 0.65)
+    setNotePaneWidth(
+      Math.min(
+        max,
+        Math.max(320, drag.startWidth + drag.startX - pointer.clientX),
+      ),
+    )
+  }
+
+  const finishDivider = (pointer: React.PointerEvent<HTMLDivElement>) => {
+    if (dividerDrag.current?.pointerId !== pointer.pointerId) return
+    pointer.currentTarget.releasePointerCapture(pointer.pointerId)
+    dividerDrag.current = null
+    localStorage.setItem(
+      'sb-note-pane-width',
+      String(Math.round(notePaneWidth)),
+    )
+  }
+
+  const openMentionedEvent = async (eventId: string) => {
+    const response = await apiCall(`/api/events/${eventId}`).catch(() => null)
+    if (!response?.ok) return
+    const calendarEvent: CalendarEvent = await response.json()
+    const day = startOfDay(new Date(calendarEvent.start_at))
+    setCursor(day)
+    setView('day')
+    setOpenNotePageId(null)
+    setEditorEvent(calendarEvent)
+  }
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)')
@@ -522,6 +570,62 @@ export function Calendar() {
             )}
           </div>
         </div>
+        {openNotePageId && (
+          <>
+            <div
+              className="calendar-note-divider"
+              role="slider"
+              aria-label="Resize note pane"
+              aria-orientation="horizontal"
+              aria-valuemin={320}
+              aria-valuemax={Math.round(window.innerWidth * 0.65)}
+              aria-valuenow={Math.round(notePaneWidth)}
+              tabIndex={0}
+              onPointerDown={(pointer) => {
+                pointer.currentTarget.setPointerCapture(pointer.pointerId)
+                dividerDrag.current = {
+                  pointerId: pointer.pointerId,
+                  startX: pointer.clientX,
+                  startWidth: notePaneWidth,
+                }
+              }}
+              onPointerMove={moveDivider}
+              onPointerUp={finishDivider}
+              onPointerCancel={() => (dividerDrag.current = null)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')
+                  return
+                event.preventDefault()
+                const next = Math.min(
+                  window.innerWidth * 0.65,
+                  Math.max(
+                    320,
+                    notePaneWidth + (event.key === 'ArrowLeft' ? 24 : -24),
+                  ),
+                )
+                setNotePaneWidth(next)
+                localStorage.setItem(
+                  'sb-note-pane-width',
+                  String(Math.round(next)),
+                )
+              }}
+            />
+            <aside
+              className="calendar-note-pane"
+              style={{ width: isMobile ? undefined : notePaneWidth }}
+            >
+              <Suspense
+                fallback={<p className="notes-pane-loading">Loading note…</p>}
+              >
+                <NotesPagePane
+                  pageId={openNotePageId}
+                  onClose={() => setOpenNotePageId(null)}
+                  onOpenEvent={(id) => void openMentionedEvent(id)}
+                />
+              </Suspense>
+            </aside>
+          </>
+        )}
       </div>
       {editorEvent && (
         <EventEditor
@@ -533,6 +637,7 @@ export function Calendar() {
             setDraftPreview(null)
           }}
           onSaved={saved}
+          onOpenNote={setOpenNotePageId}
           onDraftChange={setDraftPreview}
         />
       )}

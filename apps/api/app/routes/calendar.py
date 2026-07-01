@@ -4,12 +4,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, User
+from app.models import Calendar, CalendarEvent, Link, User
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -280,6 +280,18 @@ async def owned_event(event_id: str, user: User, session: AsyncSession) -> Calen
     return event
 
 
+async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> None:
+    if event_ids:
+        await session.execute(
+            delete(Link).where(
+                or_(
+                    (Link.source_type == "event") & Link.source_id.in_(event_ids),
+                    (Link.target_type == "event") & Link.target_id.in_(event_ids),
+                )
+            )
+        )
+
+
 @router.get("/calendars", response_model=list[CalendarResponse])
 async def get_calendars(
     user: User = Depends(get_current_user),
@@ -328,6 +340,12 @@ async def delete_calendar(
     calendar = await owned_calendar(calendar_id, user, session)
     if calendar.source != "local":
         raise HTTPException(status_code=409, detail="Synced calendars cannot be deleted here")
+    event_ids = list(
+        await session.scalars(
+            select(CalendarEvent.id).where(CalendarEvent.calendar_id == calendar.id)
+        )
+    )
+    await _delete_event_links(session, event_ids)
     await session.execute(delete(CalendarEvent).where(CalendarEvent.calendar_id == calendar.id))
     await session.delete(calendar)
     await session.commit()
@@ -441,6 +459,15 @@ async def get_events(
         query = query.where(Calendar.id.in_(calendar_ids))
     events = await session.scalars(query.order_by(CalendarEvent.start_at))
     return [item for event in events for item in expand_event(event, from_date, to_date)]
+
+
+@router.get("/events/{event_id}", response_model=EventResponse)
+async def get_event(
+    event_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> EventResponse:
+    return event_response(await owned_event(event_id, user, session))
 
 
 @router.post("/events", response_model=EventResponse, status_code=201)
@@ -579,6 +606,13 @@ async def delete_event(
 
     # Non-recurring, or the whole series: drop the row (override children cascade).
     if scope == "all" or not event.rrule:
+        event_ids = [event.id]
+        event_ids.extend(
+            await session.scalars(
+                select(CalendarEvent.id).where(CalendarEvent.recurrence_parent_id == event.id)
+            )
+        )
+        await _delete_event_links(session, event_ids)
         await session.delete(event)
         await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -592,6 +626,15 @@ async def delete_event(
     if scope == "this":
         # Hide just this occurrence and remove any override that replaced it.
         event.recurrence_exdates = [*(event.recurrence_exdates or []), occ.isoformat()]
+        override_ids = list(
+            await session.scalars(
+                select(CalendarEvent.id).where(
+                    CalendarEvent.recurrence_parent_id == event.id,
+                    CalendarEvent.recurrence_overridden_at == occ,
+                )
+            )
+        )
+        await _delete_event_links(session, override_ids)
         await session.execute(
             delete(CalendarEvent).where(
                 CalendarEvent.recurrence_parent_id == event.id,
@@ -600,6 +643,15 @@ async def delete_event(
         )
     else:  # following — end the series here and drop later overrides/exceptions.
         event.recurrence_until = occ
+        override_ids = list(
+            await session.scalars(
+                select(CalendarEvent.id).where(
+                    CalendarEvent.recurrence_parent_id == event.id,
+                    CalendarEvent.recurrence_overridden_at >= occ,
+                )
+            )
+        )
+        await _delete_event_links(session, override_ids)
         await session.execute(
             delete(CalendarEvent).where(
                 CalendarEvent.recurrence_parent_id == event.id,

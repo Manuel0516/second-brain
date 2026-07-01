@@ -207,6 +207,35 @@ class UserSettings(Base):
     user: Mapped["User"] = relationship("User", back_populates="settings")
 
 
+class Page(Base):
+    __tablename__ = "pages"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True
+    )
+    parent_page_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("pages.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), default="Untitled", nullable=False)
+    icon: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # ponytail: one JSON doc per page; split into blocks only if scale demands it.
+    content: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    position: Mapped[str] = mapped_column(String(255), default="a0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Link(Base):
     __tablename__ = "links"
     __table_args__ = (

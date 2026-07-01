@@ -29,10 +29,20 @@ describe('EventEditor', () => {
   it('submits a new event through the API', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        new Response(JSON.stringify({ id: 'event-1' }), { status: 201 }),
+      .mockImplementation((input) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input).endsWith('/note')
+                ? { id: 'page-1', title: 'Project notes' }
+                : { id: 'event-1' },
+            ),
+            { status: 201 },
+          ),
+        ),
       )
     const onSaved = vi.fn()
+    const onOpenNote = vi.fn()
 
     render(
       <EventEditor
@@ -51,6 +61,7 @@ describe('EventEditor', () => {
         }}
         onClose={vi.fn()}
         onSaved={onSaved}
+        onOpenNote={onOpenNote}
       />,
     )
 
@@ -74,8 +85,13 @@ describe('EventEditor', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), {
       timeout: 2_000,
     })
+    expect(onOpenNote).toHaveBeenCalledWith('page-1')
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/events',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/events/event-1/note',
       expect.objectContaining({ method: 'POST' }),
     )
     const request = fetchMock.mock.calls[0][1]

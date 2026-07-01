@@ -490,15 +490,103 @@ change, and the touch gesture is unaffected.
 
 ---
 
+## 14. Shared calendar order — event editor picker
+
+### Problem
+
+Reordering calendars by dragging in the sidebar changed the sidebar only. The
+event editor's calendar picker still listed calendars in raw API order, and its
+default-calendar fallback (`calendars[0]`) didn't match the first chip shown.
+
+### Decision
+
+Extract the ordering into one shared module now that a second consumer exists.
+
+- New `apps/web/src/modules/calendar/order.ts` — single source of truth:
+  `CALENDAR_ORDER_KEY`, `storedCalendarOrder()`, and
+  `orderCalendars(calendars, order?)` (saved order first, unknown ids to the
+  end).
+- `Sidebar.tsx` refactored to import these (removed its duplicate key constant
+  and inline sort); behaviour unchanged, confirmed by the existing reorder test.
+- `EventEditor.tsx` orders `calendars` via `orderCalendars(...)` (memoised so
+  the derived `selectedCalendarId` stays stable for the React Compiler) and uses
+  it for both the picker chips and the default-calendar fallbacks.
+
+The editor remounts on open (it's keyed), so it reads the latest saved order
+from `localStorage` each time — the reorder syncs on next open, not live.
+
+**Files:** `apps/web/src/modules/calendar/order.ts` (new),
+`apps/web/src/modules/calendar/Sidebar.tsx`,
+`apps/web/src/modules/calendar/EventEditor.tsx`.
+
+---
+
+## 15. Default calendar from settings applied on create
+
+### Problem
+
+The Calendar settings page exposed a **default calendar** (`default_calendar_id`),
+but nothing consumed it. New events always opened on the first calendar.
+
+### Decision
+
+`Calendar.tsx` `createAt` now seeds the draft's `calendar_id` with the settings
+default when that calendar still exists, falling back to `orderCalendars(...)[0]`
+(so it also matches the saved order):
+
+```ts
+const defaultCalendar =
+  calendars.find((c) => c.id === settings.default_calendar_id) ??
+  orderCalendars(calendars)[0]
+```
+
+**Files:** `apps/web/src/pages/Calendar.tsx`.
+
+---
+
+## 16. 5-minute snap for create, move, and resize
+
+### Problem
+
+Event creation, move, and resize resolved to 1-minute granularity, so events
+rarely landed on clean 5-minute boundaries. Move/resize snapped the drag *delta*
+to 5 minutes but added it to an off-grid original time, preserving the arbitrary
+offset (e.g. a 10:07 event stayed at :07).
+
+### Decision
+
+Snap the **result**, not just the delta, to a 5-minute grid.
+
+- **Create/select** (`time.ts` `minuteAtPointer`) rounds to the nearest 5
+  minutes (`SNAP_MINUTES = 5`) instead of flooring to 1, clamped to
+  `MINUTES_PER_DAY − SNAP_MINUTES`.
+- **Move/resize** (`TimeGrid.tsx` `moveEventGesture`) captures an `anchorMinute`
+  on the gesture — the minute-of-day of the dragged edge (start for move, end
+  for resize) — and computes
+  `target = round((anchorMinute + rawMinutes) / 5) * 5`, then
+  `deltaMinutes = target − anchorMinute`. The dragged edge lands on a boundary
+  regardless of the event's original offset; move preserves duration, resize
+  snaps the end. Preview and committed value share `deltaMinutes`, so there is no
+  jump on drop. Both desktop and touch route through the same function.
+
+**Files:** `apps/web/src/modules/calendar/time.ts` (`minuteAtPointer` snap),
+`apps/web/src/modules/calendar/TimeGrid.tsx` (`anchorMinute`, snapped delta),
+`apps/web/src/modules/calendar/TimeGrid.test.ts` (snap assertions).
+
+---
+
 ## Files changed
 
 | File | Changes |
 |---|---|
-| `apps/web/src/modules/calendar/TimeGrid.tsx` | `overlapOffsets()` algorithm, `resizingDay` state, touch state machine (`TouchState`, handlers), double-tap detection, time-display overflow clip, day-column touch dispatch, event-chip touch dispatch, resize handle touch guard, `draftReplaceKey` occurrence-scoped draft filter |
+| `apps/web/src/modules/calendar/TimeGrid.tsx` | `overlapOffsets()` algorithm, `resizingDay` state, touch state machine (`TouchState`, handlers), double-tap detection, time-display overflow clip, day-column touch dispatch, event-chip touch dispatch, resize handle touch guard, `draftReplaceKey` occurrence-scoped draft filter, 5-min `anchorMinute` snap for move/resize |
 | `apps/web/src/modules/calendar/MonthView.tsx` | `draftReplaceKey` occurrence-scoped draft filter |
-| `apps/web/src/pages/Calendar.tsx` | Derives `draftReplaceKey` from `editorEvent` and passes it to both views |
-| `apps/web/src/modules/calendar/EventEditor.tsx` | Pull-down grabber + drag handlers, `closeImmediate()` (skips `editorOut` on grabber close), `mountedAt` close guard, repeat/scope prompts rendered via `createPortal` to `document.body` |
-| `apps/web/src/modules/calendar/Sidebar.tsx` | Long-press (375 ms) drag-to-reorder with live reordering + finger re-anchoring, `homeIndex`/`ROW_GAP`, `localStorage` order persistence, delete-calendar confirmation dialog |
+| `apps/web/src/modules/calendar/time.ts` | `minuteAtPointer` snaps to nearest 5 minutes |
+| `apps/web/src/modules/calendar/TimeGrid.test.ts` | 5-minute snap assertions |
+| `apps/web/src/modules/calendar/order.ts` (new) | Shared calendar-order source of truth (`orderCalendars`, `storedCalendarOrder`, `CALENDAR_ORDER_KEY`) |
+| `apps/web/src/pages/Calendar.tsx` | Derives `draftReplaceKey`; applies settings default calendar in `createAt` |
+| `apps/web/src/modules/calendar/EventEditor.tsx` | Pull-down grabber + drag handlers, `closeImmediate()` (skips `editorOut` on grabber close), `mountedAt` close guard, repeat/scope prompts rendered via `createPortal` to `document.body`, ordered calendar picker |
+| `apps/web/src/modules/calendar/Sidebar.tsx` | Long-press (375 ms) drag-to-reorder with live reordering + finger re-anchoring, `homeIndex`/`ROW_GAP`, `localStorage` order persistence via shared `order.ts`, delete-calendar confirmation dialog |
 | `apps/web/src/modules/calendar/Sidebar.test.tsx` | Reorder flow assertions (re-anchored `translateY`) |
 | `apps/api/app/routes/calendar.py` | `DELETE /api/calendars/{id}` cascade-deletes events instead of rejecting with 409 |
 | `apps/web/src/styles.css` | `.day-column` `touch-action: pan-y`, calendar colour `::before` dot, `editor-grabber`/`editor-grabber-handle`/`editor-drag-wrap` styles, removed `long-press-active` styles, `.calendar-row.reordering` lifted style, `.cal-card-actions .danger`, removed `.scope-prompt { height: 105% }`, `@media (pointer: fine)` grabber hide |
