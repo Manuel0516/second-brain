@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { Segmented } from '../../components/Segmented'
 import { EmojiPicker } from '../../components/EmojiPicker'
 import { IconButton } from '../../components/IconButton'
+import { Dropdown } from '../../components/Dropdown'
+import { FolderPicker } from '../../components/FolderPicker'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
@@ -121,6 +123,7 @@ export function EventEditor({
     description: event.description ?? '',
     connect_notes: Boolean(event.connections?.notes),
     note_title: event.connections?.notes?.title ?? event.title ?? '',
+    note_folder_id: event.connections?.notes?.folder_id ?? null,
     connect_finance: Boolean(event.connections?.finance),
     finance_type: event.connections?.finance?.type ?? 'expense',
     finance_amount: event.connections?.finance?.amount?.toString() ?? '',
@@ -151,6 +154,12 @@ export function EventEditor({
   const [noteResults, setNoteResults] = useState<
     { id: string; title: string; type: string; icon?: string | null }[]
   >([])
+  // Create mode: existing notes picked to be linked once the event is saved.
+  const [pendingNoteLinks, setPendingNoteLinks] = useState<
+    { id: string; title: string; icon?: string | null }[]
+  >([])
+  // Edit mode: reveal the folder+title mini-form inside the Linked card.
+  const [newNoteOpen, setNewNoteOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [dragY, setDragY] = useState(0) // pull-down gesture offset
   const [isDragging, setIsDragging] = useState(false)
@@ -209,7 +218,17 @@ export function EventEditor({
         const response = await apiCall(`/api/events/${event.id}/links`)
         if (!response.ok || !active) return
         const links = await response.json()
-        if (Array.isArray(links) && active) setEventLinks(links)
+        if (Array.isArray(links) && active) {
+          setEventLinks(links)
+          // Links made elsewhere (notes side) still flip the toggle on.
+          if (links.some((link) => link.target_type === 'page')) {
+            setForm((current) =>
+              current.connect_notes
+                ? current
+                : { ...current, connect_notes: true },
+            )
+          }
+        }
       } catch {
         /* non-critical */
       }
@@ -260,7 +279,10 @@ export function EventEditor({
         )
         if (!response.ok || !active) return
         const results = await response.json()
-        const linkedIds = new Set(eventLinks.map((link) => link.target_id))
+        const linkedIds = new Set([
+          ...eventLinks.map((link) => link.target_id),
+          ...pendingNoteLinks.map((link) => link.id),
+        ])
         setNoteResults(
           (Array.isArray(results) ? results : [])
             .filter((item) => item.type === 'page' && !linkedIds.has(item.id))
@@ -274,7 +296,7 @@ export function EventEditor({
       active = false
       clearTimeout(timer)
     }
-  }, [noteQuery, eventLinks])
+  }, [noteQuery, eventLinks, pendingNoteLinks])
 
   const closeWithAnimation = useCallback((complete: () => void) => {
     if (closingRef.current) return
@@ -349,7 +371,7 @@ export function EventEditor({
     })
   }, [])
 
-  const set = (key: keyof typeof form, value: string | boolean) => {
+  const set = (key: keyof typeof form, value: string | boolean | null) => {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
@@ -437,7 +459,11 @@ export function EventEditor({
         value === '' ? null : Number(value)
       const connections: EventConnections = {
         notes: form.connect_notes
-          ? { title: form.note_title.trim() || form.title.trim() }
+          ? {
+              title: form.note_title.trim() || form.title.trim(),
+              folder_id: form.note_folder_id,
+              link_ids: pendingNoteLinks.map((link) => link.id),
+            }
           : null,
         finance: form.connect_finance
           ? {
@@ -534,7 +560,10 @@ export function EventEditor({
       if (response.ok) {
         const savedEvent = await response.json().catch(() => null)
         let notePageId: string | undefined
-        if (form.connect_notes && savedEvent?.id) {
+        // Create mode: make the new note (in its folder) and attach any
+        // pre-picked existing notes. Edit mode manages links in the Linked
+        // card instead — except the toggle-off cleanup below.
+        if (!event.id && form.connect_notes && savedEvent?.id) {
           const noteResponse = await apiCall(
             `/api/events/${savedEvent.id}/note`,
             {
@@ -543,12 +572,38 @@ export function EventEditor({
               body: JSON.stringify({
                 title: form.note_title.trim() || form.title.trim(),
                 icon: icon || undefined,
+                parent_page_id: form.note_folder_id,
               }),
             },
           ).catch(() => null)
           if (!noteResponse?.ok) return fail('Could not create the event note.')
           const page = await noteResponse.json()
           notePageId = page.id
+          for (const pending of pendingNoteLinks) {
+            // 409 (already linked) and network failures are non-fatal.
+            await apiCall('/api/links', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source_type: 'event',
+                source_id: savedEvent.id,
+                target_type: 'page',
+                target_id: pending.id,
+                relation: 'note',
+              }),
+            }).catch(() => null)
+          }
+        }
+        // Edit mode, toggle switched off: remove every event↔note link.
+        // The note pages themselves survive in the tree.
+        if (event.id && !form.connect_notes) {
+          for (const link of eventLinks.filter(
+            (item) => item.target_type === 'page',
+          )) {
+            await apiCall(`/api/links/${link.id}`, {
+              method: 'DELETE',
+            }).catch(() => null)
+          }
         }
         const remaining =
           MIN_SAVE_SPINNER_MS - (performance.now() - saveStartedAt)
@@ -568,9 +623,11 @@ export function EventEditor({
     },
     [
       event.id,
+      eventLinks,
       form,
       icon,
       occurrenceStart,
+      pendingNoteLinks,
       recurrence,
       selectedCalendarId,
       showSaveError,
@@ -636,6 +693,9 @@ export function EventEditor({
       body: JSON.stringify({
         title: form.note_title.trim() || form.title.trim() || 'Untitled',
         icon: icon || undefined,
+        parent_page_id: form.note_folder_id,
+        // The Linked card creates additional notes, never reuses the first.
+        force_new: eventLinks.some((link) => link.target_type === 'page'),
       }),
     }).catch(() => null)
     if (!response?.ok) {
@@ -643,6 +703,7 @@ export function EventEditor({
       return
     }
     const page = await response.json()
+    setNewNoteOpen(false)
     closeWithAnimation(() => onOpenNote?.(page.id))
   }
 
@@ -774,13 +835,13 @@ export function EventEditor({
               </div>
             </fieldset>
 
-            {event.id && (
+            {event.id && form.connect_notes && (
               <fieldset className="editor-group">
                 <legend>Linked</legend>
                 <div className="event-linked-list">
                   {eventLinks.map((link) => (
                     <div key={link.id} className="event-linked-item">
-                      <span aria-hidden="true">{link.icon || '↗'}</span>
+                      {link.icon && <span aria-hidden="true">{link.icon}</span>}
                       <button
                         type="button"
                         className="event-linked-open"
@@ -824,20 +885,46 @@ export function EventEditor({
                             aria-selected={false}
                             onClick={() => void linkExistingNote(result.id)}
                           >
-                            <span aria-hidden="true">{result.icon || '▧'}</span>
+                            {result.icon && (
+                              <span aria-hidden="true">{result.icon}</span>
+                            )}
                             <span>{result.title}</span>
                           </button>
                         ))}
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    className="ghost connection-open-note"
-                    onClick={() => void openEventNote()}
-                  >
-                    Create new note
-                  </button>
+                  {newNoteOpen ? (
+                    <div className="connection-options">
+                      <FolderPicker
+                        value={form.note_folder_id}
+                        onChange={(id) => set('note_folder_id', id)}
+                      />
+                      <label>
+                        Note title
+                        <input
+                          value={form.note_title}
+                          placeholder={form.title || 'Related note'}
+                          onChange={(e) => set('note_title', e.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="ghost connection-open-note"
+                        onClick={() => void openEventNote()}
+                      >
+                        Create and open
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ghost connection-open-note"
+                      onClick={() => setNewNoteOpen(true)}
+                    >
+                      Create new note
+                    </button>
+                  )}
                 </div>
               </fieldset>
             )}
@@ -1039,8 +1126,14 @@ export function EventEditor({
                       }}
                     />
                   </label>
-                  {form.connect_notes && (
+                  {/* Create mode collects the note draft here; edit mode is
+                      toggle-only — the Linked card manages everything. */}
+                  {form.connect_notes && !event.id && (
                     <div className="connection-options">
+                      <FolderPicker
+                        value={form.note_folder_id}
+                        onChange={(id) => set('note_folder_id', id)}
+                      />
                       <label>
                         Note title
                         <input
@@ -1049,6 +1142,66 @@ export function EventEditor({
                           onChange={(e) => set('note_title', e.target.value)}
                         />
                       </label>
+                      <div className="event-link-search">
+                        <input
+                          type="text"
+                          placeholder="Also link existing notes…"
+                          value={noteQuery}
+                          onChange={(e) => setNoteQuery(e.target.value)}
+                        />
+                        {noteResults.length > 0 && (
+                          <div className="event-link-results" role="listbox">
+                            {noteResults.map((result) => (
+                              <button
+                                key={result.id}
+                                type="button"
+                                role="option"
+                                aria-selected={false}
+                                onClick={() => {
+                                  setPendingNoteLinks((current) => [
+                                    ...current,
+                                    {
+                                      id: result.id,
+                                      title: result.title,
+                                      icon: result.icon,
+                                    },
+                                  ])
+                                  setNoteQuery('')
+                                  setNoteResults([])
+                                }}
+                              >
+                                <span aria-hidden="true">
+                                  {result.icon || '▧'}
+                                </span>
+                                <span>{result.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {pendingNoteLinks.map((pending) => (
+                        <div key={pending.id} className="event-linked-item">
+                          <span aria-hidden="true">{pending.icon || '▧'}</span>
+                          <span className="event-linked-title">
+                            {pending.title}
+                          </span>
+                          <button
+                            type="button"
+                            className="event-linked-unlink"
+                            aria-label={`Remove ${pending.title}`}
+                            title="Remove"
+                            onClick={() =>
+                              setPendingNoteLinks((current) =>
+                                current.filter(
+                                  (item) => item.id !== pending.id,
+                                ),
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1067,16 +1220,20 @@ export function EventEditor({
                   </label>
                   {form.connect_finance && (
                     <div className="connection-options two-column">
-                      <label>
-                        Type
-                        <select
+                      <div className="cal-field">
+                        <span>Type</span>
+                        <Dropdown
+                          ariaLabel="Finance type"
                           value={form.finance_type}
-                          onChange={(e) => set('finance_type', e.target.value)}
-                        >
-                          <option value="expense">Expense</option>
-                          <option value="income">Income</option>
-                        </select>
-                      </label>
+                          onChange={(value) =>
+                            set('finance_type', value as string)
+                          }
+                          options={[
+                            { value: 'expense', label: 'Expense' },
+                            { value: 'income', label: 'Income' },
+                          ]}
+                        />
+                      </div>
                       <label>
                         Amount
                         <input
@@ -1179,18 +1336,22 @@ export function EventEditor({
                   </label>
                   {form.connect_food && (
                     <div className="connection-options two-column">
-                      <label>
-                        Meal
-                        <select
+                      <div className="cal-field">
+                        <span>Meal</span>
+                        <Dropdown
+                          ariaLabel="Meal type"
                           value={form.meal_type}
-                          onChange={(e) => set('meal_type', e.target.value)}
-                        >
-                          <option value="breakfast">Breakfast</option>
-                          <option value="lunch">Lunch</option>
-                          <option value="dinner">Dinner</option>
-                          <option value="snack">Snack</option>
-                        </select>
-                      </label>
+                          onChange={(value) =>
+                            set('meal_type', value as string)
+                          }
+                          options={[
+                            { value: 'breakfast', label: 'Breakfast' },
+                            { value: 'lunch', label: 'Lunch' },
+                            { value: 'dinner', label: 'Dinner' },
+                            { value: 'snack', label: 'Snack' },
+                          ]}
+                        />
+                      </div>
                       <label>
                         Food or meal
                         <input
@@ -1256,20 +1417,23 @@ export function EventEditor({
                   onChange={(e) => set('link', e.target.value)}
                 />
               </label>
-              <label>
-                Reminder
-                <select
+              <div className="cal-field">
+                <span>Reminder</span>
+                <Dropdown
+                  ariaLabel="Reminder"
                   value={form.reminder_minutes}
-                  onChange={(e) => set('reminder_minutes', e.target.value)}
-                >
-                  <option value="">None</option>
-                  <option value="5">5 minutes before</option>
-                  <option value="15">15 minutes before</option>
-                  <option value="30">30 minutes before</option>
-                  <option value="60">1 hour before</option>
-                  <option value="1440">1 day before</option>
-                </select>
-              </label>
+                  onChange={(value) => set('reminder_minutes', value as string)}
+                  placeholder="None"
+                  options={[
+                    { value: '', label: 'None' },
+                    { value: '5', label: '5 minutes before' },
+                    { value: '15', label: '15 minutes before' },
+                    { value: '30', label: '30 minutes before' },
+                    { value: '60', label: '1 hour before' },
+                    { value: '1440', label: '1 day before' },
+                  ]}
+                />
+              </div>
               <label>
                 Notes
                 <textarea
@@ -1371,30 +1535,34 @@ export function EventEditor({
                           }))
                         }
                       />
-                      <select
-                        className="repeat-unit"
-                        aria-label="Frequency"
+                      <Dropdown
+                        ariaLabel="Frequency"
                         value={recurrence.freq || 'WEEKLY'}
-                        onChange={(e) =>
+                        onChange={(value) =>
                           setRecurrence((r) => ({
                             ...r,
-                            freq: e.target.value as Freq,
+                            freq: value as Freq,
                           }))
                         }
-                      >
-                        <option value="DAILY">
-                          {recurrence.interval > 1 ? 'days' : 'day'}
-                        </option>
-                        <option value="WEEKLY">
-                          {recurrence.interval > 1 ? 'weeks' : 'week'}
-                        </option>
-                        <option value="MONTHLY">
-                          {recurrence.interval > 1 ? 'months' : 'month'}
-                        </option>
-                        <option value="YEARLY">
-                          {recurrence.interval > 1 ? 'years' : 'year'}
-                        </option>
-                      </select>
+                        options={[
+                          {
+                            value: 'DAILY',
+                            label: recurrence.interval > 1 ? 'Days' : 'Day',
+                          },
+                          {
+                            value: 'WEEKLY',
+                            label: recurrence.interval > 1 ? 'Weeks' : 'Week',
+                          },
+                          {
+                            value: 'MONTHLY',
+                            label: recurrence.interval > 1 ? 'Months' : 'Month',
+                          },
+                          {
+                            value: 'YEARLY',
+                            label: recurrence.interval > 1 ? 'Years' : 'Year',
+                          },
+                        ]}
+                      />
                     </div>
                   </div>
                   <div

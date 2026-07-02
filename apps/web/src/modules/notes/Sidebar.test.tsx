@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
-import { PageTree } from './PageTree'
+import { Sidebar } from './Sidebar'
 import type { Page } from './types'
 
 const page = (
@@ -15,6 +15,10 @@ const page = (
   position,
   icon: null,
   content: { type: 'doc', content: [{ type: 'paragraph' }] },
+  type: 'page',
+  is_template: false,
+  cover: null,
+  properties: {},
   created_at: '',
   updated_at: '',
   deleted_at: null,
@@ -26,15 +30,16 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-test('renders nesting and supports inline rename and child creation', () => {
+test('expands ancestors of the selection and renames/creates via the row menu', () => {
   const onCreate = vi.fn()
   const onRename = vi.fn()
   render(
-    <PageTree
+    <Sidebar
       pages={[
         page('one', 'Projects', null, 'a0'),
         page('two', 'Launch', 'one', 'a0'),
       ]}
+      selectedId="two"
       onSelect={vi.fn()}
       onCreate={onCreate}
       onRename={onRename}
@@ -44,28 +49,30 @@ test('renders nesting and supports inline rename and child creation', () => {
     />,
   )
 
-  expect(screen.getByRole('button', { name: 'Launch' })).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: 'Add child to Projects' }))
-  expect(onCreate).toHaveBeenCalledWith('one')
-  fireEvent.doubleClick(screen.getByRole('button', { name: 'Projects' }))
+  // The selected page's ancestor chain is auto-expanded.
+  expect(screen.getByText('Launch')).toBeVisible()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Projects options' }))
   const input = screen.getByRole('textbox', { name: 'Rename Projects' })
   fireEvent.change(input, { target: { value: 'Work' } })
   fireEvent.blur(input)
   expect(onRename).toHaveBeenCalledWith('one', 'Work')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Sub-page' }))
+  expect(onCreate).toHaveBeenCalledWith('one')
 })
 
-test('reorders pages after a stationary touch hold', () => {
+test('reorders pages after a stationary long-press on the row handle', () => {
   Element.prototype.setPointerCapture = vi.fn()
   const onMove = vi.fn()
-  const onSelect = vi.fn()
   const { container } = render(
-    <PageTree
+    <Sidebar
       pages={[
         page('one', 'One', null, 'a000000'),
         page('two', 'Two', null, 'a000001'),
         page('three', 'Three', null, 'a000002'),
       ]}
-      onSelect={onSelect}
+      onSelect={vi.fn()}
       onCreate={vi.fn()}
       onRename={vi.fn()}
       onMove={onMove}
@@ -87,31 +94,17 @@ test('reorders pages after a stationary touch hold', () => {
       toJSON: () => ({}),
     })
   })
-  const title = screen.getByRole('button', { name: 'One' })
+  const handle = screen.getByRole('button', { name: 'One options' })
   vi.useFakeTimers()
 
-  fireEvent.pointerDown(title, {
-    pointerType: 'touch',
-    pointerId: 1,
-    clientX: 10,
-    clientY: 0,
-  })
-  act(() => vi.advanceTimersByTime(650))
-  fireEvent.pointerMove(title, {
-    pointerType: 'touch',
-    pointerId: 1,
-    clientX: 10,
-    clientY: 90,
-  })
-  expect(rows[0]).toHaveStyle({ transform: 'translateY(90px) scale(1.02)' })
-  fireEvent.pointerUp(title, {
-    pointerType: 'touch',
-    pointerId: 1,
-    clientX: 10,
-    clientY: 90,
-  })
-  fireEvent.click(title)
+  fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 0 })
+  act(() => vi.advanceTimersByTime(375))
+  fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 90 })
+  expect(rows[0]).toHaveStyle({ transform: 'translateY(90px) scale(1.03)' })
+  fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 90 })
+  fireEvent.click(handle)
 
   expect(onMove).toHaveBeenCalledWith('one', null, 'a000002')
-  expect(onSelect).not.toHaveBeenCalled()
+  // The click after a drag is suppressed — no row menu opens.
+  expect(screen.queryByText('Edit page')).toBeNull()
 })

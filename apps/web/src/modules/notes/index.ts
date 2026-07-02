@@ -1,5 +1,5 @@
 export { Notes } from './Notes'
-export { PageTree, type PageTreeProps } from './PageTree'
+export { Sidebar, type SidebarProps } from './Sidebar'
 export { PageView } from './PageView'
 export { TrashView } from './TrashView'
 export { Backlinks } from './Backlinks'

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiCall } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { SettingsCard } from '../../components/SettingsCard'
 
 interface AdminUser {
   id: string
@@ -12,41 +13,6 @@ interface AdminUser {
   is_test_account: boolean
   totp_enabled: boolean
   created_at: string
-}
-
-function SettingsCard({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className="settings-card"
-      style={{
-        padding: 16,
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--r-md)',
-        background: 'var(--bg-base)',
-        display: 'grid',
-        gap: 12,
-      }}
-    >
-      <div className="settings-card-head">
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {title}
-        </div>
-      </div>
-      {children}
-    </div>
-  )
 }
 
 const INPUT_STYLE: React.CSSProperties = {

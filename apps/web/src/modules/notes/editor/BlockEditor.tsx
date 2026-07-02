@@ -1,7 +1,5 @@
-/**
- * Mathematics uses Tiptap's official extension, which serializes `inlineMath`
- * and `blockMath` nodes and renders both through KaTeX.
- */
+/** Mathematics stays in TipTap's inlineMath/blockMath JSON nodes; custom node
+ * views provide in-place LaTeX editing before KaTeX rendering. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   EditorContent,
@@ -13,17 +11,23 @@ import { BubbleMenu } from '@tiptap/react/menus'
 import { DragHandle } from '@tiptap/extension-drag-handle-react'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
-import Mathematics from '@tiptap/extension-mathematics'
 import 'katex/dist/katex.min.css'
 import '../notes.css'
 import { EMPTY_DOCUMENT, type SearchResult } from '../types'
+import {
+  EditableBlockMath,
+  EditableInlineMath,
+  insertEditableInlineMath,
+} from './MathExtensions'
+import { EditableTaskItem } from './TaskItemExtension'
+import { LinkPopover } from './LinkPopover'
+import { LocationNode, insertLocation } from './LocationNode'
 
 const NoteMention = Mention.extend({
   addAttributes() {
@@ -103,16 +107,57 @@ const slashItems = [
         .run(),
   },
   {
+    label: 'Location',
+    keywords: 'map place address',
+    run: (editor: Editor) => void insertLocation(editor),
+  },
+  {
     label: 'Inline math',
     keywords: 'latex formula',
-    run: (editor: Editor) => editor.commands.insertInlineMath({ latex: 'x' }),
+    run: insertEditableInlineMath,
   },
   {
     label: 'Equation',
     keywords: 'block math latex formula',
-    run: (editor: Editor) => editor.commands.insertBlockMath({ latex: 'x' }),
+    run: (editor: Editor) =>
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: 'blockMath', attrs: { latex: '', label: '' } })
+        .run(),
   },
 ] as const
+
+const toolbarIcons = {
+  bold: <path d="M6 3.5h5a3.5 3.5 0 010 7H6zm0 7h5.5a3 3 0 010 6H6z" />,
+  italic: <path d="M10 3.5h5M5 16.5h5M12.5 3.5l-5 13" />,
+  strike: (
+    <path d="M4 10h12M14 6.5c-.5-2-2-3-4-3-2.2 0-3.8 1.1-3.8 2.8 0 1.3.8 2 2.1 2.5m.2 2.5c2.6.5 4.3 1 4.3 2.7 0 1.6-1.5 2.8-3.7 2.8-2.1 0-3.7-1-4.2-2.8" />
+  ),
+  code: <path d="M7 5.5L2.5 10 7 14.5M13 5.5l4.5 4.5-4.5 4.5" />,
+  link: (
+    <path d="M7.5 12.5l5-5M6.2 14.8l-1 .9a3 3 0 01-4.2-4.2l3-3a3 3 0 014.2 0M13.8 5.2l1-.9a3 3 0 014.2 4.2l-3 3a3 3 0 01-4.2 0" />
+  ),
+  math: <path d="M15.5 4H6l5 6-5 6h9.5" />,
+} as const
+
+function ToolbarIcon({ type }: { type: keyof typeof toolbarIcons }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {toolbarIcons[type]}
+    </svg>
+  )
+}
 
 export function BlockEditor({
   content,
@@ -150,6 +195,8 @@ export function BlockEditor({
   } | null>(null)
   const [mentionItems, setMentionItems] = useState<SearchResult[]>([])
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkHref, setLinkHref] = useState('')
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({
     left: 0,
     top: 36,
@@ -163,9 +210,19 @@ export function BlockEditor({
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        link: {
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          HTMLAttributes: {
+            rel: 'noopener noreferrer',
+            target: '_blank',
+          },
+        },
+      }),
       TaskList,
-      TaskItem.configure({ nested: true }),
+      EditableTaskItem,
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -173,7 +230,9 @@ export function BlockEditor({
       Placeholder.configure({
         placeholder: "Type '/' for commands or '[[' to link…",
       }),
-      Mathematics,
+      EditableInlineMath,
+      EditableBlockMath,
+      LocationNode,
       NoteMention.configure({
         HTMLAttributes: { class: 'notes-mention' },
         renderHTML: ({ node }) => [
@@ -426,6 +485,7 @@ export function BlockEditor({
           {/* Notion-style block gutter: add + drag on hover. */}
           <DragHandle
             editor={editor}
+            computePositionConfig={{ placement: 'left' }}
             onNodeChange={({ pos }) => {
               hoverPosRef.current = typeof pos === 'number' ? pos : null
             }}
@@ -471,48 +531,88 @@ export function BlockEditor({
           >
             {(
               [
-                ['B', () => editor.chain().focus().toggleBold().run(), 'bold'],
                 [
-                  'I',
+                  'Bold',
+                  () => editor.chain().focus().toggleBold().run(),
+                  'bold',
+                ],
+                [
+                  'Italic',
                   () => editor.chain().focus().toggleItalic().run(),
                   'italic',
                 ],
                 [
-                  'S',
+                  'Strikethrough',
                   () => editor.chain().focus().toggleStrike().run(),
                   'strike',
                 ],
-                ['<>', () => editor.chain().focus().toggleCode().run(), 'code'],
+                [
+                  'Inline code',
+                  () => editor.chain().focus().toggleCode().run(),
+                  'code',
+                ],
               ] as const
             ).map(([label, action, mark]) => (
               <button
                 key={mark}
                 type="button"
+                aria-label={label}
+                title={label}
                 aria-pressed={editor.isActive(mark)}
                 onClick={action}
               >
-                {label}
+                <ToolbarIcon type={mark} />
               </button>
             ))}
             <button
               type="button"
+              aria-label="Add or edit link"
+              title="Add or edit link"
+              aria-pressed={editor.isActive('link')}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
-                const href = window.prompt('Link URL')
-                if (href) editor.chain().focus().setLink({ href }).run()
+                setLinkHref(editor.getAttributes('link').href ?? '')
+                setLinkOpen(true)
               }}
             >
-              Link
+              <ToolbarIcon type="link" />
             </button>
             <button
               type="button"
-              onClick={() => {
-                const latex = window.prompt('LaTeX')
-                if (latex)
-                  editor.chain().focus().insertInlineMath({ latex }).run()
-              }}
+              aria-label="Inline equation"
+              title="Inline equation"
+              onClick={() => insertEditableInlineMath(editor)}
             >
-              ƒx
+              <ToolbarIcon type="math" />
             </button>
+            {linkOpen && (
+              <LinkPopover
+                initialHref={linkHref}
+                onApply={(href) => {
+                  editor
+                    .chain()
+                    .focus()
+                    .extendMarkRange('link')
+                    .setLink({ href })
+                    .run()
+                  setLinkOpen(false)
+                }}
+                onRemove={
+                  editor.isActive('link')
+                    ? () => {
+                        editor
+                          .chain()
+                          .focus()
+                          .extendMarkRange('link')
+                          .unsetLink()
+                          .run()
+                        setLinkOpen(false)
+                      }
+                    : undefined
+                }
+                onCancel={() => setLinkOpen(false)}
+              />
+            )}
           </BubbleMenu>
         </>
       )}

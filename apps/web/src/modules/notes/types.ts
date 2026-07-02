@@ -9,9 +9,55 @@ export interface Page {
   content: JSONContent
   parent_page_id: string | null
   position: string
+  type: 'page' | 'database' | 'folder'
+  is_template: boolean
+  cover: string | null
+  properties: Record<string, unknown>
   created_at: string
   updated_at: string
   deleted_at?: string | null
+}
+
+export type PropertyType =
+  | 'text'
+  | 'number'
+  | 'select'
+  | 'multi_select'
+  | 'date'
+  | 'checkbox'
+  | 'url'
+  | 'relation'
+
+export interface DatabaseProperty {
+  id: string
+  page_id: string
+  name: string
+  type: PropertyType
+  config: { options?: string[] }
+  position: string
+}
+
+export type ViewType = 'table' | 'list' | 'board' | 'calendar' | 'gallery'
+
+export interface ViewConfig {
+  group_by?: string
+  date_by?: string
+  sort?: { property: string; dir: 'asc' | 'desc' }
+  filters?: PropertyFilter[]
+}
+
+export interface PropertyFilter {
+  property: string
+  equals: unknown
+}
+
+export interface DatabaseView {
+  id: string
+  page_id: string
+  name: string
+  type: ViewType
+  config: ViewConfig
+  position: string
 }
 
 export interface Backlink {

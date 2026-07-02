@@ -143,7 +143,37 @@ Notes/pages module. Nested page tree (Notion-style).
 | icon | String(16)? | Emoji icon shown in the tree and page header. |
 | content | JSON | Tiptap v3 JSON document. The full block content of the page. |
 | position | String(255) | Fractional index string for ordering sibling pages. |
-| deleted_at | DateTime? | Soft delete. Null = active. Set = in trash. |
+| type | String(16) | "page" or "database". A database's records are its child pages. |
+| is_template | Boolean | Template flag; "Use template" duplicates the subtree (copy is never a template). |
+| cover | String(512)? | Cover preset token (e.g. "gradient:3") or image URL. No FK. |
+| properties | JSON | Record property values keyed by `database_properties.id`. |
+| deleted_at | DateTime? | Soft delete. Null = active. Set = in trash. Purged 30 days after deletion when the trash view is opened. |
+
+---
+
+### `database_properties`
+Schema columns of a database page (`pages.type = "database"`).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| page_id | UUID FK | The database page. ON DELETE CASCADE. |
+| name | String(255) | Property display name ("Status", "Due"). |
+| type | String(32) | text, number, select, multi_select, date, checkbox, url, relation. |
+| config | JSON | Type-specific config (select options, relation target). |
+| position | String(255) | Fractional index string for column ordering. |
+
+---
+
+### `database_views`
+Saved views of a database page.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| page_id | UUID FK | The database page. ON DELETE CASCADE. |
+| name | String(255) | View display name. |
+| type | String(32) | table, board, calendar, gallery, list. |
+| config | JSON | Filters, sort, group_by, visible properties — one blob. |
+| position | String(255) | Fractional index string for tab ordering. |
 
 ---
 
@@ -190,5 +220,6 @@ select(Link).where(
 | 005–008 | (calendar refinements, recurrence fields) |
 | 009 | (earlier notes-related) |
 | 010 | Pages table + Link table |
+| 011 | Database pages: pages.type/is_template/cover/properties + database_properties + database_views |
 
 Always check `alembic current` before writing a new migration.

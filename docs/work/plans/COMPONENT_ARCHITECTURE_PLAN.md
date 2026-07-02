@@ -1,6 +1,6 @@
 # Plan: Component-dominant frontend architecture
 
-Status: ready to implement
+Status: in progress — shared sidebar and settings cards implemented
 Date: 2026-07-01
 
 ---
@@ -211,7 +211,8 @@ Do NOT refactor everything at once. Extract one component at a time as follows:
 | `<ConfirmDialog>` | done | Sidebar (delete calendar) | Sidebar, Notes (delete page) |
 | `<SaveIndicator>` | todo | EventEditor | — |
 | `<SearchField>` | todo | EventEditor | — |
-| `<SidebarShell>` | todo | Sidebar | — |
+| `<SidebarShell>` | done | Calendar Sidebar | Calendar, Notes, Settings |
+| `<SettingsCard>` | done | General Settings | General, Calendar, Admin Settings |
 | `<LinkedItems>` | todo | EventEditor | — |
 
 ---
@@ -223,5 +224,6 @@ After each component extraction:
 npm run check --workspace @secondbrain/web
 ```
 
-Visual check: open `/calendar` and `/notes` — both must look identical to before.
-No new CSS. No behaviour changes. Pure structural extraction.
+Visual check: open `/calendar`, `/notes`, and `/settings` — all must preserve their
+existing behavior. Shared component styles belong in `styles.css`; module-specific layout
+stays in its module stylesheet.

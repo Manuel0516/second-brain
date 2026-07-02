@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, Link, Page, User
+from app.models import Calendar, CalendarEvent, DatabaseProperty, DatabaseView, Link, Page, User
 from app.routes.calendar import owned_event
 
 router = APIRouter(prefix="/api", tags=["notes"])
@@ -20,6 +20,7 @@ class PageCreate(BaseModel):
     title: str = Field(default="Untitled", max_length=255)
     icon: str | None = Field(default=None, max_length=16)
     parent_page_id: str | None = None
+    type: Literal["page", "database", "folder"] = "page"
 
     @field_validator("title")
     @classmethod
@@ -33,6 +34,10 @@ class PagePatch(BaseModel):
     content: dict[str, object] | None = None
     parent_page_id: str | None = None
     position: str | None = Field(default=None, min_length=1, max_length=255)
+    type: Literal["page", "database", "folder"] | None = None
+    is_template: bool | None = None
+    cover: str | None = Field(default=None, max_length=512)
+    properties: dict[str, object] | None = None
 
     @field_validator("title")
     @classmethod
@@ -56,6 +61,10 @@ class PageResponse(BaseModel):
     icon: str | None
     content: dict[str, object]
     position: str
+    type: str
+    is_template: bool
+    cover: str | None
+    properties: dict[str, object]
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
@@ -110,6 +119,10 @@ class LinkResponse(BaseModel):
 class EventNoteCreate(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     icon: str | None = Field(default=None, max_length=16)
+    parent_page_id: str | None = None
+    # Skip the idempotent existing-note shortcut — used by the Linked card's
+    # "new note" action so one event can gather several notes.
+    force_new: bool = False
 
     @field_validator("title")
     @classmethod
@@ -301,6 +314,32 @@ async def list_trash(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[Page]:
+    # ponytail: purge on trash open; move to a cron job if it ever matters.
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+    expired = set(
+        await session.scalars(
+            select(Page.id).where(Page.user_id == user.id, Page.deleted_at < cutoff)
+        )
+    )
+    if expired:
+        # Detach any live children before their parent disappears.
+        await session.execute(
+            update(Page)
+            .where(Page.parent_page_id.in_(expired), Page.id.not_in(expired))
+            .values(parent_page_id=None)
+        )
+        await session.execute(
+            delete(Link).where(
+                or_(
+                    (Link.source_type == "page") & Link.source_id.in_(expired),
+                    (Link.target_type == "page") & Link.target_id.in_(expired),
+                )
+            )
+        )
+        await session.execute(delete(DatabaseProperty).where(DatabaseProperty.page_id.in_(expired)))
+        await session.execute(delete(DatabaseView).where(DatabaseView.page_id.in_(expired)))
+        await session.execute(delete(Page).where(Page.id.in_(expired)))
+        await session.commit()
     return list(
         await session.scalars(
             select(Page)
@@ -337,6 +376,7 @@ async def create_page(
         parent_page_id=data.parent_page_id,
         title=data.title,
         icon=data.icon,
+        type=data.type,
         position=f"a{sibling_count or 0:08d}",
         content={"type": "doc", "content": []},
     )
@@ -361,6 +401,9 @@ async def patch_page(
         raise HTTPException(status_code=422, detail="content cannot be null")
     if values.get("position") is None and "position" in values:
         raise HTTPException(status_code=422, detail="position cannot be null")
+    for non_nullable in ("type", "is_template", "properties"):
+        if values.get(non_nullable) is None and non_nullable in values:
+            raise HTTPException(status_code=422, detail=f"{non_nullable} cannot be null")
     if "parent_page_id" in values:
         await _validate_parent(page, values["parent_page_id"], user, session)
     if "content" in values:
@@ -468,29 +511,37 @@ async def create_event_note(
     session: AsyncSession = Depends(get_async_session),
 ) -> Page:
     event = await owned_event(event_id, user, session)
-    existing = await session.scalar(
-        select(Page)
-        .join(
-            Link,
-            (Link.target_type == "page")
-            & (Link.target_id == Page.id)
-            & (Link.source_type == "event")
-            & (Link.source_id == event.id)
-            & (Link.relation == "note"),
+    if not (data and data.force_new):
+        existing = await session.scalar(
+            select(Page)
+            .join(
+                Link,
+                (Link.target_type == "page")
+                & (Link.target_id == Page.id)
+                & (Link.source_type == "event")
+                & (Link.source_id == event.id)
+                & (Link.relation == "note"),
+            )
+            .where(Page.user_id == user.id, Page.deleted_at.is_(None))
+            .order_by(Page.created_at)
         )
-        .where(Page.user_id == user.id, Page.deleted_at.is_(None))
-        .order_by(Page.created_at)
-    )
-    if existing is not None:
-        return existing
+        if existing is not None:
+            return existing
     draft = (event.connections or {}).get("notes")
     draft_title = draft.get("title") if isinstance(draft, dict) else None
+    draft_folder = draft.get("folder_id") if isinstance(draft, dict) else None
     title = (data.title if data else None) or draft_title or event.title
     icon = data.icon if data and data.icon else None
+    parent_page_id = (data.parent_page_id if data else None) or (
+        draft_folder if isinstance(draft_folder, str) else None
+    )
+    if parent_page_id is not None:
+        await _owned_page(parent_page_id, user, session)
     page = Page(
         user_id=user.id,
         title=title,
         icon=icon or event.icon,
+        parent_page_id=parent_page_id,
         position="a0",
         content={"type": "doc", "content": []},
     )

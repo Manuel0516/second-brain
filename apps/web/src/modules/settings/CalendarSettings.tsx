@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Segmented } from '../../components/Segmented'
+import { SettingsCard } from '../../components/SettingsCard'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
 import type { CalendarData } from '../calendar/types'
@@ -119,54 +120,6 @@ function ToggleRow({
 }
 
 const SegmentControl = Segmented
-
-function SettingsCard({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className="settings-card"
-      style={{
-        padding: 16,
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--r-md)',
-        background: 'var(--bg-base)',
-        display: 'grid',
-        gap: 12,
-      }}
-    >
-      <div className="settings-card-head">
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {title}
-        </div>
-        {description && (
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--text-secondary)',
-              marginTop: 2,
-            }}
-          >
-            {description}
-          </div>
-        )}
-      </div>
-      {children}
-    </div>
-  )
-}
 
 export function CalendarSettings() {
   const { settings, patch } = useSettings()

@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
 import { IconButton } from '../../components/IconButton'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { SidebarShell } from '../../components/SidebarShell'
 import { onColor } from './colors'
 import {
   CALENDAR_ORDER_KEY,
@@ -289,10 +290,11 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   }
 
   return (
-    <aside className={`calendar-sidebar ${open ? '' : 'closed'}`}>
-      <div className="sidebar-title">
-        <span>Calendars</span>
-        <div className="sidebar-title-actions">
+    <SidebarShell
+      title="Calendars"
+      open={open}
+      actions={
+        <>
           <IconButton
             icon="+"
             label="Add calendar"
@@ -318,8 +320,9 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
             size="md"
             className="sidebar-close"
           />
-        </div>
-      </div>
+        </>
+      }
+    >
       {adding && (
         <form className="cal-card" onSubmit={create}>
           <div className="cal-card-head">
@@ -531,6 +534,6 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
           <span className="integration-status">Soon</span>
         </button>
       </div>
-    </aside>
+    </SidebarShell>
   )
 }

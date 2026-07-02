@@ -220,6 +220,157 @@ view and the event split-view.
 - Accessibility: semantic headings, visible focus rings, keyboard support for
   the slash menu and mention popover, ≥44px touch targets on mobile.
 
+### 5.5 Notes settings — list marker schemes
+
+Enable the existing `/settings/notes` navigation item and add a small Notes
+settings panel for editor-wide list defaults.
+
+- **Bullet list style**: choose `Disc` (default), `Circle`, `Square`, or `Dash`.
+- **Numbered list style**: choose `Decimal` (default), `Lower alpha`,
+  `Upper alpha`, `Lower Roman`, or `Upper Roman`.
+- Show a short live preview beside each control so the marker is visible before
+  saving; labels must remain textual and not rely on the marker alone.
+- Persist the choices with the existing user Settings API as
+  `notes_bullet_style` and `notes_numbered_style`. Validate values on the API;
+  unknown values fall back to `disc` and `decimal`.
+- Apply both choices to every `BlockEditor` surface: standalone Notes pages and
+  event-attached note panes. A settings change updates open editors immediately.
+- Implement presentation with editor-root data attributes and native CSS
+  `list-style-type`; do not rewrite Tiptap document JSON. The `Dash` option may
+  use a `::marker` rule because CSS has no portable dash `list-style-type`.
+- The selected style applies at every nesting depth. Per-list and per-depth
+  overrides are out of scope until a real use case requires them.
+
+Verification: changing either setting updates existing lists without modifying
+their saved content, survives reload, works in dark and light themes, and keeps
+list semantics intact for assistive technology.
+
+### 5.6 Future editor controls and permanent deletion
+
+These are approved future Notes improvements, not part of the current link-toolbar
+implementation:
+
+- **Text highlight and block color**: add selection-toolbar controls for a text
+  highlight mark and a block background attribute. Use a small, design-approved,
+  token-backed palette shared by dark and light themes; do not accept arbitrary
+  colors in the first version. Store the selected value in Tiptap JSON so it
+  survives reload and copy/paste.
+- **Code-block language**: add a language selector to code blocks, persist the
+  language as a code-block attribute, show the active language in the block, and
+  apply syntax highlighting. Reuse an installed highlighter if one exists when
+  implemented; otherwise request dependency approval before adding one. Plain
+  text remains the default and unsupported languages fall back safely.
+- **Permanent note deletion**: add `Permanently delete` to Trash only, behind an
+  explicit irreversible confirmation. Add an ownership-scoped hard-delete API
+  that removes the selected page subtree and its graph links in one transaction.
+  Restore remains the primary action; permanent deletion must never appear on an
+  active note.
+- **Center drag handle on block height**: the block gutter's drag-to-move
+  button (`.notes-block-grip`) should be vertically centered within each block's
+  rendered height, not pinned to a fixed offset. Use `position: absolute; top: 50%;
+  transform: translateY(-50%)` inside a positioned block-wrapper so the grip
+  follows blocks of any height (single-line text, multi-line paragraphs, nested
+  lists, code blocks, etc.). On touch devices the grip remains hidden (the slash
+  menu covers insertion/reordering); this only affects pointer/hover devices.
+- **Popover clipping and overflow**: several popovers clip incorrectly or overflow
+  the viewport because they use hardcoded `left: 0` / `right: 0` positioning:
+  - Sidebar page context menu (`.calendar-menu`) — `position: absolute; left: 0;
+    right: 0` stretches to the sidebar row width. If the sidebar is narrow or the
+    card content is wider than the row, the menu overflows without visible overflow
+    handling. Fix: use `min-width: max-content` on the card, cap it with
+    `max-width: min(320px, 90vw)`, and add `overflow: hidden auto` so the menu
+    sizes to its content rather than the row.
+  - Database property config popover (`.notes-property-config`) — `left: 0` anchors
+    to the column header's left edge. If the column is near the right edge of the
+    table, the popover extends beyond the viewport. Fix: use `left: auto; right: 0`
+    or a `positional` utility that flips the popover when it would overflow, plus
+    `max-width: min(320px, 90vw)`.
+  - Cell popovers (`.notes-cell-popover`) in database table rows — same `left: 0`
+    issue. If the cell is near the right viewport edge (especially on mobile), the
+    popover clips. Fix: wrap each popover in a portal to `document.body` with
+    dynamic position calculation (or at minimum add a `right: 0` fallback and
+    `max-width: min(300px, 90vw)`).
+  - Cover picker popover (`.notes-cover-picker`) — positioned with
+    `right: 10px; bottom: 46px` relative to the cover banner, with a fixed
+    `width: 260px` and no viewport-aware sizing. On narrow viewports or when the
+    cover banner is near the edge of the `.notes-page` container (which caps at
+    `720px`), the popover overflows the right side. Fix: change to
+    `max-width: min(260px, 90vw)` and reposition using `left: auto; right: 10px`
+    with a `transform: translateX(0)` fallback, or wrap in a portal that keeps
+    it visible. Also add `overflow: hidden auto` to handle tall URL inputs
+    without breaking the layout.
+- **Custom dropdown UI for all selects**: the project currently uses 9 native
+  `<select>` elements across the notes and calendar modules. These render with
+  the OS-native widget, which looks inconsistent with the custom UI language
+  (rounded cards, cyan accents, monospace labels). Replace all of them with a
+  shared custom dropdown component using the existing popover/card pattern:
+  - **Page type selector** (notes `Sidebar.tsx` — Page / Database / Folder).
+  - **Property type selector** (database `PropertyConfig.tsx` — Text, Number,
+    Select, Multi-select, Date, Checkbox, URL, Relation).
+  - **Select cell value** (database `PropertyCell.tsx` — picks from property
+    options).
+  - **Date property picker** (database `CalendarView.tsx` — which date property
+    drives the calendar view).
+  - **Group-by picker** (database `BoardView.tsx` — which select property
+    groups the Kanban columns).
+  - **Finance type** (calendar `EventEditor.tsx` — Expense / Income).
+  - **Meal type** (calendar `EventEditor.tsx` — Breakfast / Lunch / Dinner /
+    Snack).
+  - **Reminder timing** (calendar `EventEditor.tsx` — None / 5min / 15min /
+    30min / 1hr / 1day).
+  - **Recurrence frequency** (calendar `EventEditor.tsx` — Daily / Weekly /
+    Monthly / Yearly).
+
+  The shared component should:
+  - Render a trigger button that shows the selected value (styled like a
+    `.cal-field` input) and a chevron icon.
+  - Open a portalled popover (`.cal-card` / `.notes-cell-popover` pattern)
+    anchored to the trigger, with each option as a clickable row.
+  - Support keyboard navigation (arrow keys, Enter to select, Escape to close).
+  - Accept the same shape of props: `options: Array<{value, label}>`,
+    `value`, `onChange`, `ariaLabel`, optional `className`.
+  - Reuse the existing animation (`popIn 120ms`), border-radius tokens, and
+    color tokens. No new visual language.
+
+  Defer to when a dedicated UI pass is done for the database module, since
+  most native selects live in database views.
+- **Split-view pane header**: the calendar split-view note pane
+  (`.notes-pane`) currently has only a sticky close button (`×`) floating at
+  the top-right with nothing balancing the top area. Add a sticky header bar
+  with:
+  - The note's **title** on the left (truncated, clickable to open full page).
+  - A small **breadcrumb** of ancestors above or beside the title.
+  - An **"Open in full page"** icon button on the right (next to the close
+    button) that navigates to `/notes/{pageId}` in the main Notes area.
+  - A **linked event indicator** showing which event the note is attached to
+    (if any), styled as a small chip with the event's icon and title.
+  The header should use the same visual language as the calendar topbar
+  (`.cal-topbar`) — compact, with a subtle bottom border.
+- **Create page type prompt**: the "New page" button in the topbar and sidebar
+  heading currently creates a page with a hardcoded type (`page`). Instead, show
+  a small popover (reusing the `.notes-cell-popover` or `.cal-card` pattern) with
+  three options — **Page**, **Folder**, **Database** — each with a short description,
+  and create the page with the selected type. The empty-state "New page" button
+  should also trigger the same prompt. This matches how Notion and similar tools
+  handle creation.
+- **Delete/trash UI rework**: the current delete flow uses the generic
+  `ConfirmDialog` component (`.scope-prompt` / `.scope-card`), which is bare-bones.
+  Improve it with:
+  - A **trash-first** model: the primary action is "Move to trash" (already
+    implemented), but show a clearer explanation of what happens to child pages
+    and linked events. Use the `.scope-options` pattern with a single prominent
+    action button rather than a two-button confirm/cancel layout.
+  - A **restore confirmation** when restoring from trash — just a toast, not a
+    dialog, since restore is safe and reversible.
+  - A **permanent delete** action inside the trash view only (not on active notes),
+    using a two-step confirm: first click marks the item (visual highlight), second
+    click executes. This prevents accidental permanent deletion while keeping the
+    flow fast for intentional use.
+
+Verification: highlight/block colors remain readable in both themes, code blocks
+retain their selected language, and permanent deletion removes pages, descendants,
+and links without affecting another user's data.
+
 ---
 
 ## 6. Edge cases to decide now
@@ -249,6 +400,9 @@ Ship in order; each ends green on `npm run check` / `check:api`.
 | N3 | `/notes` route + rail wiring; page tree sidebar; page view (title/icon/breadcrumb/editor); trash; autosave | Create/nest/rename/delete/restore pages; edits autosave |
 | N4 | Split view in `Calendar.tsx`; `POST /events/{id}/note`; event Linked panel; `[[` mentions (page+event) → `Link`; backlinks panels | Saving an event-with-note splits desktop / full-screen mobile; mentions create edges; backlinks show both directions |
 | N5 | Polish: empty states, "Saved" affordance, keyboard/a11y, responsive sheet, motion, design-canvas fidelity pass | Matches design system; a11y checks pass |
+| N6 | Notes settings: bullet and numbered-list schemes, live previews, Settings API persistence | Existing lists restyle without content changes; preferences survive reload and apply to standalone/split editors |
+| N7 | Editor formatting: text highlight, block colors, and code-block language selection | Formatting persists in Tiptap JSON; palette is theme-safe; unsupported code languages fall back to plain text |
+| N8 | Trash lifecycle: permanent page-subtree deletion and link cleanup | Irreversible confirmation is required; ownership tests pass; no orphaned page links remain |
 
 ---
 

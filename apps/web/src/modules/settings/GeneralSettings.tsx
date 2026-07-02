@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Segmented } from '../../components/Segmented'
+import { SettingsCard } from '../../components/SettingsCard'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
@@ -58,96 +59,6 @@ function ToggleRow({
         style={{ cursor: 'pointer' }}
       />
     </label>
-  )
-}
-
-function SettingsCard({
-  title,
-  description,
-  children,
-  onSave,
-  hasChanges,
-  saving,
-}: {
-  title: string
-  description?: string
-  children: React.ReactNode
-  onSave?: () => void
-  hasChanges?: boolean
-  saving?: boolean
-}) {
-  return (
-    <div
-      className="settings-card"
-      style={{
-        padding: 16,
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--r-md)',
-        background: 'var(--bg-base)',
-        display: 'grid',
-        gap: 12,
-      }}
-    >
-      <div className="settings-card-head">
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-          }}
-        >
-          {title}
-        </div>
-        {description && (
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--text-secondary)',
-              marginTop: 2,
-            }}
-          >
-            {description}
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'grid', gap: 10 }}>{children}</div>
-      {onSave && (
-        <div
-          className="settings-card-actions"
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          {saving && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              Saving...
-            </span>
-          )}
-          <button
-            onClick={onSave}
-            disabled={!hasChanges || saving}
-            className="primary"
-            style={{
-              height: 34,
-              padding: '0 14px',
-              border: '1px solid var(--accent-tint-border)',
-              borderRadius: 8,
-              background: 'var(--accent-tint)',
-              color: 'var(--accent)',
-              fontWeight: 600,
-              fontSize: 12.5,
-              cursor: hasChanges && !saving ? 'pointer' : 'default',
-              opacity: hasChanges && !saving ? 1 : 0.5,
-            }}
-          >
-            Save
-          </button>
-        </div>
-      )}
-    </div>
   )
 }
 

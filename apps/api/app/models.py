@@ -224,6 +224,13 @@ class Page(Base):
     # ponytail: one JSON doc per page; split into blocks only if scale demands it.
     content: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
     position: Mapped[str] = mapped_column(String(255), default="a0", nullable=False)
+    type: Mapped[str] = mapped_column(String(16), default="page", nullable=False)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Preset token ("gradient:3") or an image URL — no FK so covers work without files.
+    cover: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # ponytail: record property values as JSON keyed by property id; extract a
+    # values table only if server-side querying at scale demands it.
+    properties: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -234,6 +241,44 @@ class Page(Base):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DatabaseProperty(Base):
+    __tablename__ = "database_properties"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    page_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("pages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    config: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    position: Mapped[str] = mapped_column(String(255), default="a0", nullable=False)
+
+
+class DatabaseView(Base):
+    __tablename__ = "database_views"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    page_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("pages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), default="Table", nullable=False)
+    type: Mapped[str] = mapped_column(String(32), default="table", nullable=False)
+    # ponytail: filters/sort/group_by/visible props in one config blob; split
+    # into columns only if they need server-side querying.
+    config: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    position: Mapped[str] = mapped_column(String(255), default="a0", nullable=False)
 
 
 class Link(Base):

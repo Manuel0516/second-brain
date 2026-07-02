@@ -177,3 +177,19 @@ GET    /search?q=                        # Postgres full-text now, pgvector sema
    recurring "Daily Note" or "Meeting Notes" structure.
 4. **Trash/restore** — soft delete (`deleted_at`) rather than hard delete, with a Trash view
    and auto-purge after N days.
+5. **Recurring event note linking** — when the calendar creates a linked note for an event
+   that is part of a recurring series, the note must be linked to **all occurrences** of the
+   series, not just the master event or a single override.
+
+   **Implementation sketch:** the `Link` row's `source_id` points to the **master** event's
+   UUID (the one with the `rrule`), never to an override. The "Linked" panel on the note side
+   queries all `Link` rows where `source_id` = master event id, and the calendar side shows
+   the note as attached to every expanded occurrence. If a user later splits the series
+   ("this and following"), the old master's `rrule` gets an `UNTIL` and a new master is
+   created — the `Link` row stays pointing at the original master for past occurrences, and
+   a new `Link` row is created for the new master so future occurrences remain connected.
+
+   **Deferred until:** the first time a user creates a linked note from a recurring event in
+   the calendar UI. The current EventEditor already handles the `scope` concept for edits and
+   deletes; linking follows the same pattern: "All events" → master link, "This event" →
+   single-occurrence override link (stored on the override row).

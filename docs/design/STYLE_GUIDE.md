@@ -228,6 +228,11 @@ border-color: var(--accent);
 box-shadow: 0 0 0 3px var(--accent-tint);
 ```
 
+The app-wide keyboard fallback is the low-specificity
+`:where(button, input, select, textarea):focus-visible` rule in `styles.css`. Do not add
+module-wide input focus outlines: component focus styles must override the fallback with
+one border/ring treatment, never stack a second outline on top.
+
 ### Sidebar row (`.calendar-row` / `.notes-tree-row` pattern)
 ```css
 min-height: 32–40px;

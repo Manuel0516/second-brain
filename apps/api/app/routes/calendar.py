@@ -55,6 +55,8 @@ class CalendarResponse(BaseModel):
 
 class NoteConnection(BaseModel):
     title: str = Field(min_length=1, max_length=255)
+    folder_id: str | None = None
+    link_ids: list[str] = Field(default_factory=list, max_length=50)
 
 
 class FinanceConnection(BaseModel):

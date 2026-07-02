@@ -252,3 +252,104 @@ async def test_search_content_and_generic_links_are_owned(
     assert (
         await client.delete(f"/api/links/{link_id}", cookies={"access_token": token})
     ).status_code == 204
+
+
+async def test_patch_content_with_unknown_block_types_is_safe(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    """New TipTap node types (location, spreadsheet) must not break mention sync."""
+    _, token = await _user_and_token(client, test_db_session, "notes-blocks")
+    created = await client.post(
+        "/api/pages", json={"title": "Trip"}, cookies={"access_token": token}
+    )
+    target = await client.post(
+        "/api/pages", json={"title": "Packing list"}, cookies={"access_token": token}
+    )
+    content = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "locationBlock",
+                "attrs": {"address": "Plaza Mayor, Madrid", "lat": 40.4, "lng": -3.7},
+            },
+            {
+                "type": "paragraph",
+                "content": [
+                    {
+                        "type": "mention",
+                        "attrs": {"id": target.json()["id"], "type": "page", "label": "Packing"},
+                    }
+                ],
+            },
+        ],
+    }
+    patched = await client.patch(
+        f"/api/pages/{created.json()['id']}",
+        json={"content": content},
+        cookies={"access_token": token},
+    )
+    assert patched.status_code == 200
+    backlinks = await client.get(
+        f"/api/nodes/page/{target.json()['id']}/backlinks",
+        cookies={"access_token": token},
+    )
+    assert [link["relation"] for link in backlinks.json()] == ["mentions"]
+
+
+async def test_folder_pages_and_event_note_in_folder(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    user, token = await _user_and_token(client, test_db_session, "notes-folders")
+    folder = await client.post(
+        "/api/pages",
+        json={"title": "Work", "type": "folder"},
+        cookies={"access_token": token},
+    )
+    assert folder.status_code == 201
+    assert folder.json()["type"] == "folder"
+    folder_id = folder.json()["id"]
+
+    event = await _event(test_db_session, user, "Sprint review")
+    note = await client.post(
+        f"/api/events/{event.id}/note",
+        json={"title": "Review notes", "parent_page_id": folder_id},
+        cookies={"access_token": token},
+    )
+    assert note.status_code == 201
+    assert note.json()["parent_page_id"] == folder_id
+
+    # force_new creates a second, distinct note for the same event.
+    second = await client.post(
+        f"/api/events/{event.id}/note",
+        json={"title": "More notes", "force_new": True},
+        cookies={"access_token": token},
+    )
+    assert second.status_code == 201
+    assert second.json()["id"] != note.json()["id"]
+    # Without force_new the idempotent shortcut still returns the first note.
+    again = await client.post(
+        f"/api/events/{event.id}/note", json={}, cookies={"access_token": token}
+    )
+    assert again.json()["id"] == note.json()["id"]
+
+
+async def test_event_note_honors_draft_folder_id(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    user, token = await _user_and_token(client, test_db_session, "notes-draftfolder")
+    folder = await client.post(
+        "/api/pages",
+        json={"title": "Trips", "type": "folder"},
+        cookies={"access_token": token},
+    )
+    folder_id = folder.json()["id"]
+    event = await _event(test_db_session, user, "Flight")
+    event.connections = {"notes": {"title": "Itinerary", "folder_id": folder_id}}
+    await test_db_session.commit()
+
+    note = await client.post(
+        f"/api/events/{event.id}/note", json={}, cookies={"access_token": token}
+    )
+    assert note.status_code == 201
+    assert note.json()["parent_page_id"] == folder_id
+    assert note.json()["title"] == "Itinerary"

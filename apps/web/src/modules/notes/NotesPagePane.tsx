@@ -56,17 +56,21 @@ export function NotesPagePane({
     return result
   }, [page, pages])
 
+  const patchById = async (
+    id: string,
+    input: Parameters<typeof notesApi.patch>[1],
+  ) => {
+    setPages((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...input } : item)),
+    )
+    const saved = await notesApi.patch(id, input)
+    setPages((current) =>
+      current.map((item) => (item.id === id ? saved : item)),
+    )
+  }
+
   const patch = async (input: Parameters<typeof notesApi.patch>[1]) => {
-    if (!page) return
-    setPages((current) =>
-      current.map((item) =>
-        item.id === page.id ? { ...item, ...input } : item,
-      ),
-    )
-    const saved = await notesApi.patch(page.id, input)
-    setPages((current) =>
-      current.map((item) => (item.id === page.id ? saved : item)),
-    )
+    if (page) await patchById(page.id, input)
   }
 
   return (
@@ -92,6 +96,8 @@ export function NotesPagePane({
           onPatch={patch}
           onOpenPage={setActiveId}
           onOpenEvent={onOpenEvent}
+          pages={pages}
+          onPatchPage={patchById}
         />
       ) : (
         <p className="notes-pane-loading">Loading note…</p>

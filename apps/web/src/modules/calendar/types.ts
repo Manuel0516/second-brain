@@ -7,7 +7,11 @@ export interface CalendarData {
 }
 
 export interface EventConnections {
-  notes?: { title: string } | null
+  notes?: {
+    title: string
+    folder_id?: string | null
+    link_ids?: string[]
+  } | null
   finance?: {
     type: 'income' | 'expense'
     amount: number

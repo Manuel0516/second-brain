@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { notesApi } from './api'
-import { PageTree } from './PageTree'
+import { Sidebar } from './Sidebar'
 import { PageView } from './PageView'
 import { TrashView } from './TrashView'
 import type { Page } from './types'
@@ -15,6 +15,9 @@ export function Notes() {
   const [pages, setPages] = useState<Page[]>([])
   const [trash, setTrash] = useState<Page[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 640,
+  )
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
@@ -40,11 +43,18 @@ export function Notes() {
     }
   }, [])
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 800px)')
-    const update = () => setSidebarOpen(!media.matches)
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
+    const mobile = window.matchMedia('(max-width: 640px)')
+    const drawer = window.matchMedia('(max-width: 800px)')
+    const updateMobile = () => setIsMobile(mobile.matches)
+    const updateDrawer = () => setSidebarOpen(!drawer.matches)
+    mobile.addEventListener('change', updateMobile)
+    drawer.addEventListener('change', updateDrawer)
+    return () => {
+      mobile.removeEventListener('change', updateMobile)
+      drawer.removeEventListener('change', updateDrawer)
+    }
   }, [])
+
   const selected = pages.find((page) => page.id === pageId)
   const ancestors = useMemo(() => {
     const result: Page[] = []
@@ -58,18 +68,27 @@ export function Notes() {
     return result
   }, [pages, selected])
 
-  const create = async (parentId: string | null) => {
+  const createPage = async (parentId: string | null): Promise<Page | null> => {
     try {
       const page = await notesApi.create({
         parent_page_id: parentId,
         title: 'Untitled',
       })
       setPages((current) => [...current, page])
-      navigate(`/notes/${page.id}`)
+      return page
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : 'Could not create page',
       )
+      return null
+    }
+  }
+
+  const create = async (parentId: string | null) => {
+    const page = await createPage(parentId)
+    if (page) {
+      setTrash(null)
+      navigate(`/notes/${page.id}`)
     }
   }
 
@@ -88,6 +107,20 @@ export function Notes() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save page')
       throw reason
+    }
+  }
+
+  const applyTemplate = async (id: string) => {
+    try {
+      const copy = await notesApi.duplicate(id)
+      // The copy brings a whole subtree — refetch to pick it all up.
+      setPages(await notesApi.list())
+      setTrash(null)
+      navigate(`/notes/${copy.id}`)
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Could not use template',
+      )
     }
   }
 
@@ -124,9 +157,11 @@ export function Notes() {
 
   return (
     <div className="notes-shell">
-      <AppRail active="notes" onNavigate={navigate} />
+      {(!isMobile || sidebarOpen) && (
+        <AppRail active="notes" onNavigate={navigate} />
+      )}
       <div className="notes-workspace">
-        <PageTree
+        <Sidebar
           pages={pages}
           selectedId={pageId}
           onSelect={(id) => {
@@ -135,6 +170,11 @@ export function Notes() {
           }}
           onCreate={(parentId) => void create(parentId)}
           onRename={(id, title) => void patchPage(id, { title })}
+          onSetType={(id, type) => void patchPage(id, { type })}
+          onSetTemplate={(id, is_template) =>
+            void patchPage(id, { is_template })
+          }
+          onUseTemplate={(id) => void applyTemplate(id)}
           onMove={(id, parent_page_id, position) =>
             void patchPage(id, { parent_page_id, position })
           }
@@ -143,59 +183,108 @@ export function Notes() {
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
-        <section className="notes-canvas">
-          <button
-            type="button"
-            className="notes-sidebar-open"
-            aria-label="Open page navigation"
-            onClick={() => setSidebarOpen(true)}
-          >
-            ☰
-          </button>
-          {error && (
-            <div className="notes-error" role="alert">
-              {error}
-            </div>
-          )}
-          {trash ? (
-            <TrashView
-              pages={trash}
-              onBack={() => setTrash(null)}
-              onRestore={(id) =>
-                void notesApi.restore(id).then((page) => {
-                  setTrash(
-                    (current) =>
-                      current?.filter((item) => item.id !== id) ?? [],
-                  )
-                  setPages((current) => [...current, page])
-                })
-              }
-            />
-          ) : selected ? (
-            <PageView
-              page={selected}
-              ancestors={ancestors}
-              onPatch={(input) => patchPage(selected.id, input)}
-              onOpenPage={(id) => navigate(`/notes/${id}`)}
-            />
-          ) : (
-            <main className="notes-empty-page">
-              <h1>{loading ? 'Loading…' : 'Notes'}</h1>
-              {!loading && (
-                <>
-                  <p>Select a page or start a new one.</p>
-                  <button type="button" onClick={() => void create(null)}>
-                    New page
-                  </button>
-                </>
-              )}
-            </main>
-          )}
-        </section>
+        {sidebarOpen && (
+          <div
+            className="sidebar-backdrop"
+            role="presentation"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        <div className="notes-main">
+          <div className="notes-topbar">
+            <button
+              type="button"
+              className="notes-nav-btn"
+              aria-label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
+              aria-pressed={sidebarOpen}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                <path d="M7.5 3.5v13" />
+              </svg>
+            </button>
+            <h2 className="notes-topbar-title">
+              {trash ? 'Trash' : selected?.title || 'Notes'}
+            </h2>
+            <button
+              type="button"
+              className="cal-new-event notes-new-page"
+              aria-label="New page"
+              onClick={() => void create(null)}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <path d="M10 4v12M4 10h12" />
+              </svg>
+              <span className="cal-new-event-label">New page</span>
+            </button>
+          </div>
+          <section className="notes-canvas">
+            {error && (
+              <div className="notes-error" role="alert">
+                {error}
+              </div>
+            )}
+            {trash ? (
+              <TrashView
+                pages={trash}
+                onBack={() => setTrash(null)}
+                onRestore={(id) =>
+                  void notesApi.restore(id).then((page) => {
+                    setTrash(
+                      (current) =>
+                        current?.filter((item) => item.id !== id) ?? [],
+                    )
+                    setPages((current) => [...current, page])
+                  })
+                }
+              />
+            ) : selected ? (
+              <PageView
+                page={selected}
+                ancestors={ancestors}
+                onPatch={(input) => patchPage(selected.id, input)}
+                onOpenPage={(id) => navigate(`/notes/${id}`)}
+                pages={pages}
+                onPatchPage={patchPage}
+                onCreatePage={(parentId) => void createPage(parentId)}
+              />
+            ) : (
+              <main className="notes-empty-page">
+                <h1>{loading ? 'Loading…' : 'Notes'}</h1>
+                {!loading && (
+                  <>
+                    <p>Select a page or start a new one.</p>
+                    <button type="button" onClick={() => void create(null)}>
+                      New page
+                    </button>
+                  </>
+                )}
+              </main>
+            )}
+          </section>
+        </div>
       </div>
       <ConfirmDialog
         open={pendingDelete !== null}
-        message={`Move \u201c${pendingDelete?.title}\u201d to trash?`}
+        message={`Move “${pendingDelete?.title}” to trash?`}
         detail="Nested pages will also be moved to trash."
         confirmLabel="Move to trash"
         onConfirm={() => void remove()}

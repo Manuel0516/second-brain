@@ -1,16 +1,21 @@
 # What's happening now
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ---
 
 ## Active work
 
-**Notes module polish**
-- Notes page UI is implemented but needs visual parity with the calendar page.
-- Icon picker popover CSS fixes in progress (double-border / glow issues).
-- Block editor (Tiptap v3) is working with drag handles and bubble menu.
-- Many-to-many event↔note linking is working.
+**Notes module remake — ALL 5 PHASES DONE (2026-07-02, history 0010–0011, 0019–0021)**
+- Phase 1: UI rebuilt to calendar parity (shared shell/sidebar/topbar/mobile drawer).
+- Phase 2: backend for database pages (migration 011, properties/views CRUD, duplicate, trash purge).
+- Phase 3: database pages UI (table/list/board, typed property cells, sort/group).
+- Phase 4: covers (preset gradients + URL) and templates.
+- Phase 5: gallery + calendar views, location block (OSM, zero deps).
+- Deferred: spreadsheet block formulas (needs HyperFormula approval); cover image uploads (needs `minio` dep + files route); filter-editing UI (filters.ts already applies `config.filters`); board drag on touch.
+
+**Event↔note linking rework + folders (2026-07-02, history 0022)**
+- Folder page type; FolderPicker component; event creation asks folder + title + link-existing; edit mode = toggle-only connections card + Linked card for all management; toggle-off unlinks everything (notes survive).
 
 **Project governance restructure**
 - AGENTS.md rewritten as universal guide (Claude + Codex + Copilot).
@@ -22,13 +27,10 @@ Last updated: 2026-07-01
 
 ## Up next (rough priority order)
 
-1. **Frontend componentization** — extract `<Card>`, `<Field>`, `<IconButton>`, `<ConfirmDialog>`
-   from existing module code into `src/components/`. See `plans/COMPONENT_ARCHITECTURE_PLAN.md`.
-2. Notes UI visual parity — match calendar/settings feel exactly.
-3. Notes mobile layout — same touch patterns as calendar.
-4. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
-5. Settings → Security page — wire up TOTP 2FA UI.
-6. Google Calendar sync — Phase 1 completion.
+1. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
+2. Settings → Security page — wire up TOTP 2FA UI.
+3. Google Calendar sync — Phase 1 completion.
+4. Notes deferred items (spreadsheet formulas, cover uploads, filter UI) — pick up on demand.
 
 ---
 

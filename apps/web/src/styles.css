@@ -135,6 +135,13 @@ textarea {
   font: inherit;
 }
 
+/* Low-specificity accessibility fallback. Component focus styles override it
+   without producing a second ring. */
+:where(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Nerd Font symbols. unicode-range limits this to Private-Use-Area codepoints,
    so the file is only fetched when an actual Nerd glyph is rendered — normal
    text and standard emoji never trigger the download. */
@@ -358,6 +365,61 @@ button:not(.calendar-event):active {
   background: var(--accent-tint) !important;
   color: var(--text-primary) !important;
 }
+.settings-nav {
+  padding: 20px 10px;
+}
+.settings-nav .sidebar-title {
+  padding-left: 4px;
+}
+
+.settings-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+}
+.settings-card-head h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-card-head p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.settings-card-body {
+  display: grid;
+  gap: 10px;
+}
+.settings-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.settings-card-actions span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.settings-card-save {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: var(--r-md);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-card-save:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
 
 /* Springy, staggered entrance for the settings header + cards on load. */
 .settings-content > div > * {
@@ -427,7 +489,7 @@ button:not(.calendar-event):active {
   height: 9px;
 }
 
-.calendar-sidebar {
+.app-sidebar {
   width: 230px;
   flex: 0 0 auto;
   padding: 20px 14px;
@@ -441,7 +503,7 @@ button:not(.calendar-event):active {
     transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* Desktop: collapse to zero width. */
-.calendar-sidebar.closed {
+.app-sidebar.closed {
   width: 0;
   padding-left: 0;
   padding-right: 0;
@@ -1633,7 +1695,7 @@ input[type='color'] {
 .event-editor header {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2417,7 +2479,7 @@ input[type='color'] {
     transform: translateX(0);
     opacity: 1;
   }
-  .calendar-sidebar {
+  .app-sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
@@ -2434,7 +2496,7 @@ input[type='color'] {
       opacity 0.18s ease;
     will-change: transform;
   }
-  .calendar-sidebar.closed {
+  .app-sidebar.closed {
     width: min(240px, calc(100vw - 64px));
     padding: 20px 14px;
     border-right-width: 1px;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { IconButton } from '../../components/IconButton'
+import { SidebarShell } from '../../components/SidebarShell'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 
@@ -108,15 +109,14 @@ export function SettingsLayout() {
         }}
       >
         {/* Settings nav sidebar */}
-        <nav
-          className={`calendar-sidebar settings-nav ${sidebarOpen ? '' : 'closed'}`}
-          style={{
-            padding: '20px 10px',
-          }}
-        >
-          <div className="sidebar-title" style={{ paddingLeft: 4 }}>
-            <span>Settings</span>
-            <div className="sidebar-title-actions">
+        <SidebarShell
+          as="nav"
+          title="Settings"
+          open={sidebarOpen}
+          className="settings-nav"
+          ariaLabel="Settings navigation"
+          actions={
+            <>
               <IconButton
                 icon={
                   <svg
@@ -136,9 +136,9 @@ export function SettingsLayout() {
                 size="sm"
                 className="sidebar-close"
               />
-            </div>
-          </div>
-
+            </>
+          }
+        >
           <div
             style={{ display: 'grid', gap: 2, flex: 1, alignContent: 'start' }}
           >
@@ -260,7 +260,7 @@ export function SettingsLayout() {
               </NavLink>
             </>
           )}
-        </nav>
+        </SidebarShell>
         {sidebarOpen && (
           <div
             className="sidebar-backdrop"

@@ -1,5 +1,7 @@
-/* Notes module — reuses the calendar shell language: rail → contextual sidebar
-   → canvas, the same tokens, popovers in the .cal-card style, no new visuals. */
+/* Notes module — shares the calendar shell language directly: the sidebar,
+   rows, row menus, cards, and mobile drawer reuse the .calendar-* /.cal-*
+   classes from styles.css. This file only holds what is notes-specific:
+   the page tree, the page canvas, and the block editor. */
 
 .notes-shell {
   display: flex;
@@ -7,101 +9,119 @@
   overflow: hidden;
   background: var(--bg-base);
   color: var(--text-primary);
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .notes-workspace {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
-
-/* ── Sidebar (matches .calendar-sidebar) ─────────────────────────── */
-.notes-sidebar {
-  width: 230px;
-  flex: 0 0 auto;
+.notes-main {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  padding: 20px 14px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-base);
+  min-width: 0;
   overflow: hidden;
 }
-.notes-sidebar-heading {
+
+/* ── Topbar (mirrors .cal-topbar) ────────────────────────────────── */
+.notes-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  color: var(--text-tertiary);
-  font: 600 11px var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 18px 28px 14px;
+  border-bottom: 1px solid var(--border);
+  animation: fadeDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.notes-sidebar-heading > span:last-child {
+.notes-nav-btn {
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
-  gap: 2px;
-}
-.notes-sidebar-heading button {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--r-md);
-  background: transparent;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
   color: var(--text-secondary);
-  font-size: 18px;
-  line-height: 1;
+  font-size: 14px;
   cursor: pointer;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease;
+  transition: background 0.15s;
 }
-.notes-sidebar-heading button:hover {
+.notes-nav-btn:hover {
   background: var(--bg-raised);
+}
+.notes-topbar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
   color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-new-page {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: 8px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notes-new-page:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* ── Page tree ───────────────────────────────────────────────────── */
+/* ── Sidebar: notes-specific layout on top of SidebarShell ──────── */
+.notes-sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .notes-tree {
   flex: 1;
-  overflow: auto;
+  overflow: hidden auto;
   margin: 0 -4px;
   padding: 0 4px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
 }
+.notes-tree [role='group'] {
+  display: grid;
+  gap: 2px;
+}
+.notes-tree [role='treeitem'] {
+  display: grid;
+  gap: 2px;
+}
+/* Tree rows reuse .calendar-row (grid 18px 1fr 26px, 40px, hover). */
 .notes-tree-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 32px;
-  padding-right: 4px;
-  border-radius: var(--r-md);
-  color: var(--text-secondary);
-  transition:
-    background 0.14s ease,
-    color 0.14s ease,
-    box-shadow 0.14s ease;
-}
-.notes-tree-row:hover {
-  background: rgba(255, 240, 200, 0.04);
-  color: var(--text-primary);
+  min-height: 36px;
 }
 .notes-tree-row.selected {
   background: var(--bg-raised);
-  color: var(--text-primary);
   box-shadow: inset 2px 0 var(--accent);
 }
-/* Lifted look while touch-dragging to reorder. */
-.notes-tree-row[style*='translateY'] {
-  z-index: 2;
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
-  transition: none;
+.notes-tree-row.selected .calendar-name {
+  color: var(--text-primary);
 }
 .notes-tree-toggle {
   width: 18px;
   height: 26px;
-  flex: 0 0 18px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -109,44 +129,132 @@
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 11px;
   cursor: pointer;
+  transition: color 0.14s ease;
+}
+.notes-tree-toggle:hover {
+  color: var(--text-primary);
 }
 .notes-tree-toggle:disabled {
   cursor: default;
 }
-.notes-tree-row > span[aria-hidden] {
-  font-size: 13px;
-  opacity: 0.85;
+.notes-tree-toggle svg {
+  transition: transform 0.14s ease;
+}
+.notes-tree-toggle.open svg {
+  transform: rotate(90deg);
 }
 .notes-tree-title {
-  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  padding: 7px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
   border: 0;
   background: none;
   color: inherit;
   font-size: 13px;
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: pointer;
   touch-action: pan-y;
 }
-.notes-tree-action {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
+.notes-tree-icon {
+  flex: 0 0 auto;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.notes-empty {
+  padding: 6px 8px;
   color: var(--text-tertiary);
-  font-size: 16px;
-  line-height: 1;
+  font-size: 12px;
+}
+
+/* Templates section (above the trash link). */
+.notes-templates {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.notes-templates-title {
+  padding: 4px 8px 6px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.notes-template-row {
+  display: grid;
+  grid-template-columns: 1fr 26px 26px;
+  gap: 4px;
+  align-items: center;
+  min-height: 36px;
+  padding: 2px 8px;
+  border-radius: var(--r-md);
+  transition: background 0.14s ease;
+}
+.notes-template-row:hover {
+  background: rgba(255, 240, 200, 0.04);
+}
+
+/* ── Covers ──────────────────────────────────────────────────────── */
+.notes-cover {
+  position: relative;
+  height: 160px;
+  margin-bottom: 16px;
+  border-radius: var(--r-lg);
+  background-position: center;
+  background-size: cover;
+}
+.notes-cover-g1 {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 45%, var(--bg-base)),
+    var(--bg-elevated)
+  );
+}
+.notes-cover-g2 {
+  background-image: linear-gradient(
+    135deg,
+    var(--accent-tint),
+    color-mix(in srgb, var(--accent) 22%, var(--bg-raised))
+  );
+}
+.notes-cover-g3 {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text-primary) 14%, var(--bg-base)),
+    var(--bg-raised)
+  );
+}
+.notes-cover-g4 {
+  background-image: linear-gradient(180deg, var(--bg-raised), var(--bg-base));
+}
+.notes-cover-g5 {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--text-tertiary) 35%, var(--bg-base)),
+    var(--bg-elevated)
+  );
+}
+.notes-cover-g6 {
+  background-image: linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--accent) 30%, var(--bg-base)) 0%,
+    var(--bg-base) 55%,
+    color-mix(in srgb, var(--accent) 18%, var(--bg-base)) 100%
+  );
+}
+.notes-cover-change {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
   cursor: pointer;
   opacity: 0;
   transition:
@@ -154,48 +262,117 @@
     background 0.14s ease,
     color 0.14s ease;
 }
-.notes-tree-row:hover .notes-tree-action,
-.notes-tree-action:focus-visible {
+.notes-cover:hover .notes-cover-change,
+.notes-cover-change:focus-visible,
+.notes-cover-change[aria-expanded='true'] {
   opacity: 1;
 }
-.notes-tree-action:hover {
+@media (hover: none) {
+  .notes-cover-change {
+    opacity: 1;
+  }
+}
+.notes-cover-change:hover {
   background: var(--bg-raised);
   color: var(--text-primary);
 }
-.notes-tree-rename {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 7px;
-  border: 1px solid var(--accent);
-  border-radius: var(--r-sm);
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-size: 13px;
+.notes-cover-picker {
+  position: absolute;
+  right: 10px;
+  top: calc(100% + 6px);
+  z-index: 7;
+  width: 260px;
+  max-width: min(260px, calc(100vw - 40px));
+  overflow-y: auto;
 }
-.notes-empty {
-  padding: 6px 8px;
+.notes-cover .notes-cover-picker {
+  top: auto;
+  bottom: 46px;
+}
+.notes-cover-swatches {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.notes-cover-swatch {
+  height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.notes-cover-swatch[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+/* Sits beside the save-state pill, clear of the breadcrumbs. */
+.notes-add-cover-anchor {
+  position: absolute;
+  top: -26px;
+  right: 60px;
+}
+.notes-add-cover-anchor .notes-cover-picker {
+  right: 0;
+}
+.notes-add-cover {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
   color: var(--text-tertiary);
   font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-page:hover .notes-add-cover,
+.notes-add-cover:focus-visible,
+.notes-add-cover[aria-expanded='true'] {
+  opacity: 1;
+}
+@media (hover: none) {
+  .notes-add-cover {
+    opacity: 1;
+  }
+}
+.notes-add-cover:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* Trash pinned at the bottom (mirrors the .integration section). */
+.notes-trash-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 .notes-trash-link {
-  margin-top: 8px;
-  padding: 10px 8px;
+  width: 100%;
   min-height: 40px;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 8px;
   border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--r-md);
   background: none;
   color: var(--text-tertiary);
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
-  transition: color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
 }
 .notes-trash-link:hover {
-  color: var(--text-secondary);
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 
 /* ── Canvas + page ───────────────────────────────────────────────── */
@@ -204,12 +381,12 @@
   flex: 1;
   min-width: 0;
   overflow: auto;
-  background: var(--bg-base);
 }
 .notes-page {
   width: min(720px, calc(100% - 56px));
   margin: 0 auto;
   padding: 40px 0 96px;
+  animation: pageEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .notes-breadcrumbs {
   display: flex;
@@ -233,86 +410,86 @@
   margin-left: 6px;
   color: var(--text-tertiary);
 }
-/* Icon picker + title: grid with an optional icon slot on the left.
-   When an icon is set, a 56×56 input shows it. When no icon, the
-   EmojiPicker trigger matches that same 56×56 size. */
+
+/* Icon + title head. The shared EmojiPicker trigger is enlarged to a icon slot. */
 .notes-page-head {
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 0;
   margin: 12px 0 20px;
 }
-.notes-icon-input {
-  width: 56px;
-  height: 56px;
-  border: 0;
-  outline: 0;
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 34px;
-  text-align: center;
-  transition: background 0.14s ease;
-  margin-right: 12px;
-}
-.notes-icon-input:hover {
-  background: var(--bg-elevated);
-}
-.notes-icon-input::placeholder {
-  color: var(--text-tertiary);
-}
-/* Match the EmojiPicker trigger to the icon input size. */
 .notes-page-head .editor-icon-trigger {
-  width: 56px;
-  height: 56px;
   margin-right: 12px;
 }
-.notes-page-head .editor-icon-picker {
-  margin-right: 0;
+.notes-page-head .editor-icon-trigger .event-icon-glyph {
+  font-size: 34px;
 }
-/* No icon: collapse the first column so the title sits flush left.
-   On hover (or when the EmojiPicker popover is open), show the trigger. */
-.notes-page-head.no-icon:not(:hover):not(.icon-picker-open)
-  .editor-icon-picker {
+/* Icon selected: strip the container border/background so only the glyph
+   shows — the trigger becomes a transparent icon slot, not a button chip. */
+
+.notes-page-head:not(.no-icon) .editor-icon-trigger {
+  background: transparent;
+  border: none;
+}
+/* No icon: collapse the slot so the title sits flush left. Reveal the
+   trigger on hover (desktop) or when icon-picker-open is set. */
+.notes-page-head.no-icon .editor-icon-picker {
   display: none;
 }
-.notes-page-head.no-icon:not(:hover):not(.icon-picker-open) .notes-title-input {
+.notes-page-head.no-icon .notes-title-input {
   grid-column: 1 / -1;
 }
-/* Hide the trigger when no icon and not interacting, but the grid
-   cell reserves space so the title stays aligned. */
-.notes-page-head.no-icon .editor-icon-trigger {
-  opacity: 0;
-  transition:
-    opacity 0.14s ease,
-    border-color 0.15s,
-    background 0.15s;
+/* When the picker is explicitly opened, restore the picker display and
+   let the title share the row again. */
+.notes-page-head.no-icon.icon-picker-open .editor-icon-picker {
+  display: block;
 }
-.notes-page-head.no-icon:hover .editor-icon-trigger,
-.notes-page-head.no-icon.icon-picker-open .editor-icon-trigger {
-  opacity: 1;
+.notes-page-head.no-icon.icon-picker-open .notes-title-input {
+  grid-column: auto;
 }
-/* The popover already provides a container border, so remove the input's
-   visible border to avoid a double-border effect. The accent focus glow
-   is preserved. */
+@media (hover: hover) {
+  .notes-page-head.no-icon .editor-icon-trigger {
+    opacity: 0;
+    transition:
+      opacity 0.14s ease,
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .notes-page-head.no-icon:hover .editor-icon-trigger,
+  .notes-page-head.no-icon.icon-picker-open .editor-icon-trigger {
+    opacity: 1;
+  }
+}
+/* The popover provides the container border — keep the custom-icon input
+   borderless to avoid a double border. */
 .notes-page-head .editor-icon-popover .editor-icon-custom {
-  border-color: transparent;
-  background: var(--bg-raised);
+  background: var(--bg-elevated);
 }
 .notes-page-head .editor-icon-popover .editor-icon-custom:focus {
-  border-color: transparent;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
 }
 .notes-title-input {
   min-width: 0;
-  border: 0;
+  padding-left: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   outline: 0;
   background: transparent;
   color: var(--text-primary);
   font-size: clamp(26px, 4vw, 34px);
   font-weight: 700;
   letter-spacing: -0.025em;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.notes-shell .notes-title-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
 }
 .notes-title-input::placeholder {
   color: var(--text-tertiary);
@@ -386,6 +563,15 @@
 .notes-editor .tiptap ol {
   padding-left: 1.4em;
 }
+.notes-editor .tiptap ul:not([data-type='taskList']) {
+  list-style: disc;
+}
+.notes-editor .tiptap ol {
+  list-style: decimal;
+}
+.notes-editor .tiptap li::marker {
+  color: var(--text-tertiary);
+}
 .notes-editor .tiptap blockquote {
   margin-left: 0;
   padding-left: 14px;
@@ -437,13 +623,63 @@
   padding: 0;
   list-style: none;
 }
-.notes-editor .tiptap li[data-type='taskItem'] {
+.notes-editor .tiptap .notes-task-item {
   display: flex;
   gap: 8px;
   align-items: flex-start;
 }
-.notes-editor .tiptap li[data-type='taskItem'] > label {
+.notes-task-check {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
   margin-top: 0.35em;
+  cursor: pointer;
+}
+.notes-task-check input {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.notes-task-checkmark {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--bg-base);
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.notes-task-checkmark svg {
+  opacity: 0;
+}
+.notes-task-check input:checked + .notes-task-checkmark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.notes-task-check input:checked + .notes-task-checkmark svg {
+  opacity: 1;
+}
+.notes-task-check input:focus-visible + .notes-task-checkmark {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.notes-task-content {
+  flex: 1;
+  min-width: 0;
+  cursor: text;
+}
+.notes-task-item[data-checked='true'] .notes-task-content {
+  color: var(--text-secondary);
+  text-decoration: line-through;
 }
 .notes-mention {
   display: inline;
@@ -454,6 +690,135 @@
   color: var(--accent);
   font-weight: 500;
   cursor: pointer;
+}
+.notes-editor .tiptap a {
+  color: var(--accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.notes-editor .tiptap a:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* Math nodes switch in place between LaTeX source and rendered KaTeX. */
+.math-node-inline {
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+.math-node-rendered {
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: text;
+}
+.math-node-rendered:hover,
+.math-node-rendered:active {
+  transform: none !important;
+}
+.math-node-rendered:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.math-node-inline-rendered {
+  display: inline-flex;
+  padding: 1px 3px;
+  border-radius: var(--r-sm);
+  line-height: 1;
+}
+.math-node-inline-rendered:hover {
+  background: var(--bg-raised);
+}
+.math-node-inline-input,
+.math-node-block-input,
+.math-node-label-field input {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.math-node-inline-input {
+  width: min(240px, 60vw);
+  min-height: 30px;
+  padding: 3px 7px;
+  font-size: 13px;
+}
+.math-node-inline-input:focus,
+.math-node-block-input:focus,
+.math-node-label-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.math-node-block {
+  display: block;
+  width: 100%;
+  margin: 0.8em 0;
+}
+.math-node-block-rendered {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(32px, 1fr) auto minmax(32px, 1fr);
+  align-items: center;
+  width: 100%;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+}
+.math-node-block-rendered:hover {
+  background: var(--bg-elevated);
+}
+.math-node-block-output {
+  grid-column: 2;
+}
+.math-node-block-output .katex-display {
+  margin: 0;
+}
+.math-node-equation-number {
+  grid-column: 3;
+  justify-self: end;
+  color: var(--text-tertiary);
+  font: 12px var(--font-mono);
+}
+.math-node-block-editing {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+}
+.math-node-block-input {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.math-node-label-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.math-node-label-field input {
+  width: 110px;
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 /* ── Editor popovers — .cal-card language ────────────────────────── */
@@ -487,13 +852,108 @@
   text-transform: capitalize;
 }
 .notes-selection-toolbar {
+  position: relative;
   gap: 1px;
   animation: popIn 120ms ease-out both;
 }
 .notes-selection-toolbar button {
   min-width: 30px;
+  display: grid;
+  place-items: center;
   text-align: center;
   font-weight: 600;
+}
+.notes-slash-menu button,
+.notes-selection-toolbar button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.notes-slash-menu button[aria-selected='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.notes-selection-toolbar button:hover,
+.notes-selection-toolbar button[aria-pressed='true'] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-link-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  width: min(320px, 90vw);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 120ms ease-out both;
+}
+.notes-link-popover label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.notes-link-popover input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: 400 13px var(--font-ui);
+  text-transform: none;
+  letter-spacing: normal;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.notes-link-popover input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.notes-link-popover p {
+  margin: 0;
+  color: #d9573f;
+  font-size: 11px;
+}
+.notes-link-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.notes-selection-toolbar .notes-link-actions button {
+  min-width: 0;
+  min-height: 30px;
+  display: inline-flex;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.notes-link-actions .primary {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.notes-link-actions .danger {
+  margin-right: auto;
+  color: #d9573f;
 }
 
 /* ── Notion-style block gutter (drag handle + add) ───────────────── */
@@ -528,29 +988,11 @@
   background: var(--bg-raised);
   color: var(--text-secondary);
 }
-.notes-slash-menu button,
-.notes-selection-toolbar button {
-  min-height: 32px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-.notes-slash-menu button[aria-selected='true'] {
-  background: var(--accent-tint);
-  color: var(--accent);
-}
-.notes-selection-toolbar button:hover,
-.notes-selection-toolbar button[aria-pressed='true'] {
-  background: var(--bg-raised);
-  color: var(--text-primary);
+/* Touch: no hover means no gutter — the slash menu covers insertion. */
+@media (pointer: coarse) {
+  .notes-block-gutter {
+    display: none;
+  }
 }
 
 /* ── Linked / backlinks panel ────────────────────────────────────── */
@@ -576,6 +1018,9 @@
   gap: 8px;
 }
 .notes-linked-list button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
   padding: 6px 11px;
   border: 1px solid var(--accent-tint-border);
@@ -590,7 +1035,7 @@
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-/* ── Trash + empty states + generic buttons ──────────────────────── */
+/* ── Trash + empty states ────────────────────────────────────────── */
 .notes-trash h1 {
   font-size: 26px;
   font-weight: 700;
@@ -696,70 +1141,590 @@
   font-size: 13px;
 }
 
-.notes-sidebar-open {
-  display: none;
-}
-/* The editor's caret is the focus indicator — no outline on the contenteditable. */
+/* The editor's caret is the focus indicator — no outline on the
+   contenteditable itself. */
 .notes-editor .tiptap:focus,
 .notes-editor .tiptap:focus-visible {
   outline: none;
-}
-.notes-shell button:focus-visible,
-.notes-shell input:focus-visible,
-.notes-slash-menu button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 .katex {
   color: var(--text-primary);
 }
 
-/* ── Mobile: sidebar becomes an overlay drawer (matches calendar) ── */
+/* ── Database pages: view tabs + table/list/board ────────────────── */
+.notes-database {
+  display: grid;
+  gap: 10px;
+}
+.notes-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.notes-view-tabs > button,
+.notes-view-tabs .notes-cell-popover-anchor > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+.notes-view-tabs > button:hover {
+  color: var(--text-primary);
+  background: var(--bg-raised);
+}
+.notes-view-tabs > button[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.notes-view-remove {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-sm);
+  color: var(--text-tertiary);
+}
+.notes-view-remove:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* Table view */
+.notes-table-wrap {
+  overflow-x: auto;
+}
+.notes-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.notes-table th,
+.notes-table td {
+  position: relative;
+  min-width: 110px;
+  padding: 0;
+  border: 1px solid var(--border-grid);
+  vertical-align: middle;
+}
+.notes-table th {
+  background: var(--bg-elevated);
+  text-align: left;
+}
+.notes-table-title-col {
+  min-width: 180px;
+}
+.notes-table-add-col {
+  min-width: 34px;
+  width: 34px;
+}
+.notes-table-head-btn {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-table-head-btn:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-record-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.notes-record-title:hover {
+  background: var(--bg-raised);
+}
+.notes-property-config {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 0;
+  z-index: 6;
+  min-width: 220px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.notes-property-config select,
+.notes-property-config textarea,
+.notes-sidebar .cal-field select {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: 400 13px var(--font-ui);
+  text-transform: none;
+  letter-spacing: normal;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.notes-property-config select:focus,
+.notes-property-config textarea:focus,
+.notes-sidebar .cal-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.notes-property-config textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.notes-sort-buttons {
+  display: flex;
+  gap: 6px;
+}
+.notes-sort-buttons button {
+  flex: 1;
+  min-height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-sort-buttons button[aria-pressed='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--accent);
+}
+
+/* Cells */
+.notes-table .notes-cell-input,
+.notes-cell-popover .notes-cell-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: 400 13px var(--font-ui);
+}
+.notes-table .notes-cell-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--r-sm);
+}
+.notes-table td:has(> input[type='checkbox']) {
+  text-align: center;
+}
+.notes-table input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 10px;
+  accent-color: var(--accent);
+}
+.notes-cell-popover-anchor {
+  position: relative;
+}
+.notes-cell-trigger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.notes-cell-trigger:hover {
+  background: var(--bg-raised);
+}
+.notes-cell-pill {
+  padding: 2px 8px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: 99px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.notes-cell-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.notes-cell-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 6;
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 120ms ease-out both;
+}
+.notes-cell-popover > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.notes-cell-popover > button:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-cell-popover > button.danger {
+  color: #d9573f;
+}
+.notes-cell-popover p {
+  margin: 0;
+  padding: 6px 10px;
+}
+.notes-new-record {
+  width: fit-content;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+.notes-new-record:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* List view */
+.notes-list-view {
+  display: grid;
+  gap: 2px;
+}
+.notes-list-row {
+  border-radius: var(--r-md);
+  min-height: 40px;
+  border-bottom: 1px solid var(--border-grid);
+}
+
+/* Board view */
+.notes-board {
+  display: grid;
+  gap: 10px;
+}
+.notes-board-groupby {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.notes-board-groupby select {
+  margin-left: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+.notes-board-columns {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.notes-board-column {
+  flex: 0 0 220px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+}
+.notes-board-column h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 2px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.notes-board-count {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.notes-board-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: grab;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.notes-board-card:hover {
+  border-color: var(--accent-tint-border);
+  box-shadow: var(--shadow-sm);
+}
+.notes-board-hint {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Gallery view */
+.notes-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.notes-gallery-card {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.notes-gallery-card:hover {
+  border-color: var(--accent-tint-border);
+  box-shadow: var(--shadow-sm);
+}
+.notes-gallery-cover {
+  display: grid;
+  place-items: center;
+  height: 76px;
+  background: var(--bg-raised) center/cover;
+  font-size: 26px;
+}
+.notes-gallery-title {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-gallery-new {
+  display: grid;
+  place-items: center;
+  min-height: 110px;
+  border-style: dashed;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+/* Database calendar view */
+.notes-dbcal {
+  display: grid;
+  gap: 8px;
+}
+.notes-dbcal-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notes-dbcal-nav strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.notes-dbcal-nav button {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notes-dbcal-nav button:hover {
+  background: var(--bg-raised);
+}
+.notes-dbcal-nav select {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.notes-dbcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border-grid);
+  border-radius: var(--r-md);
+}
+.notes-dbcal-head {
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.notes-dbcal-day {
+  min-height: 84px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 4px;
+  border-top: 1px solid var(--border-grid);
+  border-left: 1px solid var(--border-grid);
+}
+.notes-dbcal-day.outside {
+  opacity: 0.45;
+}
+.notes-dbcal-day.today .notes-dbcal-date {
+  color: var(--accent);
+  font-weight: 700;
+}
+.notes-dbcal-date {
+  color: var(--text-tertiary);
+  font: 11px var(--font-mono);
+}
+.notes-dbcal-chip {
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid var(--accent-tint-border);
+  border-radius: var(--r-sm);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.notes-dbcal-chip:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Location block */
+.notes-location {
+  margin: 0.6em 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+}
+.notes-location-map {
+  display: block;
+  width: 100%;
+  height: 220px;
+  border: 0;
+}
+.notes-location-address {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* ── Mobile — the sidebar drawer + backdrop come from the shared
+   SidebarShell/.sidebar-backdrop rules in styles.css. ─────────────── */
 @media (max-width: 800px) {
-  .notes-shell > .app-rail {
-    display: none;
-  }
-  .notes-sidebar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 8;
-    width: min(300px, 86vw);
-    background: var(--bg-elevated);
-    box-shadow: var(--shadow-md);
-    transform: translateX(-100%);
-    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .notes-sidebar.open {
-    transform: translateX(0);
+  .notes-topbar {
+    padding: 12px 14px;
+    gap: 8px;
   }
   .notes-page {
     width: min(100% - 32px, 720px);
-    padding-top: 60px;
-  }
-  .notes-sidebar-open {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: 5;
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-md);
-    background: var(--bg-elevated);
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-  /* Larger touch targets on mobile only. */
-  .notes-sidebar-heading button {
-    width: 40px;
-    height: 40px;
   }
   .notes-tree-row {
-    min-height: 40px;
+    min-height: 44px;
   }
-  .notes-tree-action {
-    opacity: 1;
+  /* Table scrolls horizontally with the title column pinned. */
+  .notes-table-title-col {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg-base);
+  }
+  .notes-table th.notes-table-title-col {
+    background: var(--bg-elevated);
   }
 }

@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import get_settings
 from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
-from app.routes import admin, auth, calendar, notes, settings
+from app.routes import admin, auth, calendar, databases, notes, settings
 from app.security import hash_password
 
 
@@ -62,6 +62,7 @@ app = FastAPI(title="Second Brain API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(notes.router)
+app.include_router(databases.router)
 app.include_router(settings.router)
 app.include_router(admin.router)
 
