@@ -177,6 +177,25 @@ Saved views of a database page.
 
 ---
 
+### `files`
+User-uploaded files (images in notes today). The bytes live in MinIO under the
+object key `{user_id}/{file_id}`; this table is the ownership/metadata index.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key; also the MinIO object key suffix. |
+| user_id | UUID FK | Owner. Every read is ownership-checked. |
+| name | String(255) | Original filename. |
+| content_type | String(100) | Validated on upload (png/jpeg/gif/webp/svg). |
+| size | Integer | Bytes. Uploads are capped at 10 MB. |
+| created_at | DateTime | UTC. |
+
+Served via `GET /api/files/{id}` (streamed from MinIO with long cache
+headers). Deleting a note block does not delete its file — orphans are
+acceptable for now (`# ponytail:` orphan sweep later).
+
+---
+
 ### `links`
 The generic cross-module graph edge. **The most important table for future modules.**
 
@@ -221,5 +240,6 @@ select(Link).where(
 | 009 | (earlier notes-related) |
 | 010 | Pages table + Link table |
 | 011 | Database pages: pages.type/is_template/cover/properties + database_properties + database_views |
+| 012 | Files table (MinIO-backed uploads for note images) |
 
 Always check `alembic current` before writing a new migration.

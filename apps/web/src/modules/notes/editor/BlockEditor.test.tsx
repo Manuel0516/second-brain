@@ -388,3 +388,43 @@ test('renders and edits inline and block mathematics in place', async () => {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   expect(container.querySelector('.notes-editor')).toBeInTheDocument()
 })
+
+test('pasting an image file uploads it and inserts an image block', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 201,
+    json: async () => ({ url: '/api/files/test-id' }),
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const { container } = render(
+      <BlockEditor
+        onChange={vi.fn()}
+        debounceMs={0}
+        content={{ type: 'doc', content: [{ type: 'paragraph' }] }}
+      />,
+    )
+    const surface = container.querySelector('.tiptap')!
+    fireEvent.paste(surface, {
+      clipboardData: {
+        files: [new File(['png-bytes'], 'shot.png', { type: 'image/png' })],
+        getData: () => '',
+        types: ['Files'],
+      },
+    })
+
+    await waitFor(() => {
+      const image = container.querySelector<HTMLImageElement>(
+        'figure.notes-image img',
+      )
+      expect(image).not.toBeNull()
+      expect(image!.src).toContain('/api/files/test-id')
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/files',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

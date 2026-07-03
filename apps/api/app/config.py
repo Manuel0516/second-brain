@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load the repository `.env` locally. Production values are injected by Compose,
@@ -32,6 +33,23 @@ class Settings(BaseSettings):
 
     # TOTP encryption (Fernet key for encrypted TOTP storage)
     totp_encryption_key: str = ""
+
+    # MinIO / S3-compatible storage. The credentials fall back to the
+    # MINIO_ROOT_* names Compose already requires in .env, so one pair of
+    # values drives both the server and the client.
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = Field(
+        "secondbrain",
+        validation_alias=AliasChoices("minio_access_key", "minio_root_user"),
+    )
+    minio_secret_key: str = Field(
+        "secondbrain",
+        validation_alias=AliasChoices("minio_secret_key", "minio_root_password"),
+    )
+    minio_bucket: str = "secondbrain"
+    minio_secure: bool = False
+    # Public URL prefix (set to the proxy/external URL in production)
+    minio_public_url: str = ""
 
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 

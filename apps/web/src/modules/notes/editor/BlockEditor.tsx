@@ -44,18 +44,36 @@ import {
   setSelectedBlockColor,
 } from './ColorExtensions'
 import { NotesCodeBlock } from './CodeBlockView'
-
+import { ImageBlock, uploadImageFile } from './ImageNode'
+import { BookmarkNode, fetchBookmarkMeta } from './BookmarkNode'
+import {
+  ColumnList,
+  Column,
+  getColumnDropTarget,
+  handleColumnDrop,
+} from './ColumnNodes'
+import { TableToolbar } from './TableToolbar'
+import { TextAlign, TEXT_ALIGNMENTS } from './TextAlignExtension'
 const DRAG_POSITION_CONFIG = { placement: 'left' as const }
 const DRAG_NESTED_CONFIG = {
   rules: [
     {
       id: 'top-level-or-list-item',
-      evaluate: ({ node, depth }) =>
-        depth === 1 ||
-        node.type.name === 'listItem' ||
-        node.type.name === 'taskItem'
-          ? 0
-          : 1000,
+      evaluate: ({ node, depth }) => {
+        // Column containers never drag as a whole — their blocks do.
+        if (node.type.name === 'columnList' || node.type.name === 'column')
+          return 1000
+        if (
+          depth === 1 ||
+          node.type.name === 'listItem' ||
+          node.type.name === 'taskItem'
+        )
+          return 0
+        // Blocks directly inside a column sit at depth 3 (doc > columnList >
+        // column > block); score above list items so those still win ties.
+        if (depth === 3) return 10
+        return 1000
+      },
     },
   ],
 } satisfies Exclude<DragHandleProps['nested'], boolean | undefined>
@@ -79,25 +97,37 @@ interface BlockEditorProps {
   ariaLabel?: string
 }
 
-/** Duplicate the top-level block at the cursor (no-op at doc level). */
-export function duplicateBlock(editor: Editor): void {
+/** Depth of the block the cursor is in: top-level, or a column's child. */
+function blockDepth(editor: Editor): number | null {
   const { $from } = editor.state.selection
-  if ($from.depth < 1) return
+  for (let depth = 1; depth <= $from.depth; depth += 1) {
+    const name = $from.node(depth).type.name
+    if (name !== 'columnList' && name !== 'column') return depth
+  }
+  return null
+}
+
+/** Duplicate the block at the cursor (no-op at doc level). */
+export function duplicateBlock(editor: Editor): void {
+  const depth = blockDepth(editor)
+  if (depth === null) return
+  const { $from } = editor.state.selection
   editor
     .chain()
     .focus()
-    .insertContentAt($from.after(1), $from.node(1).toJSON())
+    .insertContentAt($from.after(depth), $from.node(depth).toJSON())
     .run()
 }
 
-/** Delete the top-level block at the cursor (no-op at doc level). */
+/** Delete the block at the cursor (no-op at doc level). */
 export function deleteBlock(editor: Editor): void {
+  const depth = blockDepth(editor)
+  if (depth === null) return
   const { $from } = editor.state.selection
-  if ($from.depth < 1) return
   editor
     .chain()
     .focus()
-    .deleteRange({ from: $from.before(1), to: $from.after(1) })
+    .deleteRange({ from: $from.before(depth), to: $from.after(depth) })
     .run()
 }
 
@@ -190,6 +220,48 @@ const slashItems = [
     keywords: 'info note aside highlight emoji',
     run: (editor: Editor) => editor.chain().focus().wrapIn('callout').run(),
   },
+  {
+    label: 'Image',
+    keywords: 'picture photo upload file',
+    run: (editor: Editor) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/*'
+      input.onchange = async () => {
+        const file = input.files?.[0]
+        if (!file) return
+        const src = await uploadImageFile(file)
+        if (src)
+          editor.chain().focus().setImageBlock({ src, alt: file.name }).run()
+      }
+      input.click()
+    },
+  },
+  {
+    label: 'Bookmark',
+    keywords: 'link embed card url website',
+    run: (editor: Editor) => {
+      const raw = window.prompt('Paste a URL')?.trim()
+      if (!raw) return
+      const url =
+        raw.startsWith('http://') || raw.startsWith('https://')
+          ? raw
+          : `https://${raw}`
+      void fetchBookmarkMeta(url).then((meta) =>
+        editor.chain().focus().setBookmark(meta).run(),
+      )
+    },
+  },
+  {
+    label: '2 columns',
+    keywords: 'layout split two column',
+    run: (editor: Editor) => editor.chain().focus().setColumnLayout(2).run(),
+  },
+  {
+    label: '3 columns',
+    keywords: 'layout split three column',
+    run: (editor: Editor) => editor.chain().focus().setColumnLayout(3).run(),
+  },
   // Formatting — the selection-toolbar actions, reachable from '/' too.
   // With a collapsed cursor the mark applies to what you type next.
   {
@@ -260,6 +332,10 @@ const toolbarIcons = {
     <path d="M7.5 12.5l5-5M6.2 14.8l-1 .9a3 3 0 01-4.2-4.2l3-3a3 3 0 014.2 0M13.8 5.2l1-.9a3 3 0 014.2 4.2l-3 3a3 3 0 01-4.2 0" />
   ),
   math: <path d="M15.5 4H6l5 6-5 6h9.5" />,
+  left: <path d="M3 4h14M3 8h8M3 12h14M3 16h8" />,
+  center: <path d="M3 4h14M6 8h8M3 12h14M6 16h8" />,
+  right: <path d="M3 4h14M9 8h8M3 12h14M9 16h8" />,
+  justify: <path d="M3 4h14M3 8h14M3 12h14M3 16h14" />,
 } as const
 
 function ToolbarIcon({ type }: { type: keyof typeof toolbarIcons }) {
@@ -330,6 +406,13 @@ export function BlockEditor({
     left: 0,
     top: 36,
   })
+  // Vertical accent bar shown while dragging a block over a column edge.
+  const [columnDrop, setColumnDrop] = useState<{
+    left: number
+    top: number
+    height: number
+  } | null>(null)
+  const columnDropKeyRef = useRef('')
   useEffect(() => {
     onChangeRef.current = onChange
     searchRef.current = onSearch
@@ -375,10 +458,17 @@ export function BlockEditor({
       NotesCodeBlock,
       TaskList,
       EditableTaskItem,
+      // Stock table view (no NodeView) so prosemirror-tables' native column
+      // resizing works; controls live in the floating TableToolbar overlay.
       Table.configure({ resizable: true }),
+      TextAlign,
       TableRow,
       TableHeader,
       TableCell,
+      ImageBlock,
+      BookmarkNode,
+      ColumnList,
+      Column,
       Placeholder.configure({
         placeholder: "Type '/' for commands or '[[' to link…",
       }),
@@ -404,6 +494,80 @@ export function BlockEditor({
     content: editorContent,
     editorProps: {
       attributes: { 'aria-label': ariaLabel },
+      handleDrop: (view, event, slice, moved) => {
+        // Image files dropped in — upload and insert at the drop position.
+        const files = Array.from(event.dataTransfer?.files ?? []).filter(
+          (file) => file.type.startsWith('image/'),
+        )
+        if (files.length) {
+          event.preventDefault()
+          const coords = view.posAtCoords({
+            left: event.clientX,
+            top: event.clientY,
+          })
+          const dropPos = coords?.pos ?? view.state.selection.from
+          void (async () => {
+            let at = dropPos
+            for (const file of files) {
+              const src = await uploadImageFile(file)
+              if (!src || !editor) continue
+              editor
+                .chain()
+                .insertContentAt(Math.min(at, editor.state.doc.content.size), {
+                  type: 'imageBlock',
+                  attrs: { src, alt: file.name },
+                })
+                .run()
+              at = editor.state.selection.to
+            }
+          })()
+          return true
+        }
+        // A block dragged onto the left/right edge of another block becomes
+        // a column beside it.
+        if (moved && slice) return handleColumnDrop(view, event, slice)
+        return false
+      },
+      handlePaste: (view, event) => {
+        // Image files or screenshots pasted — upload and insert in place.
+        const files = Array.from(event.clipboardData?.files ?? []).filter(
+          (file) => file.type.startsWith('image/'),
+        )
+        if (files.length) {
+          event.preventDefault()
+          void (async () => {
+            for (const file of files) {
+              const src = await uploadImageFile(file)
+              if (src)
+                editor
+                  ?.chain()
+                  .focus()
+                  .setImageBlock({ src, alt: file.name })
+                  .run()
+            }
+          })()
+          return true
+        }
+
+        // A bare URL pasted on an empty paragraph → bookmark card.
+        const text = event.clipboardData?.getData('text/plain')?.trim()
+        const { $from } = view.state.selection
+        if (
+          text &&
+          /^https?:\/\/\S+$/.test(text) &&
+          view.state.selection.empty &&
+          $from.parent.type.name === 'paragraph' &&
+          $from.parent.content.size === 0
+        ) {
+          event.preventDefault()
+          void fetchBookmarkMeta(text).then((meta) => {
+            editor?.chain().focus().setBookmark(meta).run()
+          })
+          return true
+        }
+
+        return false
+      },
       handleClick: (_view, _position, event) => {
         const target = (event.target as HTMLElement).closest<HTMLElement>(
           '.notes-mention',
@@ -526,6 +690,49 @@ export function BlockEditor({
   }, [slashIndex, mentionIndex])
 
   useEffect(() => () => clearTimeout(saveTimer.current), [])
+  // Track block drags to preview the column edge zones (the dropcursor's
+  // horizontal line is hidden while this vertical indicator shows).
+  useEffect(() => {
+    if (!editor) return
+    const dom = editor.view.dom
+    const clear = () => {
+      if (!columnDropKeyRef.current) return
+      columnDropKeyRef.current = ''
+      setColumnDrop(null)
+    }
+    const onDragOver = (event: DragEvent) => {
+      const view = editor.view
+      if (!view.dragging) return clear()
+      const target = getColumnDropTarget(view, event)
+      const { selection } = view.state
+      if (
+        !target ||
+        (selection.from <= target.pos && target.pos < selection.to)
+      )
+        return clear()
+      const key = `${target.pos}:${target.side}`
+      if (key === columnDropKeyRef.current) return
+      const blockDom = view.nodeDOM(target.pos)
+      const box = containerRef.current?.getBoundingClientRect()
+      if (!(blockDom instanceof HTMLElement) || !box) return clear()
+      const rect = blockDom.getBoundingClientRect()
+      columnDropKeyRef.current = key
+      setColumnDrop({
+        left:
+          (target.side === 'left' ? rect.left - 8 : rect.right + 8) - box.left,
+        top: rect.top - box.top,
+        height: rect.height,
+      })
+    }
+    dom.addEventListener('dragover', onDragOver)
+    dom.addEventListener('drop', clear)
+    window.addEventListener('dragend', clear)
+    return () => {
+      dom.removeEventListener('dragover', onDragOver)
+      dom.removeEventListener('drop', clear)
+      window.removeEventListener('dragend', clear)
+    }
+  }, [editor])
   // Anchor the slash/mention popover at the caret. Position is set in rAF (not
   // synchronously) so it never reads refs during render.
   useEffect(() => {
@@ -680,7 +887,7 @@ export function BlockEditor({
 
   return (
     <div
-      className="notes-editor"
+      className={`notes-editor${columnDrop ? ' notes-col-dropping' : ''}`}
       role="group"
       aria-label="Block editor"
       ref={containerRef}
@@ -798,6 +1005,29 @@ export function BlockEditor({
             >
               <ToolbarIcon type="math" />
             </button>
+            {TEXT_ALIGNMENTS.map((alignment) => (
+              <button
+                key={alignment}
+                type="button"
+                aria-label={`Align ${alignment}`}
+                title={`Align ${alignment}`}
+                aria-pressed={
+                  alignment === 'left'
+                    ? !TEXT_ALIGNMENTS.some(
+                        (other) =>
+                          other !== 'left' &&
+                          editor.isActive({ textAlign: other }),
+                      )
+                    : editor.isActive({ textAlign: alignment })
+                }
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() =>
+                  editor.chain().focus().setTextAlign(alignment).run()
+                }
+              >
+                <ToolbarIcon type={alignment} />
+              </button>
+            ))}
             <button
               type="button"
               aria-label="Colors"
@@ -934,10 +1164,21 @@ export function BlockEditor({
               />
             )}
           </BubbleMenu>
+
+          {/* Row/column controls above the table the caret is in. */}
+          <TableToolbar editor={editor} containerRef={containerRef} />
         </>
       )}
 
       <EditorContent editor={editor} />
+
+      {columnDrop && (
+        <div
+          className="notes-column-drop-indicator"
+          style={columnDrop}
+          aria-hidden="true"
+        />
+      )}
 
       {slash && filteredSlash.length > 0 && (
         <div

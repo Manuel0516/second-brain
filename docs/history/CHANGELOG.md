@@ -7,6 +7,12 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0033](0033-image-quality-table-ui-text-align.md) | Image quality cap, table UI rework, block text alignment | 2026-07-03 | accepted |
+| [0032](0032-minio-config-fix.md) | Fix MinIO wiring: image uploads actually reach storage | 2026-07-03 | accepted |
+| [0031](0031-notes-media-layout-rework.md) | Notes media & layout rework: drag-to-column, image controls, table fix | 2026-07-03 | accepted |
+| [0030](0030-notes-media-and-layout.md) | Notes media, embeds, tables, and multi-column layout | 2026-07-03 | superseded in part by 0031 |
+| [0029](0029-notes-connection-link-existing.md) | Link existing note in event connection card | 2026-07-03 | accepted |
+| [0028](0028-event-link-results-zindex-and-emoji-fix.md) | Event link results z-index and emoji fix | 2026-07-03 | accepted |
 | [0027](0027-block-drag-and-color-palette.md) | Notion-style block drag and color palette polish | 2026-07-03 | accepted |
 | [0026](0026-notes-creation-math-and-ui-fixes.md) | Notes creation, math, and UI fixes | 2026-07-03 | accepted |
 | [0025](0025-notes-batch-improvements.md) | Popover primitive, gap-based drag depth, collapsible headings, §5.6 completion | 2026-07-03 | accepted |

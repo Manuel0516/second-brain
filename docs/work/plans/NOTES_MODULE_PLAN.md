@@ -272,7 +272,7 @@ list semantics intact for assistive technology.
 ### 5.6 Future editor controls and permanent deletion
 
 > STATUS 2026-07-03: **all items below are implemented** (history 0022–0025).
-> Link-existing-note → 0022; dropdowns/popovers/grip → 0023 + finished properly
+
 > in 0025 (portalled Popover primitive); highlight/block color, code-block
 > language, permanent deletion, trash rework, pane header, create-type prompt
 > → 0025.
@@ -282,13 +282,12 @@ implementation:
 
 - **Link existing note in connections card**: the event editor's Notes connection
   card currently only creates a new note page. Add an option to link an existing
-  page instead, using the same search-and-select pattern already inside the
+  page instead of creating one, using the same search-and-select pattern already inside the
   "Linked" fieldset (the `event-link-search` input). The connection card should
   show two modes: **"Create new"** (current, creates a fresh Page + Link) and
-  **"Link existing"** (search existing pages by title, select one, writes a
+  **"Link existing"** (search existing pages by title, select one so it needs to let you choose if you want both things, or only one, writes a
   `Link` row without creating a page). This way the user can connect an existing
-  note to an event directly from the connection card without opening the "Linked"
-  section.
+  note to an event directly from the connection card without creating a new note. 
 
 - **Text highlight and block color**: add selection-toolbar controls for a text
   highlight mark and a block background attribute. Use a small, design-approved,

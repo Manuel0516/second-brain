@@ -281,6 +281,23 @@ class DatabaseView(Base):
     position: Mapped[str] = mapped_column(String(255), default="a0", nullable=False)
 
 
+class File(Base):
+    __tablename__ = "files"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
 class Link(Base):
     __tablename__ = "links"
     __table_args__ = (

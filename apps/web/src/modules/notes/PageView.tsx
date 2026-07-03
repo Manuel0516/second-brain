@@ -158,6 +158,13 @@ export function PageView({
             // the emoji picker so users can add one.
             if (!icon && !iconPickerOpen) setIconPickerOpen(true)
           }}
+          onBlur={(e) => {
+            // Close the picker when leaving the title, unless focus moved
+            // into the emoji picker (choosing an icon or typing a custom one).
+            const target = e.relatedTarget as HTMLElement | null
+            if (target?.closest('.editor-icon-picker')) return
+            setIconPickerOpen(false)
+          }}
           onChange={(event) => {
             setTitle(event.target.value)
             saveMetadata({ title: event.target.value })

@@ -31,11 +31,12 @@ export function EmojiPicker({
         !pickerRef.current.contains(event.target as Node)
       ) {
         setOpen(false)
+        onOpenChange?.(false)
       }
     }
     window.addEventListener('mousedown', close)
     return () => window.removeEventListener('mousedown', close)
-  }, [open])
+  }, [open, onOpenChange])
 
   const pick = (value: string) => {
     onChange(value)

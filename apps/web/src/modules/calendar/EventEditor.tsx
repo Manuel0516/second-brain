@@ -160,6 +160,8 @@ export function EventEditor({
   >([])
   // Edit mode: reveal the folder+title mini-form inside the Linked card.
   const [newNoteOpen, setNewNoteOpen] = useState(false)
+  // Create mode: whether to create a new note (vs only link existing ones).
+  const [createNoteEnabled, setCreateNoteEnabled] = useState(true)
   const [closing, setClosing] = useState(false)
   const [dragY, setDragY] = useState(0) // pull-down gesture offset
   const [isDragging, setIsDragging] = useState(false)
@@ -560,25 +562,28 @@ export function EventEditor({
       if (response.ok) {
         const savedEvent = await response.json().catch(() => null)
         let notePageId: string | undefined
-        // Create mode: make the new note (in its folder) and attach any
-        // pre-picked existing notes. Edit mode manages links in the Linked
-        // card instead — except the toggle-off cleanup below.
+        // Create mode: optionally make a new note (in its folder) and
+        // attach any pre-picked existing notes. Edit mode manages links
+        // in the Linked card instead — except the toggle-off cleanup below.
         if (!event.id && form.connect_notes && savedEvent?.id) {
-          const noteResponse = await apiCall(
-            `/api/events/${savedEvent.id}/note`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: form.note_title.trim() || form.title.trim(),
-                icon: icon || undefined,
-                parent_page_id: form.note_folder_id,
-              }),
-            },
-          ).catch(() => null)
-          if (!noteResponse?.ok) return fail('Could not create the event note.')
-          const page = await noteResponse.json()
-          notePageId = page.id
+          if (createNoteEnabled) {
+            const noteResponse = await apiCall(
+              `/api/events/${savedEvent.id}/note`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: form.note_title.trim() || form.title.trim(),
+                  icon: icon || undefined,
+                  parent_page_id: form.note_folder_id,
+                }),
+              },
+            ).catch(() => null)
+            if (!noteResponse?.ok)
+              return fail('Could not create the event note.')
+            const page = await noteResponse.json()
+            notePageId = page.id
+          }
           for (const pending of pendingNoteLinks) {
             // 409 (already linked) and network failures are non-fatal.
             await apiCall('/api/links', {
@@ -622,6 +627,7 @@ export function EventEditor({
       }
     },
     [
+      createNoteEnabled,
       event.id,
       eventLinks,
       form,
@@ -1130,22 +1136,47 @@ export function EventEditor({
                       toggle-only — the Linked card manages everything. */}
                   {form.connect_notes && !event.id && (
                     <div className="connection-options">
-                      <FolderPicker
-                        value={form.note_folder_id}
-                        onChange={(id) => set('note_folder_id', id)}
-                      />
-                      <label>
-                        Note title
+                      <label className="connection-check">
                         <input
-                          value={form.note_title}
-                          placeholder={form.title || 'Related note'}
-                          onChange={(e) => set('note_title', e.target.value)}
+                          type="checkbox"
+                          checked={createNoteEnabled}
+                          onChange={(e) =>
+                            setCreateNoteEnabled(e.target.checked)
+                          }
                         />
+                        Create new note
                       </label>
+                      <div
+                        className={`connection-create-fields${createNoteEnabled ? ' open' : ''}`}
+                      >
+                        <div>
+                          <span className="connection-field-label">Folder</span>
+                          <FolderPicker
+                            value={form.note_folder_id}
+                            onChange={(id) => set('note_folder_id', id)}
+                          />
+                        </div>
+                        <div>
+                          <span className="connection-field-label">
+                            Note title
+                          </span>
+                          <input
+                            aria-label="Note title"
+                            value={form.note_title}
+                            placeholder={form.title || 'Related note'}
+                            onChange={(e) => set('note_title', e.target.value)}
+                          />
+                        </div>
+                      </div>
                       <div className="event-link-search">
+                        <span className="connection-field-label">Link</span>
                         <input
                           type="text"
-                          placeholder="Also link existing notes…"
+                          placeholder={
+                            createNoteEnabled
+                              ? 'Also link existing notes…'
+                              : 'Link existing notes…'
+                          }
                           value={noteQuery}
                           onChange={(e) => setNoteQuery(e.target.value)}
                         />
@@ -1170,9 +1201,9 @@ export function EventEditor({
                                   setNoteResults([])
                                 }}
                               >
-                                <span aria-hidden="true">
-                                  {result.icon || '▧'}
-                                </span>
+                                {result.icon && (
+                                  <span aria-hidden="true">{result.icon}</span>
+                                )}
                                 <span>{result.title}</span>
                               </button>
                             ))}
@@ -1181,7 +1212,9 @@ export function EventEditor({
                       </div>
                       {pendingNoteLinks.map((pending) => (
                         <div key={pending.id} className="event-linked-item">
-                          <span aria-hidden="true">{pending.icon || '▧'}</span>
+                          {pending.icon && (
+                            <span aria-hidden="true">{pending.icon}</span>
+                          )}
                           <span className="event-linked-title">
                             {pending.title}
                           </span>

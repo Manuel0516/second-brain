@@ -54,8 +54,13 @@ services:
       LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-5}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-secondbrain}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - internal

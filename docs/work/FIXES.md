@@ -9,7 +9,6 @@ Format: `- [ ] Short description — context/file — priority (high/medium/low)
 ## Active bugs
 
 - [ ] Settings → Security page stub is not yet wired to TOTP backend — low
-- [ ] MinIO file attachment not yet wired to frontend — low
 - [ ] Notes heading toggle stops working after repeated use — the chevron
   button (ProseMirror widget in `CollapsibleHeading.ts`) works for the first
   few collapse/expand cycles but eventually becomes unresponsive. Likely a
@@ -25,6 +24,18 @@ Format: `- [ ] Short description — context/file — priority (high/medium/low)
 
 ## Recently fixed (last 30 days)
 
+- [x] Image paste/import into note blocks did nothing — three stacked env
+  problems: migration 012 never applied locally (`files` table missing),
+  URL-style `MINIO_ENDPOINT` rejected by the client, and the API reading
+  different credential env names than Compose provisions MinIO with. Fixed
+  2026-07-03 (history 0032); run `alembic upgrade head` after pulling.
+- [x] Editor tables rendered rows inside a `<div>` (no real `<table>` in the
+  DOM) — table NodeView used a div content element. Fixed 2026-07-03 by
+  `NodeViewContent as="table"`, then superseded: NodeView removed entirely in
+  favor of a floating toolbar so native column resizing works (0031, 0033).
+- [x] Column layout normalizer deleted content when dissolving a layout, and
+  `/2 columns` duplicated the current block. Fixed 2026-07-03 (0031) with
+  regression tests in `ColumnNodes.test.ts`.
 - [x] Heading collapse chevron jumped down on hover — the global button:hover translate replaced the chevron's centering transform. Fixed 2026-07-03: centered via `top: calc(0.875em - 11px)` (first-line aligned, no transform) + scoped hover override; verified pixel-stable headlessly.
 - [x] Notes route blank/crash — stale Vite optimize-deps cache after installing the new TipTap deps (504 "Outdated Optimize Dep" on @tiptap/extension-highlight broke the lazy Notes chunk). Fixed 2026-07-03: cleared `apps/web/node_modules/.vite`; restart the dev server after dependency installs.
 - [x] Collapsed headings silently un-collapsed on page load — the auto-expand plugin fired on TipTap's programmatic content sync (selection lands at doc end) and the autosave persisted the expansion. Fixed 2026-07-03: appendTransaction now ignores transactions carrying `preventUpdate` meta (CollapsibleHeading.ts).

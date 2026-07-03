@@ -1,22 +1,38 @@
 # What's happening now
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 ---
 
 ## Active work
 
-**Notes module remake — ALL 5 PHASES DONE (2026-07-02, history 0010–0011, 0019–0021)**
-- Phase 1: UI rebuilt to calendar parity (shared shell/sidebar/topbar/mobile drawer).
-- Phase 2: backend for database pages (migration 011, properties/views CRUD, duplicate, trash purge).
-- Phase 3: database pages UI (table/list/board, typed property cells, sort/group).
-- Phase 4: covers (preset gradients + URL) and templates.
-- Phase 5: gallery + calendar views, location block (OSM, zero deps).
-- Deferred: spreadsheet block formulas (needs HyperFormula approval); cover image uploads (needs `minio` dep + files route); filter-editing UI (filters.ts already applies `config.filters`); board drag on touch.
+**Notes media & layout — DONE, reworked, polished (2026-07-03, history 0030–0033)**
+- Backend file service: `minio` dep, `files` table (migration 012), `storage.py`,
+  `POST/GET/DELETE /api/files`, SSRF-guarded `GET /api/embed`. MinIO env wired
+  into the `api` service in `compose.yaml` (`MINIO_ENDPOINT: minio:9000` +
+  `MINIO_ROOT_*` passthrough) — see 0032 for the three config traps hit locally.
+- Image blocks: paste (incl. screenshots, multiple files), drop at pointer
+  position, `/image` picker; NodeView with width drag grip + align controls;
+  never upscaled past natural width (no quality loss).
+- Bookmark cards: `/bookmark` or paste a bare URL on an empty line.
+- Tables: floating toolbar (row/col add/delete, header, delete) above the
+  active table, native column resizing, horizontally centered, auto width.
+- Multi-column layout: drag a block onto the left/right edge of another →
+  columns of blocks (cap 3, accent drop indicator); `/2 columns`, `/3 columns`;
+  safe dissolution (content lifted, never deleted). Regression-tested in
+  `ColumnNodes.test.ts`.
+- Block text alignment: left/center/right/justify in the selection toolbar
+  (hand-rolled `TextAlignExtension.ts`, official-extension-compatible format).
+- Cover image uploads are now unblocked (files service exists) but not wired.
 
 **Notes batch 2 DONE (2026-07-03, history 0025)** — Popover primitive (Dropdown/database popovers portalled for real), gap-based tree drag depth (order without forced nesting; fully-left = root where valid), per-line list drag, collapsible headings (details block removed + stripDetails migration), highlight/block colors, code-block languages, permanent deletion + trash rework + toast, split-view pane header, create-page type prompt.
 
-**UP NEXT — planned in `plans/NOTES_MEDIA_AND_LAYOUT_PLAN.md` (2026-07-03):** file upload service (`minio` dep, approval pending) → image blocks → link/bookmark embed cards (server-side metadata fetch with SSRF guard) → table row/column controls → multi-column layouts (biggest piece, own session). Sidebar drag-to-root already shipped in 0025.
+**Notes module remake — ALL 5 PHASES DONE (2026-07-02, history 0010–0011, 0019–0021)**
+- UI to calendar parity; database pages backend (011) + UI (table/list/board/
+  gallery/calendar views); covers + templates; location block.
+- Still deferred: spreadsheet block formulas (needs HyperFormula approval);
+  cover image uploads (files service now exists, wiring pending); filter-editing
+  UI; board drag on touch; row-height dragging in editor tables.
 
 **Notes drag-and-drop + block commands (2026-07-03, history 0024)**
 - Tree: instant mouse drag with live drop indicator (line/nest tint); touch keeps long-press. Blocks: accent drop cursor + dragged-block ring. Slash menu: formatting commands, H3, Toggle (`@tiptap/extension-details`), Callout, Duplicate/Delete block.
@@ -37,7 +53,10 @@ Last updated: 2026-07-02
 1. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
 2. Settings → Security page — wire up TOTP 2FA UI.
 3. Google Calendar sync — Phase 1 completion.
-4. Notes deferred items (spreadsheet formulas, cover uploads, filter UI) — pick up on demand.
+4. Notes settings (N6): bullet/numbered list marker schemes — only open
+   sub-phase of `plans/NOTES_MODULE_PLAN.md`.
+5. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
+   table row-height dragging) — pick up on demand.
 
 ---
 
