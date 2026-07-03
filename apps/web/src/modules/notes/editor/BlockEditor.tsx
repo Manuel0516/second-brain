@@ -374,6 +374,7 @@ export function BlockEditor({
   const searchRef = useRef(onSearch)
   const clickRef = useRef(onMentionClick)
   const containerRef = useRef<HTMLDivElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
   const colorPanelRef = useRef<HTMLDivElement>(null)
   const dragSourceRef = useRef<HTMLElement | null>(null)
@@ -400,7 +401,6 @@ export function BlockEditor({
   const [mentionIndex, setMentionIndex] = useState(0)
   const [linkOpen, setLinkOpen] = useState(false)
   const [colorsOpen, setColorsOpen] = useState(false)
-  const [hoveredBlockType, setHoveredBlockType] = useState<string | null>(null)
   const [linkHref, setLinkHref] = useState('')
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({
     left: 0,
@@ -836,16 +836,24 @@ export function BlockEditor({
       pos,
     }: Parameters<NonNullable<DragHandleProps['onNodeChange']>>[0]) => {
       hoverPosRef.current = typeof pos === 'number' && pos >= 0 ? pos : null
-      setHoveredBlockType(node?.type.name ?? null)
+      const type = node?.type.name
+      // Collapsing briefly reports no node; retain the last valid rail layout.
+      if (type && gutterRef.current) gutterRef.current.dataset.nodeType = type
     },
     [],
   )
+
+  const selectCollapsedDragSection = useCallback(() => {
+    if (!editor) return
+    const pos = hoverPosRef.current
+    if (pos == null) return
+    selectCollapsedHeadingSection(editor, pos)
+  }, [editor])
 
   const prepareBlockDrag = useCallback(() => {
     if (!editor) return
     const pos = hoverPosRef.current
     if (pos == null) return
-    selectCollapsedHeadingSection(editor, pos)
     const source = editor.view.nodeDOM(pos)
     if (source instanceof HTMLElement) {
       source.classList.add('notes-dragging-block')
@@ -906,10 +914,7 @@ export function BlockEditor({
             onElementDragStart={prepareBlockDrag}
             onElementDragEnd={finishBlockDrag}
           >
-            <div
-              className="notes-block-gutter"
-              data-node-type={hoveredBlockType ?? undefined}
-            >
+            <div className="notes-block-gutter" ref={gutterRef}>
               <button
                 type="button"
                 className="notes-block-add"
@@ -924,6 +929,7 @@ export function BlockEditor({
                 className="notes-block-grip"
                 aria-hidden="true"
                 title="Drag to move"
+                onPointerDown={selectCollapsedDragSection}
               >
                 <svg
                   width="12"

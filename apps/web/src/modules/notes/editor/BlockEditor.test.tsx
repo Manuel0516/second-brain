@@ -199,6 +199,85 @@ test('a collapsed heading hides following blocks until a peer heading', () => {
   editor.destroy()
 })
 
+test('main headings collapse independently and keep toggling repeatedly', async () => {
+  const editor = new Editor({
+    extensions: [
+      StarterKit.configure({ heading: false }),
+      CollapsibleHeading.configure({ levels: [1, 2, 3] }),
+    ],
+    content: {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 1 },
+          content: [{ type: 'text', text: 'First' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'First body' }] },
+        {
+          type: 'heading',
+          attrs: { level: 1 },
+          content: [{ type: 'text', text: 'Second' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Second body' }] },
+      ],
+    },
+  })
+  const headingPositions: number[] = []
+  editor.state.doc.forEach((node, pos) => {
+    if (node.type.name === 'heading') headingPositions.push(pos)
+  })
+
+  editor.commands.setTextSelection(
+    (editor.state.doc.nodeAt(headingPositions[0])?.nodeSize ?? 0) + 1,
+  )
+  const dispatch = vi.spyOn(editor.view, 'dispatch')
+  fireEvent.pointerDown(
+    editor.view.dom.querySelectorAll('.notes-heading-toggle')[0],
+  )
+  fireEvent.pointerDown(
+    editor.view.dom.querySelectorAll('.notes-heading-toggle')[1],
+  )
+
+  expect(editor.state.doc.nodeAt(headingPositions[0])?.attrs.collapsed).toBe(
+    true,
+  )
+  expect(editor.state.doc.nodeAt(headingPositions[1])?.attrs.collapsed).toBe(
+    true,
+  )
+  expect(
+    editor.view.dom.querySelectorAll('.notes-collapsed-hidden'),
+  ).toHaveLength(2)
+  expect(editor.view.dom.lastElementChild).toHaveClass(
+    'notes-drag-handle-sentinel',
+  )
+  expect(
+    dispatch.mock.calls.some(
+      ([transaction]) => transaction.getMeta('lockDragHandle') === true,
+    ),
+  ).toBe(true)
+  await waitFor(() =>
+    expect(
+      dispatch.mock.calls.some(
+        ([transaction]) => transaction.getMeta('lockDragHandle') === false,
+      ),
+    ).toBe(true),
+  )
+
+  for (let index = 0; index < 6; index += 1) {
+    fireEvent.pointerDown(
+      editor.view.dom.querySelectorAll('.notes-heading-toggle')[0],
+    )
+    expect(editor.state.doc.nodeAt(headingPositions[0])?.attrs.collapsed).toBe(
+      index % 2 === 1,
+    )
+    expect(editor.state.doc.nodeAt(headingPositions[1])?.attrs.collapsed).toBe(
+      true,
+    )
+  }
+  editor.destroy()
+})
+
 test('collapsed heading drag selects its complete hidden section', () => {
   const editor = new Editor({
     extensions: [
@@ -236,6 +315,7 @@ test('collapsed heading drag selects its complete hidden section', () => {
   ).toBe(4)
   expect(selectCollapsedHeadingSection(editor, 0)).toBe(true)
   expect(editor.state.selection.empty).toBe(false)
+  expect(editor.state.selection.content().content.childCount).toBe(4)
   expect(editor.state.doc.nodeAt(0)?.attrs.collapsed).toBe(true)
   editor.destroy()
 })

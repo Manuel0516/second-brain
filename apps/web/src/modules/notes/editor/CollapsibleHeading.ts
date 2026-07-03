@@ -3,7 +3,6 @@ import type { Editor } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as PMNode } from '@tiptap/pm/model'
-import type { EditorView } from '@tiptap/pm/view'
 
 /**
  * Every heading is a toggle: collapsing it hides all following top-level
@@ -89,11 +88,7 @@ export function selectCollapsedHeadingSection(
   return true
 }
 
-function chevronButton(
-  view: EditorView,
-  headingPos: number,
-  collapsed: boolean,
-): HTMLElement {
+function chevronButton(headingPos: number, collapsed: boolean): HTMLElement {
   const button = document.createElement('button')
   button.type = 'button'
   button.className = `notes-heading-toggle${collapsed ? ' collapsed' : ''}`
@@ -102,18 +97,9 @@ function chevronButton(
     'aria-label',
     collapsed ? 'Expand section' : 'Collapse section',
   )
+  button.dataset.headingPos = String(headingPos)
   button.innerHTML =
     '<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l6 6-6 6"/></svg>'
-  const toggle = () => {
-    view.dispatch(
-      view.state.tr.setNodeAttribute(headingPos, 'collapsed', !collapsed),
-    )
-  }
-  button.addEventListener('pointerdown', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    toggle()
-  })
   return button
 }
 
@@ -121,11 +107,42 @@ function headingCollapsePlugin(): Plugin {
   return new Plugin({
     key: new PluginKey('headingCollapse'),
     props: {
+      handleDOMEvents: {
+        pointerdown(view, event) {
+          const target = event.target
+          if (!(target instanceof Element)) return false
+          const button = target.closest<HTMLButtonElement>(
+            '.notes-heading-toggle',
+          )
+          if (!button || !view.dom.contains(button)) return false
+          const headingPos = Number(button.dataset.headingPos)
+          const heading = view.state.doc.nodeAt(headingPos)
+          if (!heading || heading.type.name !== 'heading') return false
+
+          event.preventDefault()
+          event.stopPropagation()
+          const tr = view.state.tr.setNodeAttribute(
+            headingPos,
+            'collapsed',
+            !heading.attrs.collapsed,
+          )
+          tr.setSelection(TextSelection.near(tr.doc.resolve(headingPos + 1)))
+          tr.setMeta('lockDragHandle', true)
+          view.dispatch(tr)
+          requestAnimationFrame(() => {
+            if (!view.isDestroyed) {
+              view.dispatch(view.state.tr.setMeta('lockDragHandle', false))
+            }
+          })
+          return true
+        },
+      },
       // Recomputed fresh from the doc each time — no DecorationSet mapping
       // to get wrong; the top-level walk is O(blocks) and docs are small.
       decorations(state) {
         const decorations: Decoration[] = []
-        for (const range of hiddenRanges(state.doc)) {
+        const ranges = hiddenRanges(state.doc)
+        for (const range of ranges) {
           state.doc.nodesBetween(range.from, range.to, (node, pos) => {
             if (pos < range.from) return true
             decorations.push(
@@ -136,13 +153,26 @@ function headingCollapsePlugin(): Plugin {
             return false // top-level nodes only
           })
         }
+        if (ranges.some((range) => range.to === state.doc.content.size)) {
+          decorations.push(
+            Decoration.widget(
+              state.doc.content.size,
+              () => {
+                const sentinel = document.createElement('div')
+                sentinel.className = 'notes-drag-handle-sentinel'
+                return sentinel
+              },
+              { side: 1, key: 'drag-handle-sentinel' },
+            ),
+          )
+        }
         state.doc.forEach((node, offset) => {
           if (node.type.name !== 'heading') return
           const collapsed = Boolean(node.attrs.collapsed)
           decorations.push(
             Decoration.widget(
               offset + 1,
-              (view) => chevronButton(view, offset, collapsed),
+              () => chevronButton(offset, collapsed),
               { side: -1, key: `heading-toggle-${offset}-${collapsed}` },
             ),
           )
@@ -159,7 +189,7 @@ function headingCollapsePlugin(): Plugin {
       const userTransactions = transactions.filter(
         (tr) => !tr.getMeta('preventUpdate'),
       )
-      if (!userTransactions.some((tr) => tr.docChanged || tr.selectionSet)) {
+      if (!userTransactions.some((tr) => tr.selectionSet)) {
         return null
       }
       if (!newState.selection.empty) return null

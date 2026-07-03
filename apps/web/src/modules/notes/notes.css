@@ -756,6 +756,14 @@
 .notes-editor .notes-collapsed-hidden {
   display: none;
 }
+/* TipTap measures the editor's last element to find drag targets. Keep a
+   measurable, non-content endpoint when the real last block is collapsed. */
+.notes-drag-handle-sentinel {
+  width: 100%;
+  height: 10px;
+  visibility: hidden;
+  pointer-events: none;
+}
 .notes-editor .tiptap h1,
 .notes-editor .tiptap h2,
 .notes-editor .tiptap h3 {
@@ -2146,38 +2154,34 @@
   }
   .notes-page {
     width: min(100% - 32px, 720px);
-    padding: 32px 20px 96px 36px;
+    padding: 32px 32px 96px 44px;
   }
   .notes-tree-row {
     min-height: 44px;
   }
+  /* Fixed-width control rail: node changes must not resize or animate the
+     floating handle while a heading is expanded/collapsed. */
   .notes-block-gutter {
-    transform: translateX(4px);
-  }
-  .notes-block-gutter[data-node-type='heading'] .notes-block-add {
-    display: none;
-  }
-  .notes-heading-toggle,
-  .notes-block-gutter[data-node-type='heading'] .notes-block-grip {
-    width: 18px;
-    height: 20px;
-  }
-  .notes-heading-toggle {
-    top: calc(0.875em - 10px);
-  }
-  .notes-heading-toggle svg,
-  .notes-block-gutter[data-node-type='heading'] .notes-block-grip svg {
-    width: 9px;
-    height: 9px;
+    transform: none;
+    transition: none;
   }
   .notes-block-gutter[data-node-type='heading'] {
-    transform: translateX(-26px);
+    transform: translateX(-22px);
+  }
+  .notes-block-gutter[data-node-type='heading'] .notes-block-add {
+    visibility: hidden;
+    pointer-events: none;
   }
   .notes-block-gutter:is(
     [data-node-type='listItem'],
     [data-node-type='taskItem']
   ) {
-    transform: translateX(0);
+    transform: none;
+  }
+  .notes-heading-toggle svg,
+  .notes-block-gutter[data-node-type='heading'] .notes-block-grip svg {
+    width: 10px;
+    height: 10px;
   }
   /* Table scrolls horizontally with the title column pinned. */
   .notes-table-title-col {

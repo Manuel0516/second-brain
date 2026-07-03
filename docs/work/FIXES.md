@@ -9,29 +9,22 @@ Format: `- [ ] Short description — context/file — priority (high/medium/low)
 ## Active bugs
 
 - [ ] Settings → Security page stub is not yet wired to TOTP backend — low
-- [ ] Mobile notes heading controls are still incorrectly laid out — the
-  heading toggle and floating drag grip become cramped, transition toward or
-  beyond the left screen edge when the heading is expanded, and do not keep a
-  stable separation from the title text. Recent mobile-only padding, sizing,
-  and `translateX` adjustments in `notes.css` did not solve the underlying
-  positioning interaction. Reproduce at a real phone viewport and replace the
-  competing absolute/floating transforms with one stable heading control lane.
-  Files: `notes.css`, `BlockEditor.tsx`, `CollapsibleHeading.ts` — medium
-- [ ] Notes heading toggle stops working after repeated use — the chevron
-  button (ProseMirror widget in `CollapsibleHeading.ts`) works for the first
-  few collapse/expand cycles but eventually becomes unresponsive. Likely a
-  decoration-key or widget-recreation issue in the `headingCollapsePlugin`:
-  each toggle dispatches `setNodeAttribute` which triggers a decoration
-  recompute, and the widget factory creates a fresh button DOM node each
-  time. The old button's event listeners may not be cleaned up, or the
-  DecorationSet diff may leave a stale widget in the DOM that no longer
-  receives events. The `appendTransaction` auto-expand logic may also race
-  with rapid clicks. File: `CollapsibleHeading.ts` — medium
 
 ---
 
 ## Recently fixed (last 30 days)
 
+- [x] Notes drag controls disappeared or kept a stale top position when
+  headings collapsed, especially when every heading was closed — heading
+  toggles now use TipTap's lock/unlock lifecycle across the DOM update, with a
+  regression check for both transaction states. An invisible decoration also
+  keeps TipTap's final-element measurement valid when the last content block
+  is hidden. Fixed 2026-07-03 (history 0036).
+- [x] Notes heading toggles became unresponsive or reopened other collapsed
+  main headings — per-widget listeners were replaced by one plugin handler,
+  toggles now move selection onto their heading, and auto-expand only responds
+  to selection changes. Repeated and independent toggles are covered by tests.
+  Fixed 2026-07-03 (history 0036).
 - [x] Image paste/import into note blocks did nothing — three stacked env
   problems: migration 012 never applied locally (`files` table missing),
   URL-style `MINIO_ENDPOINT` rejected by the client, and the API reading
