@@ -24,9 +24,8 @@ export function Notes() {
   )
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Page | null>(null)
-  const [createMenu, setCreateMenu] = useState<'topbar' | 'empty' | null>(null)
+  const [createMenu, setCreateMenu] = useState<'topbar' | null>(null)
   const newPageRef = useRef<HTMLButtonElement>(null)
-  const emptyNewRef = useRef<HTMLButtonElement>(null)
   // Minimal toast: one message + timeout, used for safe/undoable feedback.
   const [toast, setToast] = useState('')
   const toastTimer = useRef(0)
@@ -121,8 +120,13 @@ export function Notes() {
     )
     try {
       const saved = await notesApi.patch(id, input)
+      // Keep the local content reference: the server echoes what we sent but
+      // re-serialized, and swapping it would churn (or reset) the open editor
+      // after every autosave — the checkbox jank on mobile.
       setPages((current) =>
-        current.map((page) => (page.id === id ? saved : page)),
+        current.map((page) =>
+          page.id === id ? { ...saved, content: page.content } : page,
+        ),
       )
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save page')
@@ -316,29 +320,21 @@ export function Notes() {
                 onCreatePage={(parentId) => void createPage(parentId)}
               />
             ) : (
-              <main className="notes-empty-page">
+              <main className="notes-overview" aria-label="All notes">
                 <h1>{loading ? 'Loading…' : 'Notes'}</h1>
-                {!loading && (
-                  <>
-                    <p>Select a page or start a new one.</p>
-                    <button
-                      ref={emptyNewRef}
-                      type="button"
-                      aria-expanded={createMenu === 'empty'}
-                      onClick={() =>
-                        setCreateMenu(createMenu === 'empty' ? null : 'empty')
-                      }
-                    >
-                      New page
-                    </button>
-                    <CreatePageMenu
-                      anchorRef={emptyNewRef}
-                      open={createMenu === 'empty'}
-                      onClose={() => setCreateMenu(null)}
-                      onCreate={(type) => void create(null, type)}
+                {!loading &&
+                  (pages.length === 0 ? (
+                    <p className="notes-overview-empty">
+                      No pages yet — create one with “New page” above.
+                    </p>
+                  ) : (
+                    <OverviewTree
+                      pages={pages}
+                      parentId={null}
+                      depth={0}
+                      onOpen={(id) => navigate(`/notes/${id}`)}
                     />
-                  </>
-                )}
+                  ))}
               </main>
             )}
           </section>
@@ -371,4 +367,63 @@ function isChildOf(page: Page, ancestorId: string, pages: Page[]): boolean {
       null
   }
   return false
+}
+
+/** Front-page overview: the whole page tree as clickable rows. */
+function OverviewTree({
+  pages,
+  parentId,
+  depth,
+  onOpen,
+}: {
+  pages: Page[]
+  parentId: string | null
+  depth: number
+  onOpen: (id: string) => void
+}) {
+  const children = pages
+    .filter((page) => page.parent_page_id === parentId)
+    .sort((a, b) => a.position.localeCompare(b.position))
+  if (!children.length) return null
+  return (
+    <ul className="notes-overview-list">
+      {children.map((page) => (
+        <li key={page.id}>
+          <button
+            type="button"
+            className="notes-overview-row"
+            style={{ paddingLeft: 10 + depth * 20 }}
+            onClick={() => onOpen(page.id)}
+          >
+            <span className="notes-overview-icon" aria-hidden="true">
+              {page.icon || (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 1.5h5.5L13 5v9.5H4z" />
+                  <path d="M9.5 1.5V5H13" />
+                </svg>
+              )}
+            </span>
+            <span className="notes-overview-title">
+              {page.title || 'Untitled'}
+            </span>
+          </button>
+          <OverviewTree
+            pages={pages}
+            parentId={page.id}
+            depth={depth + 1}
+            onOpen={onOpen}
+          />
+        </li>
+      ))}
+    </ul>
+  )
 }

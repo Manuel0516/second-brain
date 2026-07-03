@@ -31,11 +31,14 @@ apps/api/
     models.py          — all database tables (SQLAlchemy ORM models)
     security.py        — password hashing (Argon2), JWT creation/validation
     dependencies.py    — FastAPI dependencies (e.g. `current_user()`)
+    storage.py         — MinIO client (lazy singleton, bucket auto-create)
 
     routes/
       auth.py          — POST /login, POST /logout, POST /refresh, GET /me, TOTP
       calendar.py      — CRUD for /calendars and /events
       notes.py         — CRUD for /pages, plus /links and /search
+      files.py         — image upload/serve/delete (MinIO) + GET /embed
+                         (SSRF-guarded page-metadata fetch for bookmark cards)
       settings.py      — GET + PATCH /settings
       admin.py         — internal admin endpoints
 ```
@@ -102,6 +105,12 @@ commits/rolls back automatically. Never manually manage transactions in route fu
 
 If any of these fail, the app refuses to start. This prevents accidentally running prod with
 dev defaults.
+
+**MinIO (file storage):** `MINIO_ENDPOINT` (bare `host:port` or a URL — the
+client strips the scheme and derives TLS from it), plus credentials read from
+`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` **or** the `MINIO_ROOT_USER`/
+`MINIO_ROOT_PASSWORD` names Compose already requires — one pair in `.env`
+drives both the server and the client (see history 0032).
 
 ---
 

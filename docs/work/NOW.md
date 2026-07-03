@@ -6,6 +6,20 @@ Last updated: 2026-07-03
 
 ## Active work
 
+**Mobile fixes + notes front page (2026-07-03, history 0034–0036, 0038)**
+- Mobile page padding, stable heading toggle controls/rail (0034–0036).
+- Todo-check save churn fixed (content reference kept + 1200 ms debounce with
+  unmount flush); emoji picker usable on iOS; "Delete block" in a list now
+  deletes only the line (was wiping the list — regression-tested); keyboard
+  no longer pans the notes topbar away (viewport meta + dvh shell); `/notes`
+  front page is now an overview tree of all notes (0038).
+
+**Notes settings page — N6 DONE (2026-07-03, history 0037)**
+- `/settings/notes`: bullet (disc/circle/square/dash) and numbered (decimal/
+  alpha/roman) marker schemes with live previews; persisted via Settings API
+  (migration 013); applied as pure CSS via editor-root data attributes.
+- `NOTES_MODULE_PLAN.md` is now fully complete.
+
 **Notes media & layout — DONE, reworked, polished (2026-07-03, history 0030–0033)**
 - Backend file service: `minio` dep, `files` table (migration 012), `storage.py`,
   `POST/GET/DELETE /api/files`, SSRF-guarded `GET /api/embed`. MinIO env wired
@@ -53,9 +67,7 @@ Last updated: 2026-07-03
 1. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
 2. Settings → Security page — wire up TOTP 2FA UI.
 3. Google Calendar sync — Phase 1 completion.
-4. Notes settings (N6): bullet/numbered list marker schemes — only open
-   sub-phase of `plans/NOTES_MODULE_PLAN.md`.
-5. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
+4. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
    table row-height dragging) — pick up on demand.
 
 ---

@@ -14,6 +14,14 @@ Format: `- [ ] Short description — context/file — priority (high/medium/low)
 
 ## Recently fixed (last 30 days)
 
+- [x] Deleting a todo/bullet via "Delete block" removed the entire list —
+  `blockDepth` targeted the whole list node instead of the list line. Fixed
+  2026-07-03 (0038) with a regression test.
+- [x] Emoji picker closed instantly on mobile (iOS blur has no
+  relatedTarget); todo checks felt janky (server content echo churned the
+  editor + saves too frequent); notes topbar panned away when the keyboard
+  opened. All fixed 2026-07-03 (0038).
+
 - [x] Notes drag controls disappeared or kept a stale top position when
   headings collapsed, especially when every heading was closed — heading
   toggles now use TipTap's lock/unlock lifecycle across the DOM update, with a

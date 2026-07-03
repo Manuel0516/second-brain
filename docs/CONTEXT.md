@@ -21,6 +21,7 @@ Load this index first. Open only the row that matches the task.
 | Meals, nutrition, water, or recipes | `docs/product/FOOD_MODULE.md` |
 | AI capture, tools, or provider behavior | `docs/product/AI_ASSISTANT_MODULE.md` |
 | Settings, preferences, or exports | `docs/product/SETTINGS_MODULE.md` |
+| File uploads, images, MinIO storage | `docs/architecture/BACKEND.md` + `DATABASE.md` (`files` table) |
 | Backend / API architecture | `docs/architecture/BACKEND.md` |
 | Database tables or migrations | `docs/architecture/DATABASE.md` |
 | Frontend structure or routing | `docs/architecture/FRONTEND.md` |

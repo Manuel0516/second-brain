@@ -21,6 +21,13 @@ export interface UserSettings {
   default_reminder_minutes: number | null
   show_weekends: boolean
   dim_past_events: boolean
+  notes_bullet_style: 'disc' | 'circle' | 'square' | 'dash'
+  notes_numbered_style:
+    | 'decimal'
+    | 'lower-alpha'
+    | 'upper-alpha'
+    | 'lower-roman'
+    | 'upper-roman'
 }
 
 interface SettingsContextType {
@@ -42,6 +49,8 @@ const DEFAULTS: UserSettings = {
   default_reminder_minutes: null,
   show_weekends: true,
   dim_past_events: true,
+  notes_bullet_style: 'disc',
+  notes_numbered_style: 'decimal',
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

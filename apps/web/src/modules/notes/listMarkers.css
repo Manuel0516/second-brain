@@ -1,0 +1,40 @@
+/**
+ * Settings-driven list marker schemes.
+ *
+ * Applied via data attributes on the notes editor root (BlockEditor) and on
+ * the Notes settings live previews — same selectors, both surfaces. Only
+ * list-style-type lives here; spacing belongs to each surface. All nesting
+ * depths follow because the rules match every descendant list. Task lists
+ * keep their checkboxes (excluded), and unknown attribute values simply
+ * match no override, falling back to the disc/decimal defaults.
+ */
+
+[data-bullet-style] ul:not([data-type='taskList']) {
+  list-style-type: disc;
+}
+[data-bullet-style='circle'] ul:not([data-type='taskList']) {
+  list-style-type: circle;
+}
+[data-bullet-style='square'] ul:not([data-type='taskList']) {
+  list-style-type: square;
+}
+/* No native dash keyword — the string syntax renders it directly. */
+[data-bullet-style='dash'] ul:not([data-type='taskList']) {
+  list-style-type: '–  ';
+}
+
+[data-numbered-style] ol {
+  list-style-type: decimal;
+}
+[data-numbered-style='lower-alpha'] ol {
+  list-style-type: lower-alpha;
+}
+[data-numbered-style='upper-alpha'] ol {
+  list-style-type: upper-alpha;
+}
+[data-numbered-style='lower-roman'] ol {
+  list-style-type: lower-roman;
+}
+[data-numbered-style='upper-roman'] ol {
+  list-style-type: upper-roman;
+}

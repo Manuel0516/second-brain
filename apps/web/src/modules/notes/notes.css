@@ -5,7 +5,9 @@
 
 .notes-shell {
   display: flex;
-  height: 100vh;
+  /* dvh: follows the visible viewport (mobile keyboard/URL bar), keeping
+     the topbar on screen instead of being panned out of view. */
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-base);
   color: var(--text-primary);
@@ -1399,8 +1401,7 @@
   min-height: 52px;
   border-bottom: 1px solid var(--border);
 }
-.notes-trash button,
-.notes-empty-page button {
+.notes-trash button {
   min-height: 34px;
   padding: 0 14px;
   border: 1px solid var(--border-strong);
@@ -1413,8 +1414,7 @@
     background 0.14s ease,
     border-color 0.14s ease;
 }
-.notes-trash button:hover,
-.notes-empty-page button:hover {
+.notes-trash button:hover {
   border-color: var(--accent-tint-border);
 }
 .notes-trash-hint {
@@ -1477,24 +1477,70 @@
 .notes-back:hover {
   color: var(--text-primary);
 }
-.notes-empty-page {
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-  height: 100%;
-  text-align: center;
-  color: var(--text-secondary);
+/* ── Front page: overview tree of every note ─────────────────────── */
+.notes-overview {
+  width: min(100% - 48px, 720px);
+  margin: 0 auto;
+  padding: 40px 0 96px;
 }
-.notes-empty-page h1 {
+.notes-overview h1 {
+  margin: 0 0 18px;
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
-.notes-empty-page p {
+.notes-overview-empty {
   color: var(--text-tertiary);
   font-size: 13.5px;
+}
+.notes-overview-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes-overview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.notes-overview-row:hover {
+  background: var(--bg-raised);
+}
+.notes-overview-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: 1;
+}
+.notes-overview-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 800px) {
+  .notes-overview {
+    width: min(100% - 28px, 720px);
+    padding-top: 24px;
+  }
+  .notes-overview-row {
+    min-height: 44px;
+  }
 }
 
 /* ── Split-view note pane (opened beside the calendar grid) ──────── */

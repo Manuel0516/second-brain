@@ -19,7 +19,7 @@ Status values: `planned`, `in progress`, `verified`.
 - [x] Scoped project instructions and six specialists in Codex and Claude
 - [x] Ponytail `full` installed and hook output verified in both tools
 - [x] React/FastAPI scaffold and API health contracts
-- [ ] PostgreSQL/MinIO development services
+- [x] PostgreSQL/MinIO development services (MinIO wired end-to-end for note image uploads, history 0030–0032)
 - [x] Production-safe Compose and Hub/Traefik labels (static validation)
 - [x] CI and application quality checks
 - [x] Baseline Git commit
@@ -28,3 +28,6 @@ Status values: `planned`, `in progress`, `verified`.
 - [x] Deploy hardening (config guard, lifespan, env-aware cookies, TOTP, security headers, migrations-on-boot)
 - [x] Page transitions & light mode fixes
 - [x] Notes module (rich pages, nesting/trash, event links, mentions, backlinks, search)
+- [x] Notes media & layout (image uploads, bookmark cards, table controls + resizing, multi-column drag layout, text alignment)
+- [x] Notes settings page (list marker schemes) — notes plan fully complete
+- [x] Mobile notes pass (todo saving, emoji picker, list deletion, keyboard layout, front-page overview)

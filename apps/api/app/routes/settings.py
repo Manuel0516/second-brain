@@ -18,6 +18,9 @@ HEX = r"^#[0-9A-Fa-f]{6}$"
 DEFAULT_FAVORITE_EMOJIS = ["📅", "💼", "☕", "🏃", "🍽️", "📝", "🎧", "🎯"]
 DEFAULT_FAVORITE_COLORS = ["#3B6FE0", "#2E9E6E", "#D6932B", "#8B5CF6", "#D9573F"]
 
+BulletStyle = Literal["disc", "circle", "square", "dash"]
+NumberedStyle = Literal["decimal", "lower-alpha", "upper-alpha", "lower-roman", "upper-roman"]
+
 
 class SettingsResponse(BaseModel):
     theme: Literal["system", "light", "dark"]
@@ -32,6 +35,8 @@ class SettingsResponse(BaseModel):
     default_reminder_minutes: int | None
     show_weekends: bool
     dim_past_events: bool
+    notes_bullet_style: BulletStyle
+    notes_numbered_style: NumberedStyle
 
 
 class SettingsPatch(BaseModel):
@@ -47,6 +52,8 @@ class SettingsPatch(BaseModel):
     default_reminder_minutes: int | None = Field(default=None, ge=0, le=40_320)
     show_weekends: bool | None = None
     dim_past_events: bool | None = None
+    notes_bullet_style: BulletStyle | None = None
+    notes_numbered_style: NumberedStyle | None = None
 
     @field_validator("favorite_emojis")
     @classmethod
@@ -115,6 +122,8 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         default_reminder_minutes=s.default_reminder_minutes,
         show_weekends=s.show_weekends,
         dim_past_events=s.dim_past_events,
+        notes_bullet_style=s.notes_bullet_style,
+        notes_numbered_style=s.notes_numbered_style,
     )
 
 

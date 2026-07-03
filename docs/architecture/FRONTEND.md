@@ -119,17 +119,31 @@ Gestures on touch devices use a state machine in `TimeGrid.tsx` — not ad-hoc t
 
 ```
 modules/notes/
+  Notes.tsx          — route shell: pages state, sidebar, topbar, front-page
+                       overview tree (no page selected)
   PageView.tsx       — page canvas: icon, title, block editor, backlinks
-  NotesTree.tsx      — sidebar page tree with drag-to-reorder
+  Sidebar.tsx        — sidebar page tree with drag-to-reorder
   Backlinks.tsx      — backlinks panel at the bottom of each page
   api.ts             — notes-specific API calls
   types.ts           — TypeScript types for Page, Backlink, SearchResult, Link
-  editor/
-    BlockEditor.tsx  — Tiptap v3 block editor instance + DragHandle + BubbleMenu
   notes.css          — module styles (tokens only, no new values)
+  listMarkers.css    — settings-driven list marker schemes (also imported by
+                       the Notes settings page for its live previews)
+  editor/
+    BlockEditor.tsx  — the Tiptap v3 editor: extensions, slash menu,
+                       BubbleMenu (marks, colors, text alignment), DragHandle,
+                       paste/drop (images, bookmark URLs, column edge-drops)
+    ImageNode.tsx    — image block NodeView (width grip, align, upload helper)
+    BookmarkNode.tsx — link-embed card NodeView + metadata fetch helper
+    ColumnNodes.ts   — multi-column layout nodes + drag-to-edge drop logic
+    TableToolbar.tsx — floating table controls (row/col/header/delete)
+    TextAlignExtension.ts — paragraph/heading text-align attribute
+    (+ math, callout, code block, collapsible heading, task item, location,
+     color extensions — one file each)
 ```
 
 Block content is stored as Tiptap JSON in the `Page.content` JSONB column.
+Images upload to `POST /api/files` (MinIO-backed) and embed by URL.
 
 ---
 

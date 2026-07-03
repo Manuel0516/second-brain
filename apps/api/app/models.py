@@ -197,6 +197,9 @@ class UserSettings(Base):
     default_reminder_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     show_weekends: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     dim_past_events: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Notes editor
+    notes_bullet_style: Mapped[str] = mapped_column(String(16), default="disc", nullable=False)
+    notes_numbered_style: Mapped[str] = mapped_column(String(16), default="decimal", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

@@ -1,5 +1,20 @@
 # Plan E — Notes media, embeds, tables, and multi-column layout
 
+> ## STATUS (2026-07-03) — COMPLETE (history 0030–0033)
+>
+> All five phases shipped, then reworked/polished the same day. Deltas from
+> this plan as written:
+> - Columns are created by **dragging a block to another block's edge**
+>   (plus slash commands); dissolution lifts content (0031).
+> - Tables: **no NodeView** — a floating toolbar overlay instead, which
+>   keeps native column resizing working; tables center and auto-size
+>   (0031, 0033). Row-height dragging remains unsupported.
+> - Images got a NodeView with width grip + align controls and are never
+>   upscaled past natural size (0031, 0033).
+> - Extra beyond plan: block text alignment in the selection toolbar (0033).
+> - Ops traps hit and fixed in 0032: migration must be applied, MinIO
+>   endpoint format, credential env names (compose now passes them).
+
 > Audience: implementing AI or developer. Read order: this plan →
 > `docs/design/STYLE_GUIDE.md` → nearest `AGENTS.md`. Run `npm run check`
 > (web) and `npm run check:api` before any task is "done". Reuse the tokens

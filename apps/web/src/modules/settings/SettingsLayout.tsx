@@ -42,7 +42,7 @@ const NAV_ITEMS = [
   { to: '/settings/calendar', label: 'Calendar', disabled: false },
   { to: '/settings/fitness', label: 'Fitness', disabled: true },
   { to: '/settings/food', label: 'Food', disabled: true },
-  { to: '/settings/notes', label: 'Notes', disabled: true },
+  { to: '/settings/notes', label: 'Notes', disabled: false },
   { to: '/settings/security', label: 'Security', disabled: true },
 ]
 

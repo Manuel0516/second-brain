@@ -25,7 +25,10 @@ export function EmojiPicker({
 
   useEffect(() => {
     if (!open) return
-    const close = (event: MouseEvent) => {
+    // pointerdown, not mousedown: touch browsers synthesize mouse events
+    // late (or not at all), which made outside-dismissal unreliable on
+    // mobile. pointerdown fires for every input type at gesture start.
+    const close = (event: PointerEvent) => {
       if (
         pickerRef.current &&
         !pickerRef.current.contains(event.target as Node)
@@ -34,8 +37,8 @@ export function EmojiPicker({
         onOpenChange?.(false)
       }
     }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
   }, [open, onOpenChange])
 
   const pick = (value: string) => {

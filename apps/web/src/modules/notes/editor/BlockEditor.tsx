@@ -22,6 +22,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Mention from '@tiptap/extension-mention'
 import 'katex/dist/katex.min.css'
 import '../notes.css'
+import '../listMarkers.css'
 import { EMPTY_DOCUMENT, type SearchResult } from '../types'
 import {
   EditableBlockMath,
@@ -95,11 +96,22 @@ interface BlockEditorProps {
   debounceMs?: number
   readOnly?: boolean
   ariaLabel?: string
+  /** List marker schemes from settings — presentation only (CSS), never
+   *  written into the document. Unknown values fall back to the defaults. */
+  bulletStyle?: string
+  numberedStyle?: string
 }
 
-/** Depth of the block the cursor is in: top-level, or a column's child. */
+/** Depth of the block the cursor is in. Inside a list this is the list
+ *  LINE (listItem/taskItem) — acting on depth 1 there would hit the whole
+ *  list and wipe every sibling item. Otherwise: top-level or a column's
+ *  child. */
 function blockDepth(editor: Editor): number | null {
   const { $from } = editor.state.selection
+  for (let depth = $from.depth; depth >= 1; depth -= 1) {
+    const name = $from.node(depth).type.name
+    if (name === 'listItem' || name === 'taskItem') return depth
+  }
   for (let depth = 1; depth <= $from.depth; depth += 1) {
     const name = $from.node(depth).type.name
     if (name !== 'columnList' && name !== 'column') return depth
@@ -361,15 +373,21 @@ export function BlockEditor({
   onChange,
   onSearch,
   onMentionClick,
-  debounceMs = 600,
+  // 1200ms: batches rapid edits (mobile todo checking) into one save; safe
+  // because the pending save is flushed on unmount.
+  debounceMs = 1200,
   readOnly = false,
   ariaLabel = 'Page content',
+  bulletStyle = 'disc',
+  numberedStyle = 'decimal',
 }: BlockEditorProps) {
   const editorContent = useMemo(
     () => (content.type ? stripDetails(content) : EMPTY_DOCUMENT),
     [content],
   )
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Editor with a debounced save still waiting — flushed on unmount.
+  const pendingSaveRef = useRef<Editor | null>(null)
   const onChangeRef = useRef(onChange)
   const searchRef = useRef(onSearch)
   const clickRef = useRef(onMentionClick)
@@ -636,10 +654,11 @@ export function BlockEditor({
     },
     onUpdate: ({ editor: current }) => {
       clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(
-        () => onChangeRef.current(current.getJSON()),
-        debounceMs,
-      )
+      pendingSaveRef.current = current
+      saveTimer.current = setTimeout(() => {
+        pendingSaveRef.current = null
+        onChangeRef.current(current.getJSON())
+      }, debounceMs)
       const { $from } = current.state.selection
       const match = $from.parent
         .textBetween(0, $from.parentOffset)
@@ -689,7 +708,18 @@ export function BlockEditor({
       ?.scrollIntoView({ block: 'nearest' })
   }, [slashIndex, mentionIndex])
 
-  useEffect(() => () => clearTimeout(saveTimer.current), [])
+  // Flush any pending debounced save on unmount so the last edits (e.g. a
+  // quick todo check right before navigating away) are never dropped.
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimer.current)
+      const pending = pendingSaveRef.current
+      pendingSaveRef.current = null
+      if (pending && !pending.isDestroyed)
+        void onChangeRef.current(pending.getJSON())
+    },
+    [],
+  )
   // Track block drags to preview the column edge zones (the dropcursor's
   // horizontal line is hidden while this vertical indicator shows).
   useEffect(() => {
@@ -898,6 +928,8 @@ export function BlockEditor({
       className={`notes-editor${columnDrop ? ' notes-col-dropping' : ''}`}
       role="group"
       aria-label="Block editor"
+      data-bullet-style={bulletStyle}
+      data-numbered-style={numberedStyle}
       ref={containerRef}
     >
       {editor && (

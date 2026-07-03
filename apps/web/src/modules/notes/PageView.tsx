@@ -47,6 +47,9 @@ export function PageView({
 
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [coverPickerOpen, setCoverPickerOpen] = useState(false)
+  // Last pointerdown target in the page head. Title blur uses it because on
+  // iOS buttons never take focus, so blur's relatedTarget is null there.
+  const headPointerRef = useRef<EventTarget | null>(null)
   const { settings } = useSettings()
   const iconPresets =
     settings.favorite_emojis.length > 0
@@ -137,6 +140,9 @@ export function PageView({
       </nav>
       <div
         className={`notes-page-head${icon ? '' : ' no-icon'}${iconPickerOpen ? ' icon-picker-open' : ''}`}
+        onPointerDownCapture={(event) => {
+          headPointerRef.current = event.target
+        }}
       >
         <EmojiPicker
           icon={icon}
@@ -159,10 +165,19 @@ export function PageView({
             if (!icon && !iconPickerOpen) setIconPickerOpen(true)
           }}
           onBlur={(e) => {
-            // Close the picker when leaving the title, unless focus moved
-            // into the emoji picker (choosing an icon or typing a custom one).
+            // Close the picker when leaving the title, unless the blur was
+            // caused by tapping into the emoji picker (choosing an icon or
+            // typing a custom one). relatedTarget covers desktop; the tracked
+            // pointerdown target covers iOS, where buttons never take focus.
             const target = e.relatedTarget as HTMLElement | null
+            const pointed = headPointerRef.current
+            headPointerRef.current = null
             if (target?.closest('.editor-icon-picker')) return
+            if (
+              pointed instanceof Element &&
+              pointed.closest('.editor-icon-picker')
+            )
+              return
             setIconPickerOpen(false)
           }}
           onChange={(event) => {
@@ -245,6 +260,8 @@ export function PageView({
           onChange={saveContent}
           onSearch={notesApi.search}
           onMentionClick={openNode}
+          bulletStyle={settings.notes_bullet_style}
+          numberedStyle={settings.notes_numbered_style}
         />
       )}
       <Backlinks nodeType="page" nodeId={page.id} onOpen={openNode} />

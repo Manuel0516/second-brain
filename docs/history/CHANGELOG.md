@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0038](0038-mobile-fixes-and-notes-front-page.md) | Mobile editor fixes + notes front-page overview | 2026-07-03 | accepted |
+| [0037](0037-notes-settings-list-markers.md) | Notes settings page: list marker schemes (N6) | 2026-07-03 | accepted |
 | [0036](0036-mobile-notes-heading-control-rail.md) | Stable mobile notes heading controls | 2026-07-03 | accepted |
 | [0035](0035-mobile-heading-toggle-and-gutter-spacing.md) | Mobile heading toggle and gutter visibility | 2026-07-03 | accepted |
 | [0034](0034-mobile-notes-padding.md) | Mobile notes page padding | 2026-07-03 | accepted |

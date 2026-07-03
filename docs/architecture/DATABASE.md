@@ -129,6 +129,8 @@ One row per user, created on first write (lazy creation).
 | default_reminder_minutes | Integer? | Default reminder offset. |
 | show_weekends | Boolean | Whether Sat/Sun show on the week grid. |
 | dim_past_events | Boolean | Whether past events render at lower opacity. |
+| notes_bullet_style | String(16) | Notes list marker: disc / circle / square / dash. |
+| notes_numbered_style | String(16) | decimal / lower-alpha / upper-alpha / lower-roman / upper-roman. |
 
 ---
 
@@ -241,5 +243,6 @@ select(Link).where(
 | 010 | Pages table + Link table |
 | 011 | Database pages: pages.type/is_template/cover/properties + database_properties + database_views |
 | 012 | Files table (MinIO-backed uploads for note images) |
+| 013 | Notes list marker style preferences on user_settings |
 
 Always check `alembic current` before writing a new migration.

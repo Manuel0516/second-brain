@@ -508,3 +508,39 @@ test('pasting an image file uploads it and inserts an image block', async () => 
     vi.unstubAllGlobals()
   }
 })
+
+test('deleting a block inside a list removes only that line, not the whole list', () => {
+  const item = (text: string) => ({
+    type: 'taskItem',
+    attrs: { checked: false },
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+  const editor = new Editor({
+    extensions: [StarterKit, TaskList, EditableTaskItem],
+    content: {
+      type: 'doc',
+      content: [
+        {
+          type: 'taskList',
+          content: [item('one'), item('two'), item('three')],
+        },
+      ],
+    },
+  })
+  let twoPos = -1
+  editor.state.doc.descendants((node, pos) => {
+    if (node.isText && node.text === 'two') twoPos = pos
+    return true
+  })
+  editor.commands.setTextSelection(twoPos + 1)
+
+  deleteBlock(editor)
+
+  expect(editor.state.doc.textContent).toBe('onethree')
+  let items = 0
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'taskItem') items += 1
+    return true
+  })
+  expect(items).toBe(2)
+})

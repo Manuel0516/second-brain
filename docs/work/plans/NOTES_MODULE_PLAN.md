@@ -1,12 +1,12 @@
 # Plan D — Notes / Pages (Phase 2), calendar-first
 
-> ## STATUS (2026-07-03) — plan essentially COMPLETE except N6
+> ## STATUS (2026-07-03) — plan COMPLETE (N6 shipped in 0037)
 >
 > Everything below shipped, plus a lot this plan deferred (see history
 > 0010–0011, 0019–0025):
 >
-> - **N1–N5, N7, N8 done.** The only open sub-phase is **N6 (notes settings:
->   bullet/numbered list marker schemes)** — not started.
+> - **All sub-phases done.** N6 (notes settings: bullet/numbered list marker
+>   schemes) shipped last, in history 0037.
 > - **Beyond this plan, also built:** database pages with properties +
 >   table/list/board/gallery/calendar views (0019, 0021); covers (preset
 >   gradients + URL) and templates (0020); folder page type + the
@@ -442,7 +442,7 @@ Ship in order; each ends green on `npm run check` / `check:api`.
 | N3 | ✅ done (0010, rebuilt to calendar parity) | `/notes` route + rail wiring; page tree sidebar; page view (title/icon/breadcrumb/editor); trash; autosave | Create/nest/rename/delete/restore pages; edits autosave |
 | N4 | ✅ done (0010, reworked in 0022 with folders + Linked card) | Split view in `Calendar.tsx`; `POST /events/{id}/note`; event Linked panel; `[[` mentions (page+event) → `Link`; backlinks panels | Saving an event-with-note splits desktop / full-screen mobile; mentions create edges; backlinks show both directions |
 | N5 | ✅ done (0010, 0012–0014, 0023, 0025) | Polish: empty states, "Saved" affordance, keyboard/a11y, responsive sheet, motion, design-canvas fidelity pass | Matches design system; a11y checks pass |
-| N6 | ⬜ **not started — the only open item** | Notes settings: bullet and numbered-list schemes, live previews, Settings API persistence | Existing lists restyle without content changes; preferences survive reload and apply to standalone/split editors |
+| N6 | ✅ done (0037) | Notes settings: bullet and numbered-list schemes, live previews, Settings API persistence | Existing lists restyle without content changes; preferences survive reload and apply to standalone/split editors |
 | N7 | ✅ done (0025) | Editor formatting: text highlight, block colors, and code-block language selection | Formatting persists in Tiptap JSON; palette is theme-safe; unsupported code languages fall back to plain text |
 | N8 | ✅ done (0025) | Trash lifecycle: permanent page-subtree deletion and link cleanup | Irreversible confirmation is required; ownership tests pass; no orphaned page links remain |
 
