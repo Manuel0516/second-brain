@@ -104,12 +104,15 @@ function chevronButton(
   )
   button.innerHTML =
     '<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l6 6-6 6"/></svg>'
-  button.addEventListener('mousedown', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const toggle = () => {
     view.dispatch(
       view.state.tr.setNodeAttribute(headingPos, 'collapsed', !collapsed),
     )
+  }
+  button.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    toggle()
   })
   return button
 }

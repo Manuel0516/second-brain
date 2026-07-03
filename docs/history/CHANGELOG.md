@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0035](0035-mobile-heading-toggle-and-gutter-spacing.md) | Mobile heading toggle and gutter visibility | 2026-07-03 | accepted |
+| [0034](0034-mobile-notes-padding.md) | Mobile notes page padding | 2026-07-03 | accepted |
 | [0033](0033-image-quality-table-ui-text-align.md) | Image quality cap, table UI rework, block text alignment | 2026-07-03 | accepted |
 | [0032](0032-minio-config-fix.md) | Fix MinIO wiring: image uploads actually reach storage | 2026-07-03 | accepted |
 | [0031](0031-notes-media-layout-rework.md) | Notes media & layout rework: drag-to-column, image controls, table fix | 2026-07-03 | accepted |

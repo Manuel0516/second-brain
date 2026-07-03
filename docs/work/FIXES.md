@@ -9,6 +9,14 @@ Format: `- [ ] Short description — context/file — priority (high/medium/low)
 ## Active bugs
 
 - [ ] Settings → Security page stub is not yet wired to TOTP backend — low
+- [ ] Mobile notes heading controls are still incorrectly laid out — the
+  heading toggle and floating drag grip become cramped, transition toward or
+  beyond the left screen edge when the heading is expanded, and do not keep a
+  stable separation from the title text. Recent mobile-only padding, sizing,
+  and `translateX` adjustments in `notes.css` did not solve the underlying
+  positioning interaction. Reproduce at a real phone viewport and replace the
+  competing absolute/floating transforms with one stable heading control lane.
+  Files: `notes.css`, `BlockEditor.tsx`, `CollapsibleHeading.ts` — medium
 - [ ] Notes heading toggle stops working after repeated use — the chevron
   button (ProseMirror widget in `CollapsibleHeading.ts`) works for the first
   few collapse/expand cycles but eventually becomes unresponsive. Likely a
