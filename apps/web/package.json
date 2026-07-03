@@ -12,7 +12,10 @@
     "check": "npm run format:check && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@tiptap/extension-code-block-lowlight": "^3.27.1",
     "@tiptap/extension-drag-handle-react": "^3.27.1",
+    "@tiptap/extension-heading": "^3.27.1",
+    "@tiptap/extension-highlight": "^3.27.1",
     "@tiptap/extension-mathematics": "^3.27.1",
     "@tiptap/extension-mention": "^3.27.1",
     "@tiptap/extension-placeholder": "^3.27.1",
@@ -28,6 +31,7 @@
     "@tiptap/suggestion": "^3.27.1",
     "date-fns": "^3.6.0",
     "katex": "^0.16.47",
+    "lowlight": "^3.3.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^6.28.0"

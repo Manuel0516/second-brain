@@ -7,7 +7,7 @@ interface LinkPopoverProps {
   onCancel: () => void
 }
 
-function normalizeHref(value: string) {
+export function normalizeHref(value: string) {
   const trimmed = value.trim()
   if (!trimmed) return null
   const href =

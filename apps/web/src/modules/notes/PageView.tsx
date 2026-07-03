@@ -43,6 +43,7 @@ export function PageView({
   const [icon, setIcon] = useState(page.icon || '')
   const [inputPageId, setInputPageId] = useState(page.id)
   const metadataTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const coverAnchorRef = useRef<HTMLButtonElement>(null)
 
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [coverPickerOpen, setCoverPickerOpen] = useState(false)
@@ -105,6 +106,7 @@ export function PageView({
           }
         >
           <button
+            ref={coverAnchorRef}
             type="button"
             className="notes-cover-change"
             aria-expanded={coverPickerOpen}
@@ -114,6 +116,7 @@ export function PageView({
           </button>
           {coverPickerOpen && (
             <CoverPicker
+              anchorRef={coverAnchorRef}
               value={page.cover}
               onChange={setCover}
               onClose={() => setCoverPickerOpen(false)}
@@ -170,6 +173,7 @@ export function PageView({
         {!page.cover && (
           <div className="notes-add-cover-anchor">
             <button
+              ref={coverAnchorRef}
               type="button"
               className="notes-add-cover"
               aria-expanded={coverPickerOpen}
@@ -179,6 +183,7 @@ export function PageView({
             </button>
             {coverPickerOpen && (
               <CoverPicker
+                anchorRef={coverAnchorRef}
                 value={null}
                 onChange={setCover}
                 onClose={() => setCoverPickerOpen(false)}

@@ -7,6 +7,10 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0027](0027-block-drag-and-color-palette.md) | Notion-style block drag and color palette polish | 2026-07-03 | accepted |
+| [0026](0026-notes-creation-math-and-ui-fixes.md) | Notes creation, math, and UI fixes | 2026-07-03 | accepted |
+| [0025](0025-notes-batch-improvements.md) | Popover primitive, gap-based drag depth, collapsible headings, §5.6 completion | 2026-07-03 | accepted |
+| [0024](0024-notes-drag-drop-and-block-commands.md) | Notes drag-and-drop (tree + blocks) and slash command expansion | 2026-07-03 | accepted |
 | [0023](0023-dropdown-component-and-css-polish.md) | Dropdown component replacing native selects + CSS polish | 2026-07-02 | accepted |
 | [0022](0022-event-note-linking-and-folders.md) | Event↔note linking rework + folder page type | 2026-07-02 | accepted |
 | [0021](0021-gallery-calendar-views-location-block.md) | Gallery/calendar database views + location block | 2026-07-02 | accepted |

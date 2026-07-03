@@ -1,5 +1,29 @@
 # Plan D — Notes / Pages (Phase 2), calendar-first
 
+> ## STATUS (2026-07-03) — plan essentially COMPLETE except N6
+>
+> Everything below shipped, plus a lot this plan deferred (see history
+> 0010–0011, 0019–0025):
+>
+> - **N1–N5, N7, N8 done.** The only open sub-phase is **N6 (notes settings:
+>   bullet/numbered list marker schemes)** — not started.
+> - **Beyond this plan, also built:** database pages with properties +
+>   table/list/board/gallery/calendar views (0019, 0021); covers (preset
+>   gradients + URL) and templates (0020); folder page type + the
+>   event↔note linking rework with folder picker and Linked card (0022);
+>   custom Dropdown + portalled Popover primitive (0023, 0025); tree drag
+>   with instant mouse drag, live drop indicator, and gap-based depth choice
+>   (0024–0025); per-line list dragging; collapsible headings (replaced the
+>   short-lived details toggle — includes a `stripDetails` load migration);
+>   expanded slash menu (formatting commands, callout, location,
+>   duplicate/delete block); split-view pane header; create-page type
+>   prompt; permanent deletion + trash rework + toast.
+> - **Migration numbering drifted:** pages landed as migration **010** (not
+>   009); database tables as 011.
+> - **Next work is Plan E** (`NOTES_MEDIA_AND_LAYOUT_PLAN.md`): file upload
+>   service (MinIO), image blocks, bookmark cards, table row/column
+>   controls, multi-column layouts.
+
 > Audience: implementing AI or developer. Self-contained build spec for the
 > first Notes phase. Read order: this plan → `docs/product/NOTES_MODULE.md`,
 > `docs/product/CALENDAR_MODULE.md §3`, `docs/product/ARCHITECTURE.md §4` →
@@ -247,8 +271,24 @@ list semantics intact for assistive technology.
 
 ### 5.6 Future editor controls and permanent deletion
 
+> STATUS 2026-07-03: **all items below are implemented** (history 0022–0025).
+> Link-existing-note → 0022; dropdowns/popovers/grip → 0023 + finished properly
+> in 0025 (portalled Popover primitive); highlight/block color, code-block
+> language, permanent deletion, trash rework, pane header, create-type prompt
+> → 0025.
+
 These are approved future Notes improvements, not part of the current link-toolbar
 implementation:
+
+- **Link existing note in connections card**: the event editor's Notes connection
+  card currently only creates a new note page. Add an option to link an existing
+  page instead, using the same search-and-select pattern already inside the
+  "Linked" fieldset (the `event-link-search` input). The connection card should
+  show two modes: **"Create new"** (current, creates a fresh Page + Link) and
+  **"Link existing"** (search existing pages by title, select one, writes a
+  `Link` row without creating a page). This way the user can connect an existing
+  note to an event directly from the connection card without opening the "Linked"
+  section.
 
 - **Text highlight and block color**: add selection-toolbar controls for a text
   highlight mark and a block background attribute. Use a small, design-approved,
@@ -386,6 +426,9 @@ and links without affecting another user's data.
    delete confirm ("its note will be kept in Notes").
 4. **Empty note** — a note created from an event but left empty is fine; show an
    empty-state placeholder, don't auto-delete.
+5. **Heading toggle hover affordance** — the current hover/latch experiment was
+   rejected. Rework the heading toggle and drag lane together in a later notes
+   pass instead of layering more CSS on top of the current behavior.
 
 ---
 
@@ -393,25 +436,33 @@ and links without affecting another user's data.
 
 Ship in order; each ends green on `npm run check` / `check:api`.
 
-| # | Scope | Done when |
-|---|---|---|
-| N1 | `Page` model + migration 009; `notes.py` pages CRUD, soft delete/restore, backlinks, search; tests | API tests pass; pages persist and isolate by user |
-| N2 | `BlockEditor` with StarterKit + tasks + tables + KaTeX + placeholder; slash menu + selection toolbar, token-styled | Renders/edits all block types; inline & block LaTeX render; `npm run check` green |
-| N3 | `/notes` route + rail wiring; page tree sidebar; page view (title/icon/breadcrumb/editor); trash; autosave | Create/nest/rename/delete/restore pages; edits autosave |
-| N4 | Split view in `Calendar.tsx`; `POST /events/{id}/note`; event Linked panel; `[[` mentions (page+event) → `Link`; backlinks panels | Saving an event-with-note splits desktop / full-screen mobile; mentions create edges; backlinks show both directions |
-| N5 | Polish: empty states, "Saved" affordance, keyboard/a11y, responsive sheet, motion, design-canvas fidelity pass | Matches design system; a11y checks pass |
-| N6 | Notes settings: bullet and numbered-list schemes, live previews, Settings API persistence | Existing lists restyle without content changes; preferences survive reload and apply to standalone/split editors |
-| N7 | Editor formatting: text highlight, block colors, and code-block language selection | Formatting persists in Tiptap JSON; palette is theme-safe; unsupported code languages fall back to plain text |
-| N8 | Trash lifecycle: permanent page-subtree deletion and link cleanup | Irreversible confirmation is required; ownership tests pass; no orphaned page links remain |
+| # | Status | Scope | Done when |
+|---|---|---|---|
+| N1 | ✅ done (0010–0011; landed as migration 010) | `Page` model + migration; `notes.py` pages CRUD, soft delete/restore, backlinks, search; tests | API tests pass; pages persist and isolate by user |
+| N2 | ✅ done (0010, 0015–0017, 0024) | `BlockEditor` with StarterKit + tasks + tables + KaTeX + placeholder; slash menu + selection toolbar, token-styled | Renders/edits all block types; inline & block LaTeX render; `npm run check` green |
+| N3 | ✅ done (0010, rebuilt to calendar parity) | `/notes` route + rail wiring; page tree sidebar; page view (title/icon/breadcrumb/editor); trash; autosave | Create/nest/rename/delete/restore pages; edits autosave |
+| N4 | ✅ done (0010, reworked in 0022 with folders + Linked card) | Split view in `Calendar.tsx`; `POST /events/{id}/note`; event Linked panel; `[[` mentions (page+event) → `Link`; backlinks panels | Saving an event-with-note splits desktop / full-screen mobile; mentions create edges; backlinks show both directions |
+| N5 | ✅ done (0010, 0012–0014, 0023, 0025) | Polish: empty states, "Saved" affordance, keyboard/a11y, responsive sheet, motion, design-canvas fidelity pass | Matches design system; a11y checks pass |
+| N6 | ⬜ **not started — the only open item** | Notes settings: bullet and numbered-list schemes, live previews, Settings API persistence | Existing lists restyle without content changes; preferences survive reload and apply to standalone/split editors |
+| N7 | ✅ done (0025) | Editor formatting: text highlight, block colors, and code-block language selection | Formatting persists in Tiptap JSON; palette is theme-safe; unsupported code languages fall back to plain text |
+| N8 | ✅ done (0025) | Trash lifecycle: permanent page-subtree deletion and link cleanup | Irreversible confirmation is required; ownership tests pass; no orphaned page links remain |
 
 ---
 
 ## 8. Explicitly out of scope (future phases)
 
-Databases (properties/records-as-pages/filters/views incl. calendar-view),
-spreadsheet/formula blocks, image/file blocks + MinIO uploads, templates,
-cover images, Google/notes sync, AI capture, semantic (pgvector) search,
-multi-user/workspaces. Each extends this foundation without redesign — the
+> 2026-07-03 update — much of this list has since shipped:
+> **built** — databases (properties/records-as-pages/table/list/board/gallery/
+> calendar views, 0019+0021), templates (0020), cover images (preset
+> gradients + URL, 0020; uploads pending the files service).
+> **planned in Plan E** — image blocks + MinIO uploads, bookmark/embed
+> cards, table controls, multi-column layout.
+> **still future** — spreadsheet/formula blocks (HyperFormula approval
+> pending), Google/notes sync, AI capture, semantic (pgvector) search,
+> multi-user/workspaces, filter-editing UI for database views, board drag
+> on touch.
+
+Each extends this foundation without redesign — the
 `Link` table and one-editor/one-storage decisions are what keep that true.
 
 ---

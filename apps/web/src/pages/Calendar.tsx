@@ -621,6 +621,7 @@ export function Calendar() {
                   pageId={openNotePageId}
                   onClose={() => setOpenNotePageId(null)}
                   onOpenEvent={(id) => void openMentionedEvent(id)}
+                  onOpenFull={(id) => navigate(`/notes/${id}`)}
                 />
               </Suspense>
             </aside>

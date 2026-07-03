@@ -1,6 +1,6 @@
 /** Mathematics stays in TipTap's inlineMath/blockMath JSON nodes; custom node
  * views provide in-place LaTeX editing before KaTeX rendering. */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   EditorContent,
   useEditor,
@@ -8,7 +8,10 @@ import {
   type JSONContent,
 } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { DragHandle } from '@tiptap/extension-drag-handle-react'
+import {
+  DragHandle,
+  type DragHandleProps,
+} from '@tiptap/extension-drag-handle-react'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import { Table } from '@tiptap/extension-table'
@@ -26,8 +29,36 @@ import {
   insertEditableInlineMath,
 } from './MathExtensions'
 import { EditableTaskItem } from './TaskItemExtension'
-import { LinkPopover } from './LinkPopover'
+import { LinkPopover, normalizeHref } from './LinkPopover'
 import { LocationNode, insertLocation } from './LocationNode'
+import { CalloutNode } from './CalloutNode'
+import {
+  CollapsibleHeading,
+  selectCollapsedHeadingSection,
+} from './CollapsibleHeading'
+import { stripDetails } from './migrateContent'
+import {
+  BlockColor,
+  COLOR_NAMES,
+  NoteHighlight,
+  setSelectedBlockColor,
+} from './ColorExtensions'
+import { NotesCodeBlock } from './CodeBlockView'
+
+const DRAG_POSITION_CONFIG = { placement: 'left' as const }
+const DRAG_NESTED_CONFIG = {
+  rules: [
+    {
+      id: 'top-level-or-list-item',
+      evaluate: ({ node, depth }) =>
+        depth === 1 ||
+        node.type.name === 'listItem' ||
+        node.type.name === 'taskItem'
+          ? 0
+          : 1000,
+    },
+  ],
+} satisfies Exclude<DragHandleProps['nested'], boolean | undefined>
 
 const NoteMention = Mention.extend({
   addAttributes() {
@@ -48,6 +79,28 @@ interface BlockEditorProps {
   ariaLabel?: string
 }
 
+/** Duplicate the top-level block at the cursor (no-op at doc level). */
+export function duplicateBlock(editor: Editor): void {
+  const { $from } = editor.state.selection
+  if ($from.depth < 1) return
+  editor
+    .chain()
+    .focus()
+    .insertContentAt($from.after(1), $from.node(1).toJSON())
+    .run()
+}
+
+/** Delete the top-level block at the cursor (no-op at doc level). */
+export function deleteBlock(editor: Editor): void {
+  const { $from } = editor.state.selection
+  if ($from.depth < 1) return
+  editor
+    .chain()
+    .focus()
+    .deleteRange({ from: $from.before(1), to: $from.after(1) })
+    .run()
+}
+
 const slashItems = [
   {
     label: 'Text',
@@ -65,6 +118,12 @@ const slashItems = [
     keywords: 'subtitle h2',
     run: (editor: Editor) =>
       editor.chain().focus().toggleHeading({ level: 2 }).run(),
+  },
+  {
+    label: 'Heading 3',
+    keywords: 'subheading h3',
+    run: (editor: Editor) =>
+      editor.chain().focus().toggleHeading({ level: 3 }).run(),
   },
   {
     label: 'Bulleted list',
@@ -126,6 +185,68 @@ const slashItems = [
         .insertContent({ type: 'blockMath', attrs: { latex: '', label: '' } })
         .run(),
   },
+  {
+    label: 'Callout',
+    keywords: 'info note aside highlight emoji',
+    run: (editor: Editor) => editor.chain().focus().wrapIn('callout').run(),
+  },
+  // Formatting — the selection-toolbar actions, reachable from '/' too.
+  // With a collapsed cursor the mark applies to what you type next.
+  {
+    label: 'Bold',
+    keywords: 'format strong',
+    run: (editor: Editor) => editor.chain().focus().toggleBold().run(),
+  },
+  {
+    label: 'Italic',
+    keywords: 'format emphasis',
+    run: (editor: Editor) => editor.chain().focus().toggleItalic().run(),
+  },
+  {
+    label: 'Strikethrough',
+    keywords: 'format strike',
+    run: (editor: Editor) => editor.chain().focus().toggleStrike().run(),
+  },
+  {
+    label: 'Inline code',
+    keywords: 'format monospace',
+    run: (editor: Editor) => editor.chain().focus().toggleCode().run(),
+  },
+  {
+    label: 'Link',
+    keywords: 'format url href',
+    run: (editor: Editor) => {
+      const href = normalizeHref(window.prompt('Link URL') ?? '')
+      if (!href) return
+      if (editor.state.selection.empty) {
+        editor
+          .chain()
+          .focus()
+          .insertContent([
+            {
+              type: 'text',
+              text: href,
+              marks: [{ type: 'link', attrs: { href } }],
+            },
+            { type: 'text', text: ' ' },
+          ])
+          .run()
+      } else {
+        editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
+      }
+    },
+  },
+  // Block actions on the current top-level block.
+  {
+    label: 'Duplicate block',
+    keywords: 'copy dup clone',
+    run: duplicateBlock,
+  },
+  {
+    label: 'Delete block',
+    keywords: 'remove',
+    run: deleteBlock,
+  },
 ] as const
 
 const toolbarIcons = {
@@ -168,12 +289,18 @@ export function BlockEditor({
   readOnly = false,
   ariaLabel = 'Page content',
 }: BlockEditorProps) {
-  const editorContent = content.type ? content : EMPTY_DOCUMENT
+  const editorContent = useMemo(
+    () => (content.type ? stripDetails(content) : EMPTY_DOCUMENT),
+    [content],
+  )
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const onChangeRef = useRef(onChange)
   const searchRef = useRef(onSearch)
   const clickRef = useRef(onMentionClick)
   const containerRef = useRef<HTMLDivElement>(null)
+  const colorButtonRef = useRef<HTMLButtonElement>(null)
+  const colorPanelRef = useRef<HTMLDivElement>(null)
+  const dragSourceRef = useRef<HTMLElement | null>(null)
   // Position (doc offset) of the block the drag-handle gutter is pointing at.
   const hoverPosRef = useRef<number | null>(null)
   // Refs for state used in editorProps.handleKeyDown (avoids stale closures).
@@ -196,6 +323,8 @@ export function BlockEditor({
   const [mentionItems, setMentionItems] = useState<SearchResult[]>([])
   const [mentionIndex, setMentionIndex] = useState(0)
   const [linkOpen, setLinkOpen] = useState(false)
+  const [colorsOpen, setColorsOpen] = useState(false)
+  const [hoveredBlockType, setHoveredBlockType] = useState<string | null>(null)
   const [linkHref, setLinkHref] = useState('')
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({
     left: 0,
@@ -206,6 +335,20 @@ export function BlockEditor({
     searchRef.current = onSearch
     clickRef.current = onMentionClick
   }, [onChange, onMentionClick, onSearch])
+  useEffect(() => {
+    if (!colorsOpen) return
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (
+        colorButtonRef.current?.contains(target) ||
+        colorPanelRef.current?.contains(target)
+      )
+        return
+      setColorsOpen(false)
+    }
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [colorsOpen])
 
   const editor = useEditor({
     editable: !readOnly,
@@ -220,7 +363,16 @@ export function BlockEditor({
             target: '_blank',
           },
         },
+        // Accent insertion line while dragging blocks.
+        dropcursor: { color: 'var(--accent)', width: 2 },
+        // Replaced by CollapsibleHeading (adds the collapsed attribute).
+        heading: false,
+        // Replaced by NotesCodeBlock (lowlight + language picker).
+        codeBlock: false,
       }),
+      NoteHighlight,
+      BlockColor,
+      NotesCodeBlock,
       TaskList,
       EditableTaskItem,
       Table.configure({ resizable: true }),
@@ -233,6 +385,8 @@ export function BlockEditor({
       EditableInlineMath,
       EditableBlockMath,
       LocationNode,
+      CalloutNode,
+      CollapsibleHeading.configure({ levels: [1, 2, 3] }),
       NoteMention.configure({
         HTMLAttributes: { class: 'notes-mention' },
         renderHTML: ({ node }) => [
@@ -363,6 +517,13 @@ export function BlockEditor({
   useEffect(() => {
     mentionIndexRef.current = mentionIndex
   }, [mentionIndex])
+  // Keep the keyboard-highlighted menu row visible (the menu scrolls now
+  // that the command list has grown).
+  useEffect(() => {
+    containerRef.current
+      ?.querySelector('.notes-slash-menu [aria-selected="true"]')
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [slashIndex, mentionIndex])
 
   useEffect(() => () => clearTimeout(saveTimer.current), [])
   // Anchor the slash/mention popover at the caret. Position is set in rAF (not
@@ -454,6 +615,44 @@ export function BlockEditor({
     chooseMentionRef.current = chooseMention
   }, [chooseMention])
 
+  const selectedBlock = editor?.state.selection.$from.node(
+    editor.state.selection.$from.depth,
+  )
+  const activeBlockColor = selectedBlock?.attrs.blockColor as
+    | string
+    | null
+    | undefined
+
+  const handleDragNodeChange = useCallback(
+    ({
+      node,
+      pos,
+    }: Parameters<NonNullable<DragHandleProps['onNodeChange']>>[0]) => {
+      hoverPosRef.current = typeof pos === 'number' && pos >= 0 ? pos : null
+      setHoveredBlockType(node?.type.name ?? null)
+    },
+    [],
+  )
+
+  const prepareBlockDrag = useCallback(() => {
+    if (!editor) return
+    const pos = hoverPosRef.current
+    if (pos == null) return
+    selectCollapsedHeadingSection(editor, pos)
+    const source = editor.view.nodeDOM(pos)
+    if (source instanceof HTMLElement) {
+      source.classList.add('notes-dragging-block')
+      dragSourceRef.current = source
+    }
+  }, [editor])
+
+  const finishBlockDrag = useCallback(() => {
+    dragSourceRef.current?.classList.remove('notes-dragging-block')
+    dragSourceRef.current = null
+  }, [])
+
+  useEffect(() => finishBlockDrag, [finishBlockDrag])
+
   // "+" gutter button: add an empty block after the hovered one and open slash.
   const openSlashAtCursor = () => {
     if (!editor) return
@@ -461,11 +660,17 @@ export function BlockEditor({
     if (pos != null) {
       const node = editor.state.doc.nodeAt(pos)
       const end = pos + (node?.nodeSize ?? 1)
+      // Hovering a list line (nested drag handles): stay in the list — the
+      // sibling must be a list item, not a top-level paragraph.
+      const insert =
+        node?.type.name === 'listItem' || node?.type.name === 'taskItem'
+          ? { type: node.type.name, content: [{ type: 'paragraph' }] }
+          : { type: 'paragraph' }
       editor
         .chain()
         .focus()
-        .insertContentAt(end, { type: 'paragraph' })
-        .setTextSelection(end + 1)
+        .insertContentAt(end, insert)
+        .setTextSelection(end + (insert.type === 'paragraph' ? 1 : 2))
         .run()
     } else {
       editor.chain().focus().run()
@@ -485,12 +690,19 @@ export function BlockEditor({
           {/* Notion-style block gutter: add + drag on hover. */}
           <DragHandle
             editor={editor}
-            computePositionConfig={{ placement: 'left' }}
-            onNodeChange={({ pos }) => {
-              hoverPosRef.current = typeof pos === 'number' ? pos : null
-            }}
+            // Floating UI centers the gutter against blocks of every height.
+            computePositionConfig={DRAG_POSITION_CONFIG}
+            // Every root block is draggable; list items remain independently
+            // movable without targeting paragraphs inside other components.
+            nested={DRAG_NESTED_CONFIG}
+            onNodeChange={handleDragNodeChange}
+            onElementDragStart={prepareBlockDrag}
+            onElementDragEnd={finishBlockDrag}
           >
-            <div className="notes-block-gutter">
+            <div
+              className="notes-block-gutter"
+              data-node-type={hoveredBlockType ?? undefined}
+            >
               <button
                 type="button"
                 className="notes-block-add"
@@ -565,6 +777,7 @@ export function BlockEditor({
               </button>
             ))}
             <button
+              ref={colorButtonRef}
               type="button"
               aria-label="Add or edit link"
               title="Add or edit link"
@@ -585,6 +798,113 @@ export function BlockEditor({
             >
               <ToolbarIcon type="math" />
             </button>
+            <button
+              type="button"
+              aria-label="Colors"
+              title="Highlight and block color"
+              aria-expanded={colorsOpen}
+              aria-pressed={
+                editor.isActive('highlight') || Boolean(activeBlockColor)
+              }
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setColorsOpen(!colorsOpen)}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M13.5 3.5l3 3L7 16H4v-3z" />
+                <path d="M3 19h14" />
+              </svg>
+            </button>
+            {colorsOpen && (
+              <div
+                ref={colorPanelRef}
+                className="notes-swatch-rows"
+                role="dialog"
+                aria-label="Highlight and block colors"
+              >
+                <div
+                  className="notes-swatch-section"
+                  role="group"
+                  aria-label="Text highlight"
+                >
+                  <span className="notes-swatch-label">Highlight</span>
+                  <div className="notes-swatch-options">
+                    {COLOR_NAMES.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className={`notes-swatch mark-${name}`}
+                        aria-label={`Highlight ${name}`}
+                        aria-pressed={editor.isActive('highlight', {
+                          color: name,
+                        })}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          editor
+                            .chain()
+                            .focus()
+                            .toggleHighlight({ color: name })
+                            .run()
+                          setColorsOpen(false)
+                        }}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      className="notes-swatch clear"
+                      aria-label="Remove highlight"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        editor.chain().focus().unsetHighlight().run()
+                        setColorsOpen(false)
+                      }}
+                    />
+                  </div>
+                </div>
+                <div
+                  className="notes-swatch-section"
+                  role="group"
+                  aria-label="Block background"
+                >
+                  <span className="notes-swatch-label">Block</span>
+                  <div className="notes-swatch-options">
+                    {COLOR_NAMES.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        className={`notes-swatch block-${name}`}
+                        aria-label={`Block color ${name}`}
+                        aria-pressed={activeBlockColor === name}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setSelectedBlockColor(editor, name)
+                          setColorsOpen(false)
+                        }}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      className="notes-swatch clear"
+                      aria-label="Remove block color"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setSelectedBlockColor(editor, null)
+                        setColorsOpen(false)
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
             {linkOpen && (
               <LinkPopover
                 initialHref={linkHref}

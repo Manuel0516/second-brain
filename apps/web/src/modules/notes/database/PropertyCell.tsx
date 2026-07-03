@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dropdown } from '../../../components/Dropdown'
+import { Popover } from '../../../components/Popover'
 import { notesApi } from '../api'
 import type { DatabaseProperty, SearchResult } from '../types'
 
@@ -94,18 +95,6 @@ const blurOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
   if (event.key === 'Enter') event.currentTarget.blur()
 }
 
-function usePopover(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const close = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose()
-    }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
-  })
-  return ref
-}
-
 function MultiSelectCell({
   property,
   value,
@@ -116,11 +105,12 @@ function MultiSelectCell({
   onChange: (value: unknown) => void
 }) {
   const [open, setOpen] = useState(false)
-  const ref = usePopover(() => setOpen(false))
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const options = property.config.options ?? []
   return (
-    <div className="notes-cell-popover-anchor" ref={ref}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         className="notes-cell-trigger"
         aria-label={`${property.name} values`}
@@ -137,41 +127,42 @@ function MultiSelectCell({
           <span className="notes-cell-empty">—</span>
         )}
       </button>
-      {open && (
-        <div
-          className="notes-cell-popover"
-          role="listbox"
-          aria-label={property.name}
-        >
-          {options.map((option) => {
-            const active = value.includes(option)
-            return (
-              <button
-                key={option}
-                type="button"
-                role="option"
-                aria-selected={active}
-                onClick={() =>
-                  onChange(
-                    active
-                      ? value.filter((item) => item !== option)
-                      : [...value, option],
-                  )
-                }
-              >
-                <span className="notes-cell-pill">{option}</span>
-                {active && '✓'}
-              </button>
-            )
-          })}
-          {!options.length && (
-            <p className="notes-cell-empty">
-              No options yet — add them on the column.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+      <Popover
+        anchorRef={triggerRef}
+        open={open}
+        onClose={() => setOpen(false)}
+        className="notes-cell-popover"
+        role="listbox"
+        ariaLabel={property.name}
+      >
+        {options.map((option) => {
+          const active = value.includes(option)
+          return (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={active}
+              onClick={() =>
+                onChange(
+                  active
+                    ? value.filter((item) => item !== option)
+                    : [...value, option],
+                )
+              }
+            >
+              <span className="notes-cell-pill">{option}</span>
+              {active && '✓'}
+            </button>
+          )
+        })}
+        {!options.length && (
+          <p className="notes-cell-empty">
+            No options yet — add them on the column.
+          </p>
+        )}
+      </Popover>
+    </>
   )
 }
 
@@ -189,7 +180,7 @@ function RelationCell({
   const [results, setResults] = useState<SearchResult[]>([])
   const [label, setLabel] = useState<string | null>(null)
   const [labelFor, setLabelFor] = useState(value)
-  const ref = usePopover(() => setOpen(false))
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   // Reset the resolved title when the linked page changes (render-adjust
   // pattern; avoids a cascading setState inside the effect).
@@ -226,8 +217,9 @@ function RelationCell({
   }, [open, query])
 
   return (
-    <div className="notes-cell-popover-anchor" ref={ref}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         className="notes-cell-trigger"
         aria-label={property.name}
@@ -240,46 +232,47 @@ function RelationCell({
           <span className="notes-cell-empty">—</span>
         )}
       </button>
-      {open && (
-        <div
-          className="notes-cell-popover"
-          role="dialog"
-          aria-label={`Link ${property.name}`}
-        >
-          <input
-            className="notes-cell-input"
-            aria-label="Search pages"
-            placeholder="Search pages…"
-            value={query}
-            ref={(input) => input?.focus()}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {results.slice(0, 8).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                onChange(item.id)
-                setOpen(false)
-              }}
-            >
-              {item.title || 'Untitled'}
-            </button>
-          ))}
-          {value && (
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                onChange(null)
-                setOpen(false)
-              }}
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+      <Popover
+        anchorRef={triggerRef}
+        open={open}
+        onClose={() => setOpen(false)}
+        className="notes-cell-popover"
+        role="dialog"
+        ariaLabel={`Link ${property.name}`}
+      >
+        <input
+          className="notes-cell-input"
+          aria-label="Search pages"
+          placeholder="Search pages…"
+          value={query}
+          ref={(input) => input?.focus()}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {results.slice(0, 8).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              onChange(item.id)
+              setOpen(false)
+            }}
+          >
+            {item.title || 'Untitled'}
+          </button>
+        ))}
+        {value && (
+          <button
+            type="button"
+            className="danger"
+            onClick={() => {
+              onChange(null)
+              setOpen(false)
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </Popover>
+    </>
   )
 }

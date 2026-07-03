@@ -353,3 +353,56 @@ async def test_event_note_honors_draft_folder_id(
     assert note.status_code == 201
     assert note.json()["parent_page_id"] == folder_id
     assert note.json()["title"] == "Itinerary"
+
+
+async def test_permanent_delete_purges_subtree_and_links(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    _, token = await _user_and_token(client, test_db_session, "notes-purge")
+    _, other = await _user_and_token(client, test_db_session, "notes-purge-other")
+    parent = await client.post(
+        "/api/pages", json={"title": "Parent"}, cookies={"access_token": token}
+    )
+    parent_id = parent.json()["id"]
+    child = await client.post(
+        "/api/pages",
+        json={"title": "Child", "parent_page_id": parent_id},
+        cookies={"access_token": token},
+    )
+    child_id = child.json()["id"]
+    outsider = await client.post(
+        "/api/pages", json={"title": "Outsider"}, cookies={"access_token": token}
+    )
+    await client.post(
+        "/api/links",
+        json={
+            "source_type": "page",
+            "source_id": outsider.json()["id"],
+            "target_type": "page",
+            "target_id": child_id,
+            "relation": "mentions",
+        },
+        cookies={"access_token": token},
+    )
+
+    # Active pages cannot be permanently deleted.
+    active = await client.delete(
+        f"/api/pages/{parent_id}/permanent", cookies={"access_token": token}
+    )
+    assert active.status_code == 409
+
+    assert (
+        await client.delete(f"/api/pages/{parent_id}", cookies={"access_token": token})
+    ).status_code == 204
+
+    # Another user's trashed page is invisible.
+    foreign = await client.delete(
+        f"/api/pages/{parent_id}/permanent", cookies={"access_token": other}
+    )
+    assert foreign.status_code == 404
+
+    gone = await client.delete(f"/api/pages/{parent_id}/permanent", cookies={"access_token": token})
+    assert gone.status_code == 204
+    assert (await test_db_session.scalar(select(Page).where(Page.id == parent_id))) is None
+    assert (await test_db_session.scalar(select(Page).where(Page.id == child_id))) is None
+    assert (await test_db_session.scalar(select(Link).where(Link.target_id == child_id))) is None

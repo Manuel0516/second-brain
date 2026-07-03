@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
-import { Card } from '../../components/Card'
 import { Field } from '../../components/Field'
 import { IconButton } from '../../components/IconButton'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { Popover } from '../../components/Popover'
 import { SidebarShell } from '../../components/SidebarShell'
 import { onColor } from './colors'
 import {
@@ -121,6 +121,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
     null,
   )
   const listRef = useRef<HTMLDivElement>(null)
+  const menuAnchorRef = useRef<HTMLElement>(null)
   const dragRef = useRef<{
     id: string
     pointerId: number
@@ -382,13 +383,6 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
           {error}
         </p>
       )}
-      {menuFor && (
-        <div
-          className="calendar-menu-overlay"
-          role="presentation"
-          onClick={() => setMenuFor(null)}
-        />
-      )}
       <div className="calendar-list" ref={listRef}>
         {orderedCalendars.map((calendar, index) => (
           <div
@@ -420,17 +414,18 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               type="button"
               className="calendar-menu-btn"
               aria-label={`${calendar.name} options`}
-              aria-haspopup="menu"
+              aria-haspopup="dialog"
               aria-expanded={menuFor === calendar.id}
               onPointerDown={(pointer) => startReorder(pointer, calendar)}
               onPointerMove={moveReorder}
               onPointerUp={finishReorder}
               onPointerCancel={cancelReorder}
-              onClick={() => {
+              onClick={(event) => {
                 if (suppressMenuClickRef.current === calendar.id) {
                   suppressMenuClickRef.current = null
                   return
                 }
+                menuAnchorRef.current = event.currentTarget.parentElement
                 setMenuFor((current) =>
                   current === calendar.id ? null : calendar.id,
                 )
@@ -448,7 +443,15 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               ⋯
             </button>
             {menuFor === calendar.id && (
-              <Card className="calendar-menu" animate={false}>
+              <Popover
+                anchorRef={menuAnchorRef}
+                open
+                onClose={() => setMenuFor(null)}
+                className="cal-card calendar-menu"
+                matchAnchorWidth
+                role="dialog"
+                ariaLabel={`Edit ${calendar.name}`}
+              >
                 <div className="cal-card-head">
                   <h3>Edit calendar</h3>
                   <IconButton
@@ -505,7 +508,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                     Done
                   </button>
                 </div>
-              </Card>
+              </Popover>
             )}
           </div>
         ))}

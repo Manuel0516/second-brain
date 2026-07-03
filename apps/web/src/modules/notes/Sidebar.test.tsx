@@ -62,9 +62,8 @@ test('expands ancestors of the selection and renames/creates via the row menu', 
   expect(onCreate).toHaveBeenCalledWith('one')
 })
 
-test('reorders pages after a stationary long-press on the row handle', () => {
+const renderTree = (onMove = vi.fn()) => {
   Element.prototype.setPointerCapture = vi.fn()
-  const onMove = vi.fn()
   const { container } = render(
     <Sidebar
       pages={[
@@ -94,17 +93,79 @@ test('reorders pages after a stationary long-press on the row handle', () => {
       toJSON: () => ({}),
     })
   })
+  return { rows, onMove }
+}
+
+test('mouse drag activates on movement and shows a live drop hint', () => {
+  const { rows, onMove } = renderTree()
   const handle = screen.getByRole('button', { name: 'One options' })
-  vi.useFakeTimers()
 
   fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 0 })
-  act(() => vi.advanceTimersByTime(375))
+  // First move past the click threshold arms the drag…
   fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 90 })
   expect(rows[0]).toHaveStyle({ transform: 'translateY(90px) scale(1.03)' })
+  // …and the next move paints the drop hint on the target row.
+  fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10, clientY: 90 })
+  expect(rows[2].className).toContain('drop-after')
+  // Pointer at the left edge → the hint sits at root depth.
+  expect(rows[2].style.getPropertyValue('--drop-depth-indent')).toBe('0px')
   fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 90 })
   fireEvent.click(handle)
 
+  expect(rows[2].className).not.toContain('drop-after')
   expect(onMove).toHaveBeenCalledWith('one', null, 'a000002')
   // The click after a drag is suppressed — no row menu opens.
   expect(screen.queryByText('Edit page')).toBeNull()
+})
+
+test('a deliberate rightward drag nests under the row above the gap', () => {
+  const { onMove } = renderTree()
+  const handle = screen.getByRole('button', { name: 'One options' })
+
+  fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 0 })
+  fireEvent.pointerMove(handle, { pointerId: 1, clientX: 100, clientY: 90 })
+  fireEvent.pointerMove(handle, { pointerId: 1, clientX: 100, clientY: 90 })
+  fireEvent.pointerUp(handle, { pointerId: 1, clientX: 100, clientY: 90 })
+
+  expect(onMove).toHaveBeenCalledWith('one', 'three', 'a000000')
+})
+
+test('touch reorders after a stationary long-press on the row handle', () => {
+  const { rows, onMove } = renderTree()
+  const handle = screen.getByRole('button', { name: 'One options' })
+  vi.useFakeTimers()
+
+  fireEvent.pointerDown(handle, {
+    pointerType: 'touch',
+    pointerId: 1,
+    clientX: 10,
+    clientY: 0,
+  })
+  act(() => vi.advanceTimersByTime(375))
+  fireEvent.pointerMove(handle, {
+    pointerType: 'touch',
+    pointerId: 1,
+    clientX: 10,
+    clientY: 90,
+  })
+  expect(rows[0]).toHaveStyle({ transform: 'translateY(90px) scale(1.03)' })
+  fireEvent.pointerUp(handle, {
+    pointerType: 'touch',
+    pointerId: 1,
+    clientX: 10,
+    clientY: 90,
+  })
+
+  expect(onMove).toHaveBeenCalledWith('one', null, 'a000002')
+})
+
+test('a plain click on the handle still opens the row menu', () => {
+  renderTree()
+  const handle = screen.getByRole('button', { name: 'One options' })
+
+  fireEvent.pointerDown(handle, { pointerId: 1, clientX: 10, clientY: 0 })
+  fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10, clientY: 0 })
+  fireEvent.click(handle)
+
+  expect(screen.getByText('Edit page')).toBeVisible()
 })

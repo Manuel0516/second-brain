@@ -309,6 +309,29 @@ async def list_pages(
     )
 
 
+async def _purge_pages(ids: set[str], session: AsyncSession) -> None:
+    """Hard-delete pages with their links and database schema. No commit."""
+    if not ids:
+        return
+    # Detach any live children before their parent disappears.
+    await session.execute(
+        update(Page)
+        .where(Page.parent_page_id.in_(ids), Page.id.not_in(ids))
+        .values(parent_page_id=None)
+    )
+    await session.execute(
+        delete(Link).where(
+            or_(
+                (Link.source_type == "page") & Link.source_id.in_(ids),
+                (Link.target_type == "page") & Link.target_id.in_(ids),
+            )
+        )
+    )
+    await session.execute(delete(DatabaseProperty).where(DatabaseProperty.page_id.in_(ids)))
+    await session.execute(delete(DatabaseView).where(DatabaseView.page_id.in_(ids)))
+    await session.execute(delete(Page).where(Page.id.in_(ids)))
+
+
 @router.get("/pages/trash", response_model=list[PageResponse])
 async def list_trash(
     user: User = Depends(get_current_user),
@@ -322,23 +345,7 @@ async def list_trash(
         )
     )
     if expired:
-        # Detach any live children before their parent disappears.
-        await session.execute(
-            update(Page)
-            .where(Page.parent_page_id.in_(expired), Page.id.not_in(expired))
-            .values(parent_page_id=None)
-        )
-        await session.execute(
-            delete(Link).where(
-                or_(
-                    (Link.source_type == "page") & Link.source_id.in_(expired),
-                    (Link.target_type == "page") & Link.target_id.in_(expired),
-                )
-            )
-        )
-        await session.execute(delete(DatabaseProperty).where(DatabaseProperty.page_id.in_(expired)))
-        await session.execute(delete(DatabaseView).where(DatabaseView.page_id.in_(expired)))
-        await session.execute(delete(Page).where(Page.id.in_(expired)))
+        await _purge_pages(expired, session)
         await session.commit()
     return list(
         await session.scalars(
@@ -446,6 +453,22 @@ async def restore_page(
     await session.commit()
     await session.refresh(page)
     return page
+
+
+@router.delete("/pages/{page_id}/permanent", status_code=204)
+async def permanent_delete_page(
+    page_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> Response:
+    """Irreversibly delete a trashed page subtree with its links and schema."""
+    page = await _owned_page(page_id, user, session, include_deleted=True)
+    if page.deleted_at is None:
+        raise HTTPException(status_code=409, detail="Page is not in the trash")
+    ids = await _descendant_ids(page, user, session)
+    await _purge_pages(ids, session)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/nodes/{node_type}/{node_id}/backlinks", response_model=list[BacklinkResponse])

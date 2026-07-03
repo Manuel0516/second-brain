@@ -3,7 +3,14 @@ import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import { expect, test, vi } from 'vitest'
-import { BlockEditor } from './BlockEditor'
+import { BlockEditor, deleteBlock, duplicateBlock } from './BlockEditor'
+import { BlockColor, setSelectedBlockColor } from './ColorExtensions'
+import {
+  collapsedHeadingRange,
+  CollapsibleHeading,
+  selectCollapsedHeadingSection,
+} from './CollapsibleHeading'
+import { stripDetails } from './migrateContent'
 import { EditableInlineMath, insertEditableInlineMath } from './MathExtensions'
 import { EditableTaskItem } from './TaskItemExtension'
 import { LinkPopover } from './LinkPopover'
@@ -113,6 +120,163 @@ test('a new todo keeps an editable text paragraph', () => {
   editor.destroy()
 })
 
+test('stripDetails rewrites legacy toggle blocks into headings', () => {
+  const migrated = stripDetails({
+    type: 'doc',
+    content: [
+      {
+        type: 'details',
+        content: [
+          {
+            type: 'detailsSummary',
+            content: [{ type: 'text', text: 'Section' }],
+          },
+          {
+            type: 'detailsContent',
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+            ],
+          },
+        ],
+      },
+      { type: 'paragraph', content: [{ type: 'text', text: 'After' }] },
+    ],
+  })
+  expect(migrated.content).toEqual([
+    {
+      type: 'heading',
+      attrs: { level: 3 },
+      content: [{ type: 'text', text: 'Section' }],
+    },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'After' }] },
+  ])
+  // Idempotent: running it again changes nothing.
+  expect(stripDetails(migrated)).toEqual(migrated)
+})
+
+test('a collapsed heading hides following blocks until a peer heading', () => {
+  const editor = new Editor({
+    extensions: [
+      StarterKit.configure({ heading: false }),
+      CollapsibleHeading.configure({ levels: [1, 2, 3] }),
+    ],
+    content: {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 2, collapsed: true },
+          content: [{ type: 'text', text: 'Hidden section' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'covered' }] },
+        {
+          type: 'heading',
+          attrs: { level: 3, collapsed: false },
+          content: [{ type: 'text', text: 'Deeper' }],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'also covered' }],
+        },
+        {
+          type: 'heading',
+          attrs: { level: 2, collapsed: false },
+          content: [{ type: 'text', text: 'Visible peer' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'visible' }] },
+      ],
+    },
+  })
+  const html = document.createElement('div')
+  html.appendChild(editor.view.dom)
+  const hidden = editor.view.dom.querySelectorAll('.notes-collapsed-hidden')
+  // Paragraph + h3 + paragraph are covered; the peer h2 and its text are not.
+  expect(hidden).toHaveLength(3)
+  expect(
+    editor.view.dom.querySelectorAll('.notes-heading-toggle'),
+  ).toHaveLength(3)
+  editor.destroy()
+})
+
+test('collapsed heading drag selects its complete hidden section', () => {
+  const editor = new Editor({
+    extensions: [
+      StarterKit.configure({ heading: false }),
+      CollapsibleHeading.configure({ levels: [1, 2, 3] }),
+    ],
+    content: {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 1, collapsed: true },
+          content: [{ type: 'text', text: 'Section' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+        {
+          type: 'heading',
+          attrs: { level: 2 },
+          content: [{ type: 'text', text: 'Child' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Child body' }] },
+        {
+          type: 'heading',
+          attrs: { level: 1 },
+          content: [{ type: 'text', text: 'Next section' }],
+        },
+      ],
+    },
+  })
+
+  const range = collapsedHeadingRange(editor.state.doc, 0)
+  expect(range).not.toBeNull()
+  expect(
+    editor.state.doc.slice(range!.from, range!.to).content.childCount,
+  ).toBe(4)
+  expect(selectCollapsedHeadingSection(editor, 0)).toBe(true)
+  expect(editor.state.selection.empty).toBe(false)
+  expect(editor.state.doc.nodeAt(0)?.attrs.collapsed).toBe(true)
+  editor.destroy()
+})
+
+test('duplicate and delete act on the block at the cursor', () => {
+  const editor = new Editor({
+    extensions: [StarterKit],
+    content: '<p>alpha</p><p>beta</p>',
+  })
+  editor.commands.setTextSelection(3) // inside "alpha"
+
+  duplicateBlock(editor)
+  expect(editor.getJSON().content?.map((n) => n.content?.[0])).toEqual([
+    { type: 'text', text: 'alpha' },
+    { type: 'text', text: 'alpha' },
+    { type: 'text', text: 'beta' },
+  ])
+
+  editor.commands.setTextSelection(3)
+  deleteBlock(editor)
+  expect(editor.getJSON().content?.map((n) => n.content?.[0])).toEqual([
+    { type: 'text', text: 'alpha' },
+    { type: 'text', text: 'beta' },
+  ])
+  editor.destroy()
+})
+
+test('block color targets the paragraph inside nested list items', () => {
+  const editor = new Editor({
+    extensions: [StarterKit, BlockColor],
+    content: '<ul><li><p>nested</p></li></ul>',
+  })
+  editor.commands.setTextSelection(4)
+
+  setSelectedBlockColor(editor, 'accent')
+
+  const { $from } = editor.state.selection
+  expect($from.node($from.depth).attrs.blockColor).toBe('accent')
+  editor.destroy()
+})
+
 test('renders and edits inline and block mathematics in place', async () => {
   const onChange = vi.fn()
   const { container } = render(
@@ -216,4 +380,11 @@ test('renders and edits inline and block mathematics in place', async () => {
       label: 'energy',
     })
   })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit inline equation' }))
+  const emptyInline = screen.getByRole('textbox', { name: 'Inline LaTeX' })
+  fireEvent.change(emptyInline, { target: { value: '' } })
+  fireEvent.keyDown(emptyInline, { key: 'Enter' })
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  expect(container.querySelector('.notes-editor')).toBeInTheDocument()
 })

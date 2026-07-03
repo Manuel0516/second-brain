@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PropertyCell } from './PropertyCell'
 import { PropertyConfig } from './PropertyConfig'
 import type { DatabaseProperty, Page, ViewConfig } from '../types'
@@ -17,6 +17,55 @@ interface TableViewProps {
   ) => void
   onDeleteProperty: (id: string) => void
   onSort: (property: string, dir: 'asc' | 'desc' | null) => void
+}
+
+/** One column header owning its popover anchor ref. */
+function PropertyHeader({
+  property,
+  sort,
+  open,
+  onToggle,
+  onPatch,
+  onSort,
+  onDelete,
+  onClose,
+}: {
+  property: DatabaseProperty
+  sort: ViewConfig['sort']
+  open: boolean
+  onToggle: () => void
+  onPatch: (
+    input: Partial<Pick<DatabaseProperty, 'name' | 'type' | 'config'>>,
+  ) => void
+  onSort: (dir: 'asc' | 'desc' | null) => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const anchorRef = useRef<HTMLButtonElement>(null)
+  return (
+    <th>
+      <button
+        ref={anchorRef}
+        type="button"
+        className="notes-table-head-btn"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        {property.name}
+        {sort?.property === property.id && (sort.dir === 'asc' ? ' ↑' : ' ↓')}
+      </button>
+      <PropertyConfig
+        property={property}
+        sort={sort}
+        anchorRef={anchorRef}
+        open={open}
+        onPatch={onPatch}
+        onSort={onSort}
+        onDelete={onDelete}
+        onClose={onClose}
+      />
+    </th>
+  )
 }
 
 export function TableView({
@@ -43,33 +92,22 @@ export function TableView({
           <tr>
             <th className="notes-table-title-col">Name</th>
             {properties.map((property) => (
-              <th key={property.id}>
-                <button
-                  type="button"
-                  className="notes-table-head-btn"
-                  aria-expanded={configFor === property.id}
-                  onClick={() =>
-                    setConfigFor(configFor === property.id ? null : property.id)
-                  }
-                >
-                  {property.name}
-                  {config.sort?.property === property.id &&
-                    (config.sort.dir === 'asc' ? ' ↑' : ' ↓')}
-                </button>
-                {configFor === property.id && (
-                  <PropertyConfig
-                    property={property}
-                    sort={config.sort}
-                    onPatch={(input) => onPatchProperty(property.id, input)}
-                    onSort={(dir) => onSort(property.id, dir)}
-                    onDelete={() => {
-                      setConfigFor(null)
-                      onDeleteProperty(property.id)
-                    }}
-                    onClose={() => setConfigFor(null)}
-                  />
-                )}
-              </th>
+              <PropertyHeader
+                key={property.id}
+                property={property}
+                sort={config.sort}
+                open={configFor === property.id}
+                onToggle={() =>
+                  setConfigFor(configFor === property.id ? null : property.id)
+                }
+                onPatch={(input) => onPatchProperty(property.id, input)}
+                onSort={(dir) => onSort(property.id, dir)}
+                onDelete={() => {
+                  setConfigFor(null)
+                  onDeleteProperty(property.id)
+                }}
+                onClose={() => setConfigFor(null)}
+              />
             ))}
             <th className="notes-table-add-col">
               <button

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Popover } from '../../../components/Popover'
 import { notesApi } from '../api'
 import { applyFilters, applySort } from './filters'
 import { TableView } from './TableView'
@@ -54,6 +55,7 @@ export function DatabasePage({
   const [views, setViews] = useState<DatabaseView[]>([])
   const [activeViewId, setActiveViewId] = useState<string>('')
   const [addingView, setAddingView] = useState(false)
+  const addViewRef = useRef<HTMLButtonElement>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -213,34 +215,34 @@ export function DatabasePage({
               )}
             </button>
           ))}
-          <div className="notes-cell-popover-anchor">
-            <button
-              type="button"
-              aria-label="Add view"
-              aria-expanded={addingView}
-              onClick={() => setAddingView(!addingView)}
-            >
-              +
-            </button>
-            {addingView && (
-              <div
-                className="notes-cell-popover"
-                role="menu"
-                aria-label="View type"
+          <button
+            ref={addViewRef}
+            type="button"
+            aria-label="Add view"
+            aria-expanded={addingView}
+            onClick={() => setAddingView(!addingView)}
+          >
+            +
+          </button>
+          <Popover
+            anchorRef={addViewRef}
+            open={addingView}
+            onClose={() => setAddingView(false)}
+            className="notes-cell-popover"
+            role="menu"
+            ariaLabel="View type"
+          >
+            {ADDABLE_VIEWS.map((item) => (
+              <button
+                key={item.type}
+                type="button"
+                role="menuitem"
+                onClick={() => void addView(item.type, item.label)}
               >
-                {ADDABLE_VIEWS.map((item) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => void addView(item.type, item.label)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                {item.label}
+              </button>
+            ))}
+          </Popover>
         </div>
       </div>
       {error && (

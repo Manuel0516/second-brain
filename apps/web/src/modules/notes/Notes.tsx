@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { notesApi } from './api'
+import { CreatePageMenu } from './CreatePageMenu'
 import { Sidebar } from './Sidebar'
 import { PageView } from './PageView'
 import { TrashView } from './TrashView'
@@ -23,6 +24,18 @@ export function Notes() {
   )
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Page | null>(null)
+  const [createMenu, setCreateMenu] = useState<'topbar' | 'empty' | null>(null)
+  const newPageRef = useRef<HTMLButtonElement>(null)
+  const emptyNewRef = useRef<HTMLButtonElement>(null)
+  // Minimal toast: one message + timeout, used for safe/undoable feedback.
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef(0)
+  const showToast = (message: string) => {
+    setToast(message)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(''), 2500)
+  }
+  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
   useEffect(() => {
     let active = true
@@ -68,11 +81,15 @@ export function Notes() {
     return result
   }, [pages, selected])
 
-  const createPage = async (parentId: string | null): Promise<Page | null> => {
+  const createPage = async (
+    parentId: string | null,
+    type: Page['type'] = 'page',
+  ): Promise<Page | null> => {
     try {
       const page = await notesApi.create({
         parent_page_id: parentId,
         title: 'Untitled',
+        type,
       })
       setPages((current) => [...current, page])
       return page
@@ -84,8 +101,11 @@ export function Notes() {
     }
   }
 
-  const create = async (parentId: string | null) => {
-    const page = await createPage(parentId)
+  const create = async (
+    parentId: string | null,
+    type: Page['type'] = 'page',
+  ) => {
+    const page = await createPage(parentId, type)
     if (page) {
       setTrash(null)
       navigate(`/notes/${page.id}`)
@@ -168,7 +188,7 @@ export function Notes() {
             navigate(`/notes/${id}`)
             setTrash(null)
           }}
-          onCreate={(parentId) => void create(parentId)}
+          onCreate={(parentId, type) => void create(parentId, type)}
           onRename={(id, title) => void patchPage(id, { title })}
           onSetType={(id, type) => void patchPage(id, { type })}
           onSetTemplate={(id, is_template) =>
@@ -217,10 +237,14 @@ export function Notes() {
               {trash ? 'Trash' : selected?.title || 'Notes'}
             </h2>
             <button
+              ref={newPageRef}
               type="button"
               className="cal-new-event notes-new-page"
               aria-label="New page"
-              onClick={() => void create(null)}
+              aria-expanded={createMenu === 'topbar'}
+              onClick={() =>
+                setCreateMenu(createMenu === 'topbar' ? null : 'topbar')
+              }
             >
               <svg
                 width="12"
@@ -235,6 +259,12 @@ export function Notes() {
               </svg>
               <span className="cal-new-event-label">New page</span>
             </button>
+            <CreatePageMenu
+              anchorRef={newPageRef}
+              open={createMenu === 'topbar'}
+              onClose={() => setCreateMenu(null)}
+              onCreate={(type) => void create(null, type)}
+            />
           </div>
           <section className="notes-canvas">
             {error && (
@@ -253,7 +283,26 @@ export function Notes() {
                         current?.filter((item) => item.id !== id) ?? [],
                     )
                     setPages((current) => [...current, page])
+                    showToast('Page restored')
                   })
+                }
+                onDeleteForever={(id) =>
+                  void notesApi
+                    .deletePermanent(id)
+                    .then(() => {
+                      setTrash(
+                        (current) =>
+                          current?.filter((item) => item.id !== id) ?? [],
+                      )
+                      showToast('Deleted forever')
+                    })
+                    .catch((reason) =>
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : 'Could not delete page',
+                      ),
+                    )
                 }
               />
             ) : selected ? (
@@ -272,9 +321,22 @@ export function Notes() {
                 {!loading && (
                   <>
                     <p>Select a page or start a new one.</p>
-                    <button type="button" onClick={() => void create(null)}>
+                    <button
+                      ref={emptyNewRef}
+                      type="button"
+                      aria-expanded={createMenu === 'empty'}
+                      onClick={() =>
+                        setCreateMenu(createMenu === 'empty' ? null : 'empty')
+                      }
+                    >
                       New page
                     </button>
+                    <CreatePageMenu
+                      anchorRef={emptyNewRef}
+                      open={createMenu === 'empty'}
+                      onClose={() => setCreateMenu(null)}
+                      onCreate={(type) => void create(null, type)}
+                    />
                   </>
                 )}
               </main>
@@ -282,6 +344,11 @@ export function Notes() {
           </section>
         </div>
       </div>
+      {toast && (
+        <div className="notes-toast" role="status">
+          {toast}
+        </div>
+      )}
       <ConfirmDialog
         open={pendingDelete !== null}
         message={`Move “${pendingDelete?.title}” to trash?`}

@@ -59,6 +59,12 @@ export const notesApi = {
       if (!response.ok) return json<never>(response)
     }),
   trash: () => apiCall('/api/pages/trash').then(json<Page[]>),
+  deletePermanent: (id: string) =>
+    apiCall(`/api/pages/${id}/permanent`, { method: 'DELETE' }).then(
+      (response) => {
+        if (!response.ok) return json<never>(response)
+      },
+    ),
   restore: (id: string) =>
     apiCall(`/api/pages/${id}/restore`, { method: 'POST' }).then(json<Page>),
   duplicate: (id: string) =>

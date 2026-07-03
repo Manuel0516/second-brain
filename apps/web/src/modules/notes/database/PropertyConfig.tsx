@@ -1,6 +1,6 @@
-import { Card } from '../../../components/Card'
 import { Dropdown } from '../../../components/Dropdown'
 import { Field } from '../../../components/Field'
+import { Popover } from '../../../components/Popover'
 import type { DatabaseProperty, PropertyType, ViewConfig } from '../types'
 
 const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
@@ -17,6 +17,8 @@ const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
 interface PropertyConfigProps {
   property: DatabaseProperty
   sort: ViewConfig['sort']
+  anchorRef: React.RefObject<HTMLElement | null>
+  open: boolean
   onPatch: (
     input: Partial<Pick<DatabaseProperty, 'name' | 'type' | 'config'>>,
   ) => void
@@ -29,6 +31,8 @@ interface PropertyConfigProps {
 export function PropertyConfig({
   property,
   sort,
+  anchorRef,
+  open,
   onPatch,
   onSort,
   onDelete,
@@ -38,7 +42,14 @@ export function PropertyConfig({
   const hasOptions =
     property.type === 'select' || property.type === 'multi_select'
   return (
-    <Card className="notes-property-config" animate={false}>
+    <Popover
+      anchorRef={anchorRef}
+      open={open}
+      onClose={onClose}
+      className="notes-property-config"
+      role="dialog"
+      ariaLabel={`Configure ${property.name}`}
+    >
       <Field label="Name">
         <input
           aria-label={`Rename ${property.name}`}
@@ -103,6 +114,6 @@ export function PropertyConfig({
           Done
         </button>
       </div>
-    </Card>
+    </Popover>
   )
 }

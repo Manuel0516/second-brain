@@ -13,15 +13,22 @@ function renderLatex(latex: string, displayMode: boolean) {
 
 function focusNode({ editor, getPos }: ReactNodeViewProps, after = false) {
   requestAnimationFrame(() => {
-    const pos = getPos()
-    if (pos == null) return
-    if (after)
-      editor
-        .chain()
-        .focus()
-        .setTextSelection(pos + 1)
-        .run()
-    else editor.chain().focus().setNodeSelection(pos).run()
+    if (editor.isDestroyed) return
+    try {
+      const pos = getPos()
+      if (pos == null) return
+      if (after)
+        editor
+          .chain()
+          .focus()
+          .setTextSelection(pos + 1)
+          .run()
+      else editor.chain().focus().setNodeSelection(pos).run()
+    } catch {
+      // ponytail: deleting a node invalidates getPos; its transaction already
+      // mapped the selection, so only restore editor focus.
+      editor.commands.focus()
+    }
   })
 }
 
