@@ -291,6 +291,65 @@ test('main headings collapse independently and keep toggling repeatedly', async 
   editor.destroy()
 })
 
+test('collapsing keeps section blocks visible until their animation finishes', async () => {
+  let finishAnimation = () => {}
+  const finished = new Promise<void>((resolve) => {
+    finishAnimation = resolve
+  })
+  const animate = vi.fn(() => ({ finished }) as unknown as Animation)
+  Object.defineProperty(HTMLElement.prototype, 'animate', {
+    configurable: true,
+    value: animate,
+  })
+  const editor = new Editor({
+    extensions: [
+      StarterKit.configure({ heading: false }),
+      CollapsibleHeading.configure({ levels: [1, 2, 3] }),
+    ],
+    content: {
+      type: 'doc',
+      content: [
+        {
+          type: 'heading',
+          attrs: { level: 1 },
+          content: [{ type: 'text', text: 'Section' }],
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+        {
+          type: 'heading',
+          attrs: { level: 3 },
+          content: [{ type: 'text', text: 'Nested' }],
+        },
+      ],
+    },
+  })
+
+  fireEvent.pointerDown(
+    editor.view.dom.querySelector('.notes-heading-toggle') as HTMLElement,
+  )
+  expect(
+    editor.view.dom.querySelectorAll('.notes-collapsed-hidden'),
+  ).toHaveLength(0)
+  expect(animate).toHaveBeenCalledWith(
+    expect.arrayContaining([expect.objectContaining({ height: '0px' })]),
+    expect.objectContaining({ delay: 0, duration: expect.any(Number) }),
+  )
+  expect(animate).toHaveBeenCalledWith(
+    expect.any(Array),
+    expect.objectContaining({ delay: 50 }),
+  )
+
+  finishAnimation()
+  await waitFor(() =>
+    expect(
+      editor.view.dom.querySelectorAll('.notes-collapsed-hidden'),
+    ).toHaveLength(3),
+  )
+
+  editor.destroy()
+  delete (HTMLElement.prototype as Partial<HTMLElement>).animate
+})
+
 test('collapsed heading drag selects its complete hidden section', () => {
   const editor = new Editor({
     extensions: [

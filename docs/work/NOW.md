@@ -1,10 +1,17 @@
 # What's happening now
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
 ---
 
 ## Active work
+
+**Notes + component architecture plans — CLOSED (2026-07-04, history 0047–0048)**
+- `NOTES_MODULE_PLAN.md` and `COMPONENT_ARCHITECTURE_PLAN.md` both marked done.
+- Cleaned up 13 stray duplicate `" 2"` files left by an editor/sync conflict
+  (0047). Sidebar page-tree expand/collapse and collapsible-heading expand now
+  animate instead of snapping (0048). `SaveIndicator`/`SearchField`/
+  `LinkedItems` remain deferred until a second consumer exists.
 
 **Mobile fixes + notes front page (2026-07-03, history 0034–0036, 0038)**
 - Mobile page padding, stable heading toggle controls/rail (0034–0036).

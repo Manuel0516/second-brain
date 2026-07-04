@@ -103,9 +103,65 @@ function chevronButton(headingPos: number, collapsed: boolean): HTMLElement {
   return button
 }
 
+const TOGGLE_DURATION_MS = 450
+
+/** Plugin state: heading position whose collapse animation is in flight.
+ *  While set, decorations skip display:none for that heading's blocks. */
+const collapseAnimKey = new PluginKey<number | null>('headingCollapseAnim')
+
+/** Collect the visible block DOM elements after a heading.
+ *  Walks nextElementSibling from the heading's DOM node. */
+function blocksAfterHeading(headingEl: HTMLElement): HTMLElement[] {
+  if (!headingEl.parentElement) return []
+  const blocks: HTMLElement[] = []
+  const headingLevel = Number(headingEl.tagName.slice(1))
+  let sibling = headingEl.nextElementSibling
+  while (sibling instanceof HTMLElement) {
+    if (
+      sibling.classList.contains('notes-drag-handle-sentinel') ||
+      sibling.classList.contains('ProseMirror-trailingBreak')
+    ) {
+      sibling = sibling.nextElementSibling
+      continue
+    }
+    const siblingLevel = /^H[1-6]$/.test(sibling.tagName)
+      ? Number(sibling.tagName.slice(1))
+      : null
+    if (siblingLevel !== null && siblingLevel <= headingLevel) break
+    blocks.push(sibling)
+    sibling = sibling.nextElementSibling
+  }
+  return blocks
+}
+
+/** Animate blocks sliding out from under their heading (expand). */
+function animateExpand(blocks: HTMLElement[]) {
+  if (!blocks.length || typeof blocks[0].animate !== 'function') return
+  for (const block of blocks) {
+    block.animate(
+      [
+        { opacity: 0, transform: 'translateY(-10px)' },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      {
+        duration: TOGGLE_DURATION_MS,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'both' as FillMode,
+      },
+    )
+  }
+}
+
 function headingCollapsePlugin(): Plugin {
   return new Plugin({
-    key: new PluginKey('headingCollapse'),
+    key: collapseAnimKey,
+    state: {
+      init: () => null as number | null,
+      apply(tr, value) {
+        const meta = tr.getMeta(collapseAnimKey)
+        return meta !== undefined ? meta : value
+      },
+    },
     props: {
       handleDOMEvents: {
         pointerdown(view, event) {
@@ -121,16 +177,109 @@ function headingCollapsePlugin(): Plugin {
 
           event.preventDefault()
           event.stopPropagation()
+          const expanding = Boolean(heading.attrs.collapsed)
+          // Find the heading DOM element — the toggle button is a widget
+          // rendered inside the heading, so closest() walks up to it.
+          const headingEl = button.closest<HTMLElement>('h1, h2, h3')
+          if (!expanding) {
+            // Collapse: start the Web Animation on visible blocks, dispatch
+            // collapsed=true immediately, but set collapseAnimKey so
+            // decorations skip display:none while the animation plays.
+            const blocks = headingEl ? blocksAfterHeading(headingEl) : []
+            const canAnimate =
+              blocks.length > 0 && typeof blocks[0].animate === 'function'
+            if (canAnimate) {
+              let remaining = blocks.length
+              for (const block of blocks) {
+                const height = block.getBoundingClientRect().height
+                const { marginTop, marginBottom } = getComputedStyle(block)
+                const level = /^H[1-3]$/.test(block.tagName)
+                  ? Number(block.tagName.slice(1))
+                  : 4
+                block
+                  .animate(
+                    [
+                      {
+                        height: `${height}px`,
+                        marginTop,
+                        marginBottom,
+                        boxSizing: 'border-box',
+                        overflow: 'hidden',
+                        opacity: 1,
+                        transform: 'translateY(0)',
+                        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                      },
+                      {
+                        height: `${height * 0.2}px`,
+                        marginTop: '0px',
+                        marginBottom: '0px',
+                        boxSizing: 'border-box',
+                        overflow: 'hidden',
+                        opacity: 1,
+                        transform: 'translateY(-8px)',
+                        offset: 0.65,
+                        easing: 'ease-in-out',
+                      },
+                      {
+                        height: '0px',
+                        marginTop: '0px',
+                        marginBottom: '0px',
+                        boxSizing: 'border-box',
+                        overflow: 'hidden',
+                        opacity: 0,
+                        transform: 'translateY(-10px)',
+                      },
+                    ],
+                    {
+                      delay: (4 - level) * 50,
+                      duration: TOGGLE_DURATION_MS,
+                      fill: 'forwards' as FillMode,
+                    },
+                  )
+                  .finished.then(() => {
+                    remaining--
+                    if (remaining === 0 && !view.isDestroyed) {
+                      view.dispatch(
+                        view.state.tr.setMeta(collapseAnimKey, null),
+                      )
+                    }
+                  })
+              }
+            }
+            const tr = view.state.tr.setNodeAttribute(
+              headingPos,
+              'collapsed',
+              true,
+            )
+            tr.setSelection(TextSelection.near(tr.doc.resolve(headingPos + 1)))
+            tr.setMeta('lockDragHandle', true)
+            if (canAnimate) tr.setMeta(collapseAnimKey, headingPos)
+            view.dispatch(tr)
+            requestAnimationFrame(() => {
+              if (!view.isDestroyed) {
+                view.dispatch(view.state.tr.setMeta('lockDragHandle', false))
+              }
+            })
+            return true
+          }
+          // Expand: dispatch first so display:none is removed, then animate.
           const tr = view.state.tr.setNodeAttribute(
             headingPos,
             'collapsed',
-            !heading.attrs.collapsed,
+            false,
           )
           tr.setSelection(TextSelection.near(tr.doc.resolve(headingPos + 1)))
           tr.setMeta('lockDragHandle', true)
           view.dispatch(tr)
           requestAnimationFrame(() => {
             if (!view.isDestroyed) {
+              // Re-find the heading after DOM update via the button.
+              const btn = view.dom.querySelector<HTMLElement>(
+                `.notes-heading-toggle[data-heading-pos="${headingPos}"]`,
+              )
+              const h = btn?.closest<HTMLElement>('h1, h2, h3') ?? null
+              const blocks = h ? blocksAfterHeading(h) : []
+              animateExpand(blocks)
               view.dispatch(view.state.tr.setMeta('lockDragHandle', false))
             }
           })
@@ -141,8 +290,12 @@ function headingCollapsePlugin(): Plugin {
       // to get wrong; the top-level walk is O(blocks) and docs are small.
       decorations(state) {
         const decorations: Decoration[] = []
+        const animating = collapseAnimKey.getState(state)
         const ranges = hiddenRanges(state.doc)
         for (const range of ranges) {
+          // Skip display:none while a collapse animation is playing for
+          // this heading — the Web Animation needs the blocks visible.
+          if (range.headingPos === animating) continue
           state.doc.nodesBetween(range.from, range.to, (node, pos) => {
             if (pos < range.from) return true
             decorations.push(

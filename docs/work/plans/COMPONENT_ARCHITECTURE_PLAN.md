@@ -1,6 +1,7 @@
 # Plan: Component-dominant frontend architecture
 
-Status: in progress — shared sidebar and settings cards implemented
+Status: done (2026-07-04) — closed with SaveIndicator/SearchField/LinkedItems
+deferred; pick up only if/when Finance/Fitness need them (see history 0048)
 Date: 2026-07-01
 
 ---

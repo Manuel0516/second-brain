@@ -10,6 +10,58 @@ import { TrashView } from './TrashView'
 import type { Page } from './types'
 import './notes.css'
 
+/** Skeleton loader that mirrors the SettingsSkeleton pattern:
+ *  staggered cards of pulse-shimmer placeholders shown while pages load. */
+function NotesSkeleton({ type }: { type: 'overview' | 'page' }) {
+  if (type === 'page') {
+    return (
+      <div className="notes-skeleton-page">
+        {/* Breadcrumbs placeholder */}
+        <div className="skeleton" style={{ height: 14, width: 160 }} />
+        {/* Icon + title head */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div
+            className="skeleton"
+            style={{ width: 40, height: 40, borderRadius: 'var(--r-md)' }}
+          />
+          <div className="skeleton" style={{ height: 34, width: 300 }} />
+        </div>
+        {/* Content lines */}
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ display: 'grid', gap: 8 }}>
+            <div className="skeleton" style={{ height: 14, width: '100%' }} />
+            <div className="skeleton" style={{ height: 14, width: '85%' }} />
+            <div className="skeleton" style={{ height: 14, width: '60%' }} />
+          </div>
+        ))}
+        <div className="skeleton" style={{ height: 14, width: '40%' }} />
+      </div>
+    )
+  }
+  return (
+    <div className="notes-skeleton-overview">
+      <div className="skeleton" style={{ height: 26, width: 120 }} />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '6px 10px',
+          }}
+        >
+          <div
+            className="skeleton"
+            style={{ width: 20, height: 20, borderRadius: 'var(--r-sm)' }}
+          />
+          <div className="skeleton" style={{ height: 14, width: 180 }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Notes() {
   const navigate = useNavigate()
   const { pageId } = useParams<{ pageId: string }>()
@@ -309,6 +361,8 @@ export function Notes() {
                     )
                 }
               />
+            ) : loading ? (
+              <NotesSkeleton type={pageId ? 'page' : 'overview'} />
             ) : selected ? (
               <PageView
                 page={selected}

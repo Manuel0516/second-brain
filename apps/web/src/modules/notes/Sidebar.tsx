@@ -569,7 +569,17 @@ export function Sidebar({
               </Popover>
             )}
           </div>
-          {isOpen && <div role="group">{renderLevel(page.id, depth + 1)}</div>}
+          {nested.length > 0 && (
+            <div
+              className={`notes-tree-group${isOpen ? ' open' : ''}`}
+              role="group"
+              inert={!isOpen}
+            >
+              <div className="notes-tree-group-inner">
+                {renderLevel(page.id, depth + 1)}
+              </div>
+            </div>
+          )}
         </div>
       )
     })

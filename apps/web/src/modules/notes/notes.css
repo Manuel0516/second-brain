@@ -165,6 +165,40 @@
 .notes-tree-toggle.open svg {
   transform: rotate(90deg);
 }
+/* Children mount always; grid-rows animates the reveal without measuring
+   heights by hand — 0fr/1fr tracks size to content automatically. */
+.notes-tree-group {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.notes-tree-group.open {
+  grid-template-rows: 1fr;
+}
+.notes-tree-group-inner {
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.notes-tree-group.open .notes-tree-group-inner {
+  opacity: 1;
+  transition-delay: 0.08s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-tree-group {
+    transition: none;
+  }
+  .notes-tree-group-inner {
+    transition: none;
+    opacity: 1;
+  }
+  .notes-page-head {
+    animation: none;
+  }
+  .notes-breadcrumbs {
+    animation: none;
+  }
+}
 .notes-tree-title {
   min-width: 0;
   display: flex;
@@ -435,6 +469,8 @@
   gap: 6px;
   min-height: 24px;
   font-size: 12px;
+  animation: fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.04s;
 }
 .notes-breadcrumbs button {
   border: 0;
@@ -452,13 +488,16 @@
   color: var(--text-tertiary);
 }
 
-/* Icon + title head. The shared EmojiPicker trigger is enlarged to a icon slot. */
+/* Springy entrance for the page head — icon + title appear after the
+   page container itself has entered. */
 .notes-page-head {
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   margin: 12px 0 20px;
+  animation: springUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.08s;
 }
 .notes-page-head .editor-icon-trigger {
   margin-right: 12px;
@@ -750,7 +789,8 @@
 }
 
 /* Collapsible headings: blocks hidden by a collapsed heading + the hover
-   chevron every heading carries. */
+   chevron every heading carries. Expand animation is handled by the
+   Web Animations API in CollapsibleHeading.ts (animateExpand). */
 .notes-editor .notes-collapsed-hidden {
   display: none;
 }
@@ -1659,6 +1699,8 @@
   text-align: left;
   cursor: pointer;
   transition: background 0.14s ease;
+  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--enter-delay, 0ms);
 }
 .notes-overview-row:hover {
   background: var(--bg-raised);
@@ -1682,6 +1724,48 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Staggered delay slots for overview tree rows. */
+.notes-overview-list > li:nth-child(1) > .notes-overview-row {
+  --enter-delay: 0.03s;
+}
+.notes-overview-list > li:nth-child(2) > .notes-overview-row {
+  --enter-delay: 0.07s;
+}
+.notes-overview-list > li:nth-child(3) > .notes-overview-row {
+  --enter-delay: 0.11s;
+}
+.notes-overview-list > li:nth-child(4) > .notes-overview-row {
+  --enter-delay: 0.15s;
+}
+.notes-overview-list > li:nth-child(5) > .notes-overview-row {
+  --enter-delay: 0.19s;
+}
+.notes-overview-list > li:nth-child(n + 6) > .notes-overview-row {
+  --enter-delay: 0.23s;
+}
+
+/* ── Skeleton loading (mirrors SettingsSkeleton) ────────────────── */
+.notes-skeleton-overview {
+  width: min(100% - 48px, 720px);
+  margin: 0 auto;
+  padding: 40px 0 96px;
+  display: grid;
+  gap: 16px;
+}
+.notes-skeleton-page {
+  width: min(720px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 40px 0 96px;
+  display: grid;
+  gap: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notes-overview-row {
+    animation: none;
+  }
+}
+
 @media (max-width: 800px) {
   .notes-overview {
     width: min(100% - 28px, 720px);

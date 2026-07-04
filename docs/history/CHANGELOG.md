@@ -7,6 +7,10 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0050](0050-fix-collapsible-heading-animation.md) | Fix collapsible heading animation | 2026-07-04 | accepted |
+| [0049](0049-notes-skeleton-and-title-animations.md) | Notes skeleton loading and title entrance animations | 2026-07-04 | accepted |
+| [0048](0048-close-notes-component-plans-and-toggle-animations.md) | Close Notes/Component plans, animate toggle expand/contract | 2026-07-04 | accepted |
+| [0047](0047-remove-duplicate-space-2-files.md) | Remove duplicate " 2" files | 2026-07-04 | accepted |
 | [0046](0046-cover-image-url-fix.md) | Fix cover image URL rendering and quality | 2026-07-04 | accepted |
 | [0045](0045-drag-rail-rework-and-todo-jank.md) | Drag rail rework, favourite swatch polish, todo-save jank fix | 2026-07-04 | accepted |
 | [0044](0044-notes-swatch-circle-style.md) | Notes swatch circles (calendar-consistent style) | 2026-07-04 | accepted |

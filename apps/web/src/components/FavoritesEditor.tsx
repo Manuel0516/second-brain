@@ -192,8 +192,6 @@ export function FavoriteEmojiEditor({
           maxLength={8}
           className="event-icon-glyph"
           style={{
-            width: '100%',
-            height: '100%',
             border: 'none',
             background: 'transparent',
             textAlign: 'center',
