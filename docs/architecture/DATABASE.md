@@ -100,6 +100,7 @@ The main event table. Supports one-off events and recurring series.
 | recurrence_parent_id | UUID FK? | If set, this row is an override for one occurrence of the parent series. |
 | recurrence_overridden_at | DateTime? | Which occurrence this row overrides. |
 | connections | JSON | Draft cross-module link intentions (notes, finance, fitness, food). Not real links yet — stored until target modules exist. |
+| created_by | String(50) | `"user"` or `"system:fitness"`. Tags auto-created events vs user-created. |
 
 **How recurring events work:**
 - One row in the database per series (the "parent" event).
@@ -234,6 +235,82 @@ select(Link).where(
 
 ---
 
+### `exercises`
+Exercise definitions. One row per exercise the user has defined. Created by the user through the fitness UI or imported from a wearable.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| name | String(255) | Exercise name, e.g. "Bench Press". |
+| category | String(20) | "strength", "cardio", or "mobility". |
+| unit | String(20) | "reps", "kg", "km", "min", or "reps+weight". |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `workout_sessions`
+One row per workout session (a single workout on a given day). Covers strength training sessions, runs, mobility sessions, etc.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| date | DateTime | When the workout happened (UTC). |
+| type | String(255) | Workout type, e.g. "Push day", "Pull day", "Run". |
+| notes | JSON | Tiptap block content (same shape as `pages.content`). Free-form notes for the session. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `set_entries`
+Individual sets within a workout session. Linked to an exercise and a workout session. Weight/reps/RPE tracking.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| workout_session_id | UUID FK | Which session this set belongs to. |
+| exercise_id | UUID FK | Which exercise was performed. |
+| set_number | Integer | Set order within the session (1-indexed). |
+| reps | Integer | Number of reps completed. |
+| weight | Integer? | Weight in kg (null for bodyweight exercises). |
+| rpe | Integer? | Rate of perceived exertion (1–10). |
+| notes | String(500)? | Per-set notes. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `body_metrics`
+Daily body measurements: weight, body fat percentage, and extensible measurement values.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| date | DateTime | Measurement date (UTC). |
+| weight | Float? | Body weight (kg.decimals). |
+| body_fat_pct | Float? | Body fat percentage. |
+| measurements | JSON | Extensible measurement dict, e.g. `{"waist": 80, "arms": 35}`. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `goals`
+User-defined fitness goals. Target types point at exercise max weight, exercise max reps, or body metrics.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| target_type | String(20) | "exercise_max", "exercise_reps", or "body_metric". |
+| exercise_id | UUID FK? | The exercise this goal targets (for exercise types). |
+| metric_key | String(50)? | The metric this goal targets (for body_metric type), e.g. "weight". |
+| target_value | Float | The target numeric value. |
+| target_date | DateTime? | Optional deadline for the goal. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
 ## Migration history
 
 | Number | What it added |
@@ -248,5 +325,8 @@ select(Link).where(
 | 011 | Database pages: pages.type/is_template/cover/properties + database_properties + database_views |
 | 012 | Files table (MinIO-backed uploads for note images) |
 | 013 | Notes list marker style preferences on user_settings |
+| 014 | Favorite text/highlight/block colors and favorite covers on user_settings |
+| 015 | Fitness core: exercises, workout_sessions, set_entries, body_metrics, calendar_events.created_by |
+| 016 | Goals table for fitness goal tracking |
 
 Always check `alembic current` before writing a new migration.

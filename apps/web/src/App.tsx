@@ -21,6 +21,12 @@ const Notes = lazy(() =>
   import('./modules/notes/Notes').then((module) => ({ default: module.Notes })),
 )
 
+const Fitness = lazy(() =>
+  import('./modules/fitness/Fitness').then((module) => ({
+    default: module.Fitness,
+  })),
+)
+
 function PageTransition({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const section = location.pathname.split('/')[1] || 'root'
@@ -74,6 +80,20 @@ function AppRoutes() {
                   fallback={<main className="route-loading">Loading…</main>}
                 >
                   <Notes />
+                </Suspense>
+              </SettingsProvider>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/fitness"
+          element={
+            <ProtectedRoute>
+              <SettingsProvider>
+                <Suspense
+                  fallback={<main className="route-loading">Loading…</main>}
+                >
+                  <Fitness />
                 </Suspense>
               </SettingsProvider>
             </ProtectedRoute>

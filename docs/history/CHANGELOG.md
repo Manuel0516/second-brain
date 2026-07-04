@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0053](0053-fitness-core.md) | Fitness module (Phases F1 + F1.1 + F2): backend, UI, live data, goals, stats, recharts | 2026-07-04 | accepted |
 | [0052](0052-fitness-food-prep-and-duplicate-cleanup.md) | Fitness/Food module prep + duplicate-file follow-up | 2026-07-04 | accepted |
 | [0051](0051-bubble-menu-test-timer-fix.md) | Fix BubbleMenu test timer leak | 2026-07-04 | accepted |
 | [0050](0050-fix-collapsible-heading-animation.md) | Fix collapsible heading animation | 2026-07-04 | accepted |

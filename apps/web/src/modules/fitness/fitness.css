@@ -1,0 +1,34 @@
+/* Fitness module styles — uses only CSS custom properties from styles.css */
+/* ponytail: minimal, just scope and any layout helpers not already global */
+
+.fitness-section {
+  margin-bottom: 24px;
+}
+
+.fitness-section-title {
+  color: var(--text-tertiary);
+  font: 600 11px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+/* Fitness color tokens — cyan #22D3EE, matches app accent */
+.fitness-page {
+  --fit-accent: #22d3ee;
+  --fit-accent-tint: rgba(34, 211, 238, 0.14);
+  --fit-accent-border: rgba(34, 211, 238, 0.28);
+  --fit-accent-tint-deep: rgba(34, 211, 238, 0.18);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}

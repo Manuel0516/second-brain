@@ -1,4 +1,4 @@
-export type ActiveRail = 'calendar' | 'notes' | 'settings'
+export type ActiveRail = 'calendar' | 'notes' | 'fitness' | 'settings'
 
 const IconCalendar = () => (
   <svg
@@ -80,11 +80,13 @@ function RailBtn({
   onClick,
   title,
   children,
+  color,
 }: {
   active?: boolean
   onClick?: () => void
   title: string
   children: React.ReactNode
+  color?: string
 }) {
   return (
     <button
@@ -104,7 +106,7 @@ function RailBtn({
         background: active
           ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)'
           : 'transparent',
-        color: active ? 'var(--accent)' : 'var(--text-tertiary)',
+        color: active ? (color ?? 'var(--accent)') : 'var(--text-tertiary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -189,7 +191,11 @@ export function AppRail({ active, onNavigate }: Props) {
       <RailBtn title="Finance">
         <IconFinance />
       </RailBtn>
-      <RailBtn title="Fitness">
+      <RailBtn
+        active={active === 'fitness'}
+        title="Fitness"
+        onClick={() => nav('/fitness')}
+      >
         <IconFitness />
       </RailBtn>
 
