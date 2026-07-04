@@ -1017,6 +1017,7 @@ export function BlockEditor({
           {/* Floating inline-format toolbar at the selection. */}
           <BubbleMenu
             editor={editor}
+            updateDelay={0}
             className="notes-selection-toolbar"
             options={{ placement: 'top' }}
           >

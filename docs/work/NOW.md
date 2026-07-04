@@ -71,10 +71,14 @@ Last updated: 2026-07-04
 
 ## Up next (rough priority order)
 
-1. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
-2. Settings → Security page — wire up TOTP 2FA UI.
-3. Google Calendar sync — Phase 1 completion.
-4. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
+1. **Fitness + Food module (Milestone 4)** — build plan at
+   `docs/work/plans/FITNESS_FOOD_MODULE_PLAN.md`. Jumps ahead of Finance at the
+   user's request (2026-07-04); wearable import stays deferred until Finance's
+   `ImportTemplate` exists (see plan §0).
+2. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
+3. Settings → Security page — wire up TOTP 2FA UI.
+4. Google Calendar sync — Phase 1 completion.
+5. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
    table row-height dragging) — pick up on demand.
 
 ---

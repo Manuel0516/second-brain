@@ -20,9 +20,10 @@
 >   prompt; permanent deletion + trash rework + toast.
 > - **Migration numbering drifted:** pages landed as migration **010** (not
 >   009); database tables as 011.
-> - **Next work is Plan E** (`NOTES_MEDIA_AND_LAYOUT_PLAN.md`): file upload
->   service (MinIO), image blocks, bookmark cards, table row/column
->   controls, multi-column layouts.
+> - **Plan E** (file upload service/MinIO, image blocks, bookmark cards,
+>   table row/column controls, multi-column layouts) shipped next and is
+>   fully documented in history 0030–0033; its plan file has since been
+>   removed as redundant with that history.
 
 > Audience: implementing AI or developer. Self-contained build spec for the
 > first Notes phase. Read order: this plan → `docs/product/NOTES_MODULE.md`,

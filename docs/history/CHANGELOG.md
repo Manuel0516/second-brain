@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0052](0052-fitness-food-prep-and-duplicate-cleanup.md) | Fitness/Food module prep + duplicate-file follow-up | 2026-07-04 | accepted |
+| [0051](0051-bubble-menu-test-timer-fix.md) | Fix BubbleMenu test timer leak | 2026-07-04 | accepted |
 | [0050](0050-fix-collapsible-heading-animation.md) | Fix collapsible heading animation | 2026-07-04 | accepted |
 | [0049](0049-notes-skeleton-and-title-animations.md) | Notes skeleton loading and title entrance animations | 2026-07-04 | accepted |
 | [0048](0048-close-notes-component-plans-and-toggle-animations.md) | Close Notes/Component plans, animate toggle expand/contract | 2026-07-04 | accepted |
