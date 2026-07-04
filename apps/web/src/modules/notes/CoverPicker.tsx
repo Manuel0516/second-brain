@@ -14,6 +14,7 @@ interface CoverPickerProps {
   value: string | null
   onChange: (value: string | null) => void
   onClose: () => void
+  favorites?: string[]
 }
 
 /** Popover with preset gradients + a pasted image URL. Uploads come later. */
@@ -22,6 +23,7 @@ export function CoverPicker({
   value,
   onChange,
   onClose,
+  favorites = [],
 }: CoverPickerProps) {
   return (
     <Popover
@@ -33,6 +35,28 @@ export function CoverPicker({
       role="dialog"
       ariaLabel="Change cover"
     >
+      {favorites.length > 0 && (
+        <Field label="Favourites">
+          <div className="notes-cover-swatches">
+            {favorites.map((cover) => (
+              <button
+                key={cover}
+                type="button"
+                className="notes-cover-swatch"
+                style={{
+                  backgroundImage: `url("${cover}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                }}
+                aria-label="Favourite cover"
+                aria-pressed={value === cover}
+                onClick={() => onChange(cover)}
+              />
+            ))}
+          </div>
+        </Field>
+      )}
       <Field label="Gradients">
         <div className="notes-cover-swatches">
           {COVER_PRESETS.map((preset) => (

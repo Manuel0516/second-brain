@@ -1,40 +1,199 @@
 /**
- * Settings-driven list marker schemes.
+ * Settings-driven list marker schemes with automatic depth hierarchy.
  *
  * Applied via data attributes on the notes editor root (BlockEditor) and on
- * the Notes settings live previews — same selectors, both surfaces. Only
- * list-style-type lives here; spacing belongs to each surface. All nesting
- * depths follow because the rules match every descendant list. Task lists
- * keep their checkboxes (excluded), and unknown attribute values simply
- * match no override, falling back to the disc/decimal defaults.
- */
+ * the Notes settings live previews — same selectors, both surfaces.  Only
+ * list-style-type lives here; spacing belongs to each surface.
+ *
+ * Bullet hierarchy (cycle order): disc → circle → square → dash → repeat
+ * Numbered hierarchy (cycle order): decimal → lower-alpha → lower-roman →
+ *   upper-alpha → upper-roman → repeat
+ *
+ * The setting pick determines the depth-1 style; deeper levels advance
+ * through the cycle automatically.  Task lists keep their checkboxes
+ * (excluded via :not([data-type='taskList'])).
+ *
+ * ── Bullet lists ──────────────────────────────────────────────────── */
 
+/* Default (any / unknown value) — disc cycle */
 [data-bullet-style] ul:not([data-type='taskList']) {
   list-style-type: disc;
 }
+[data-bullet-style] ul ul:not([data-type='taskList']) {
+  list-style-type: circle;
+}
+[data-bullet-style] ul ul ul:not([data-type='taskList']) {
+  list-style-type: square;
+}
+[data-bullet-style] ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: '–  ';
+}
+[data-bullet-style] ul ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: disc;
+}
+
+/* circle cycle */
 [data-bullet-style='circle'] ul:not([data-type='taskList']) {
   list-style-type: circle;
 }
+[data-bullet-style='circle'] ul ul:not([data-type='taskList']) {
+  list-style-type: square;
+}
+[data-bullet-style='circle'] ul ul ul:not([data-type='taskList']) {
+  list-style-type: '–  ';
+}
+[data-bullet-style='circle'] ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: disc;
+}
+[data-bullet-style='circle'] ul ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: circle;
+}
+
+/* square cycle */
 [data-bullet-style='square'] ul:not([data-type='taskList']) {
   list-style-type: square;
 }
-/* No native dash keyword — the string syntax renders it directly. */
+[data-bullet-style='square'] ul ul:not([data-type='taskList']) {
+  list-style-type: '–  ';
+}
+[data-bullet-style='square'] ul ul ul:not([data-type='taskList']) {
+  list-style-type: disc;
+}
+[data-bullet-style='square'] ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: circle;
+}
+[data-bullet-style='square'] ul ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: square;
+}
+
+/* dash cycle (no native keyword — string syntax renders it directly) */
 [data-bullet-style='dash'] ul:not([data-type='taskList']) {
   list-style-type: '–  ';
 }
+[data-bullet-style='dash'] ul ul:not([data-type='taskList']) {
+  list-style-type: disc;
+}
+[data-bullet-style='dash'] ul ul ul:not([data-type='taskList']) {
+  list-style-type: circle;
+}
+[data-bullet-style='dash'] ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: square;
+}
+[data-bullet-style='dash'] ul ul ul ul ul:not([data-type='taskList']) {
+  list-style-type: '–  ';
+}
 
+/* ── Numbered lists ───────────────────────────────────────────────── */
+
+/* Default (any / unknown value) — decimal cycle (fallback) */
 [data-numbered-style] ol {
   list-style-type: decimal;
 }
+[data-numbered-style] ol ol {
+  list-style-type: lower-alpha;
+}
+[data-numbered-style] ol ol ol {
+  list-style-type: lower-roman;
+}
+[data-numbered-style] ol ol ol ol {
+  list-style-type: upper-alpha;
+}
+[data-numbered-style] ol ol ol ol ol {
+  list-style-type: upper-roman;
+}
+[data-numbered-style] ol ol ol ol ol ol {
+  list-style-type: decimal;
+}
+
+/* decimal — legal-style numbering: 1., 1.1., 1.1.1., … */
+/* Uses CSS counters so nested levels show the full path. */
+[data-numbered-style='decimal'] ol {
+  counter-reset: legal-level;
+  list-style-type: none;
+}
+[data-numbered-style='decimal'] ol > li {
+  counter-increment: legal-level;
+}
+[data-numbered-style='decimal'] ol > li::marker {
+  content: counters(legal-level, '.') '. ';
+}
+
+/* lower-alpha cycle */
 [data-numbered-style='lower-alpha'] ol {
   list-style-type: lower-alpha;
 }
+[data-numbered-style='lower-alpha'] ol ol {
+  list-style-type: lower-roman;
+}
+[data-numbered-style='lower-alpha'] ol ol ol {
+  list-style-type: upper-alpha;
+}
+[data-numbered-style='lower-alpha'] ol ol ol ol {
+  list-style-type: upper-roman;
+}
+[data-numbered-style='lower-alpha'] ol ol ol ol ol {
+  list-style-type: decimal;
+}
+[data-numbered-style='lower-alpha'] ol ol ol ol ol ol {
+  list-style-type: lower-alpha;
+}
+
+/* upper-alpha cycle */
 [data-numbered-style='upper-alpha'] ol {
   list-style-type: upper-alpha;
 }
+[data-numbered-style='upper-alpha'] ol ol {
+  list-style-type: upper-roman;
+}
+[data-numbered-style='upper-alpha'] ol ol ol {
+  list-style-type: decimal;
+}
+[data-numbered-style='upper-alpha'] ol ol ol ol {
+  list-style-type: lower-alpha;
+}
+[data-numbered-style='upper-alpha'] ol ol ol ol ol {
+  list-style-type: lower-roman;
+}
+[data-numbered-style='upper-alpha'] ol ol ol ol ol ol {
+  list-style-type: upper-alpha;
+}
+
+/* lower-roman cycle */
 [data-numbered-style='lower-roman'] ol {
   list-style-type: lower-roman;
 }
+[data-numbered-style='lower-roman'] ol ol {
+  list-style-type: upper-alpha;
+}
+[data-numbered-style='lower-roman'] ol ol ol {
+  list-style-type: upper-roman;
+}
+[data-numbered-style='lower-roman'] ol ol ol ol {
+  list-style-type: decimal;
+}
+[data-numbered-style='lower-roman'] ol ol ol ol ol {
+  list-style-type: lower-alpha;
+}
+[data-numbered-style='lower-roman'] ol ol ol ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/* upper-roman cycle */
 [data-numbered-style='upper-roman'] ol {
+  list-style-type: upper-roman;
+}
+[data-numbered-style='upper-roman'] ol ol {
+  list-style-type: decimal;
+}
+[data-numbered-style='upper-roman'] ol ol ol {
+  list-style-type: lower-alpha;
+}
+[data-numbered-style='upper-roman'] ol ol ol ol {
+  list-style-type: lower-roman;
+}
+[data-numbered-style='upper-roman'] ol ol ol ol ol {
+  list-style-type: upper-alpha;
+}
+[data-numbered-style='upper-roman'] ol ol ol ol ol ol {
   list-style-type: upper-roman;
 }

@@ -15,6 +15,19 @@ import { EditableInlineMath, insertEditableInlineMath } from './MathExtensions'
 import { EditableTaskItem } from './TaskItemExtension'
 import { LinkPopover } from './LinkPopover'
 
+vi.mock('../../../context/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {
+      favorite_text_colors: [],
+      favorite_highlight_colors: [],
+      favorite_block_colors: [],
+      favorite_covers: [],
+    },
+    loading: false,
+    patch: vi.fn(),
+  }),
+}))
+
 test('link form normalizes web addresses and rejects unsafe protocols', () => {
   const onApply = vi.fn()
   const { rerender } = render(

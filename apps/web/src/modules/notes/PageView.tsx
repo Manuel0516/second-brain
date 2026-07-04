@@ -105,7 +105,7 @@ export function PageView({
           style={
             page.cover.startsWith('gradient:')
               ? undefined
-              : { backgroundImage: `url(${page.cover})` }
+              : { backgroundImage: `url("${page.cover}")` }
           }
         >
           <button
@@ -123,6 +123,7 @@ export function PageView({
               value={page.cover}
               onChange={setCover}
               onClose={() => setCoverPickerOpen(false)}
+              favorites={settings.favorite_covers}
             />
           )}
         </div>
@@ -209,6 +210,7 @@ export function PageView({
                 value={null}
                 onChange={setCover}
                 onClose={() => setCoverPickerOpen(false)}
+                favorites={settings.favorite_covers}
               />
             )}
           </div>

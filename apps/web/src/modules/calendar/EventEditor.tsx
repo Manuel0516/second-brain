@@ -79,6 +79,35 @@ interface EventLink {
   direction: 'incoming' | 'outgoing'
   title: string
   icon?: string | null
+  page_type?: string | null
+}
+
+function LinkIcon({
+  icon,
+  pageType,
+}: {
+  icon: string | null | undefined
+  pageType: string | null | undefined
+}) {
+  if (icon) return <span aria-hidden="true">{icon}</span>
+  if (pageType === 'folder')
+    return (
+      <span aria-hidden="true">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M2.5 5.5a1 1 0 011-1h4l2 2h7a1 1 0 011 1v8a1 1 0 01-1 1h-13a1 1 0 01-1-1z" />
+        </svg>
+      </span>
+    )
+  return null
 }
 
 function localValue(value: string) {
@@ -152,16 +181,27 @@ export function EventEditor({
   const [eventLinks, setEventLinks] = useState<EventLink[]>([])
   const [noteQuery, setNoteQuery] = useState('')
   const [noteResults, setNoteResults] = useState<
-    { id: string; title: string; type: string; icon?: string | null }[]
+    {
+      id: string
+      title: string
+      type: string
+      icon?: string | null
+      page_type?: string | null
+    }[]
   >([])
   // Create mode: existing notes picked to be linked once the event is saved.
   const [pendingNoteLinks, setPendingNoteLinks] = useState<
-    { id: string; title: string; icon?: string | null }[]
+    {
+      id: string
+      title: string
+      icon?: string | null
+      page_type?: string | null
+    }[]
   >([])
   // Edit mode: reveal the folder+title mini-form inside the Linked card.
   const [newNoteOpen, setNewNoteOpen] = useState(false)
   // Create mode: whether to create a new note (vs only link existing ones).
-  const [createNoteEnabled, setCreateNoteEnabled] = useState(true)
+  const [createNoteEnabled, setCreateNoteEnabled] = useState(false)
   const [closing, setClosing] = useState(false)
   const [dragY, setDragY] = useState(0) // pull-down gesture offset
   const [isDragging, setIsDragging] = useState(false)
@@ -847,7 +887,7 @@ export function EventEditor({
                 <div className="event-linked-list">
                   {eventLinks.map((link) => (
                     <div key={link.id} className="event-linked-item">
-                      {link.icon && <span aria-hidden="true">{link.icon}</span>}
+                      <LinkIcon icon={link.icon} pageType={link.page_type} />
                       <button
                         type="button"
                         className="event-linked-open"
@@ -877,7 +917,7 @@ export function EventEditor({
                   <div className="event-link-search">
                     <input
                       type="text"
-                      placeholder="Link an existing note…"
+                      placeholder="Link a note or folder…"
                       value={noteQuery}
                       onChange={(e) => setNoteQuery(e.target.value)}
                     />
@@ -891,9 +931,10 @@ export function EventEditor({
                             aria-selected={false}
                             onClick={() => void linkExistingNote(result.id)}
                           >
-                            {result.icon && (
-                              <span aria-hidden="true">{result.icon}</span>
-                            )}
+                            <LinkIcon
+                              icon={result.icon}
+                              pageType={result.page_type}
+                            />
                             <span>{result.title}</span>
                           </button>
                         ))}
@@ -1174,8 +1215,8 @@ export function EventEditor({
                           type="text"
                           placeholder={
                             createNoteEnabled
-                              ? 'Also link existing notes…'
-                              : 'Link existing notes…'
+                              ? 'Also link notes or folders…'
+                              : 'Link notes or folders…'
                           }
                           value={noteQuery}
                           onChange={(e) => setNoteQuery(e.target.value)}
@@ -1195,15 +1236,17 @@ export function EventEditor({
                                       id: result.id,
                                       title: result.title,
                                       icon: result.icon,
+                                      page_type: result.page_type,
                                     },
                                   ])
                                   setNoteQuery('')
                                   setNoteResults([])
                                 }}
                               >
-                                {result.icon && (
-                                  <span aria-hidden="true">{result.icon}</span>
-                                )}
+                                <LinkIcon
+                                  icon={result.icon}
+                                  pageType={result.page_type}
+                                />
                                 <span>{result.title}</span>
                               </button>
                             ))}
@@ -1212,9 +1255,10 @@ export function EventEditor({
                       </div>
                       {pendingNoteLinks.map((pending) => (
                         <div key={pending.id} className="event-linked-item">
-                          {pending.icon && (
-                            <span aria-hidden="true">{pending.icon}</span>
-                          )}
+                          <LinkIcon
+                            icon={pending.icon}
+                            pageType={pending.page_type}
+                          />
                           <span className="event-linked-title">
                             {pending.title}
                           </span>

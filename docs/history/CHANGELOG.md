@@ -7,6 +7,14 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0046](0046-cover-image-url-fix.md) | Fix cover image URL rendering and quality | 2026-07-04 | accepted |
+| [0045](0045-drag-rail-rework-and-todo-jank.md) | Drag rail rework, favourite swatch polish, todo-save jank fix | 2026-07-04 | accepted |
+| [0044](0044-notes-swatch-circle-style.md) | Notes swatch circles (calendar-consistent style) | 2026-07-04 | accepted |
+| [0043](0043-favorite-colors-and-covers.md) | Favourite colours/covers settings + shared favourites editors | 2026-07-04 | accepted |
+| [0042](0042-notes-toolbar-alignment-dropdown.md) | Notes toolbar: alignment dropdown + pencil separator | 2026-07-04 | accepted |
+| [0041](0041-list-marker-depth-hierarchy.md) | Hierarchical list markers by nesting depth | 2026-07-04 | accepted |
+| [0040](0040-folder-linking-in-event-card.md) | Folders linkable as notes in event card links | 2026-07-04 | accepted |
+| [0039](0039-overview-tree-icon-cleanup.md) | Notes overview tree: icon cleanup and folder icon | 2026-07-04 | accepted |
 | [0038](0038-mobile-fixes-and-notes-front-page.md) | Mobile editor fixes + notes front-page overview | 2026-07-03 | accepted |
 | [0037](0037-notes-settings-list-markers.md) | Notes settings page: list marker schemes (N6) | 2026-07-03 | accepted |
 | [0036](0036-mobile-notes-heading-control-rail.md) | Stable mobile notes heading controls | 2026-07-03 | accepted |

@@ -28,6 +28,10 @@ export interface UserSettings {
     | 'upper-alpha'
     | 'lower-roman'
     | 'upper-roman'
+  favorite_text_colors: string[]
+  favorite_highlight_colors: string[]
+  favorite_block_colors: string[]
+  favorite_covers: string[]
 }
 
 interface SettingsContextType {
@@ -51,6 +55,10 @@ const DEFAULTS: UserSettings = {
   dim_past_events: true,
   notes_bullet_style: 'disc',
   notes_numbered_style: 'decimal',
+  favorite_text_colors: [],
+  favorite_highlight_colors: [],
+  favorite_block_colors: [],
+  favorite_covers: [],
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

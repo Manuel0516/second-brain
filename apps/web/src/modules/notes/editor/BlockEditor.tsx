@@ -42,6 +42,8 @@ import {
   BlockColor,
   COLOR_NAMES,
   NoteHighlight,
+  NoteTextColor,
+  onColor,
   setSelectedBlockColor,
 } from './ColorExtensions'
 import { NotesCodeBlock } from './CodeBlockView'
@@ -55,7 +57,12 @@ import {
 } from './ColumnNodes'
 import { TableToolbar } from './TableToolbar'
 import { TextAlign, TEXT_ALIGNMENTS } from './TextAlignExtension'
-const DRAG_POSITION_CONFIG = { placement: 'left' as const }
+import { useSettings } from '../../../context/SettingsContext'
+// left-start: the rail anchors to the block's TOP edge, so tall blocks (a
+// list item with nested children, a wrapped paragraph) keep the handle beside
+// their first line instead of floating at the subtree's vertical middle.
+// CSS nudges it onto the first text line per node type (--rail-y).
+const DRAG_POSITION_CONFIG = { placement: 'left-start' as const }
 const DRAG_NESTED_CONFIG = {
   rules: [
     {
@@ -388,6 +395,11 @@ export function BlockEditor({
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   // Editor with a debounced save still waiting — flushed on unmount.
   const pendingSaveRef = useRef<Editor | null>(null)
+  // The JSON object this editor last emitted through onChange. The autosave
+  // round-trip hands it straight back as the content prop; recognising it by
+  // reference skips the whole-document compare below, whose double
+  // JSON.stringify caused a visible hitch on phones (janky todo checking).
+  const lastEmittedRef = useRef<JSONContent | null>(null)
   const onChangeRef = useRef(onChange)
   const searchRef = useRef(onSearch)
   const clickRef = useRef(onMentionClick)
@@ -395,6 +407,8 @@ export function BlockEditor({
   const gutterRef = useRef<HTMLDivElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
   const colorPanelRef = useRef<HTMLDivElement>(null)
+  const alignBtnRef = useRef<HTMLButtonElement>(null)
+  const alignPanelRef = useRef<HTMLDivElement>(null)
   const dragSourceRef = useRef<HTMLElement | null>(null)
   // Position (doc offset) of the block the drag-handle gutter is pointing at.
   const hoverPosRef = useRef<number | null>(null)
@@ -417,8 +431,13 @@ export function BlockEditor({
   } | null>(null)
   const [mentionItems, setMentionItems] = useState<SearchResult[]>([])
   const [mentionIndex, setMentionIndex] = useState(0)
+  const { settings } = useSettings()
   const [linkOpen, setLinkOpen] = useState(false)
   const [colorsOpen, setColorsOpen] = useState(false)
+  const [alignOpen, setAlignOpen] = useState(false)
+  const [highlightCustomHex, setHighlightCustomHex] = useState('#22d3ee')
+  const [blockCustomHex, setBlockCustomHex] = useState('#22d3ee')
+  const [textCustomHex, setTextCustomHex] = useState('#f0ede5')
   const [linkHref, setLinkHref] = useState('')
   const [menuPos, setMenuPos] = useState<{ left: number; top: number }>({
     left: 0,
@@ -437,19 +456,22 @@ export function BlockEditor({
     clickRef.current = onMentionClick
   }, [onChange, onMentionClick, onSearch])
   useEffect(() => {
-    if (!colorsOpen) return
+    if (!colorsOpen && !alignOpen) return
     const close = (event: PointerEvent) => {
       const target = event.target as Node
       if (
         colorButtonRef.current?.contains(target) ||
-        colorPanelRef.current?.contains(target)
+        colorPanelRef.current?.contains(target) ||
+        alignBtnRef.current?.contains(target) ||
+        alignPanelRef.current?.contains(target)
       )
         return
       setColorsOpen(false)
+      setAlignOpen(false)
     }
     window.addEventListener('pointerdown', close)
     return () => window.removeEventListener('pointerdown', close)
-  }, [colorsOpen])
+  }, [colorsOpen, alignOpen])
 
   const editor = useEditor({
     editable: !readOnly,
@@ -472,6 +494,7 @@ export function BlockEditor({
         codeBlock: false,
       }),
       NoteHighlight,
+      NoteTextColor,
       BlockColor,
       NotesCodeBlock,
       TaskList,
@@ -657,7 +680,9 @@ export function BlockEditor({
       pendingSaveRef.current = current
       saveTimer.current = setTimeout(() => {
         pendingSaveRef.current = null
-        onChangeRef.current(current.getJSON())
+        const json = current.getJSON()
+        lastEmittedRef.current = json
+        onChangeRef.current(json)
       }, debounceMs)
       const { $from } = current.state.selection
       const match = $from.parent
@@ -715,8 +740,11 @@ export function BlockEditor({
       clearTimeout(saveTimer.current)
       const pending = pendingSaveRef.current
       pendingSaveRef.current = null
-      if (pending && !pending.isDestroyed)
-        void onChangeRef.current(pending.getJSON())
+      if (pending && !pending.isDestroyed) {
+        const json = pending.getJSON()
+        lastEmittedRef.current = json
+        void onChangeRef.current(json)
+      }
     },
     [],
   )
@@ -780,10 +808,12 @@ export function BlockEditor({
   }, [editor, slash, mention])
   useEffect(() => {
     if (!editor || editor.isFocused) return
+    // Our own autosave echoing back — the editor already holds this state.
+    if (content === lastEmittedRef.current) return
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(editorContent)) {
       editor.commands.setContent(editorContent, { emitUpdate: false })
     }
-  }, [editor, editorContent])
+  }, [editor, content, editorContent])
   useEffect(() => editor?.setEditable(!readOnly), [editor, readOnly])
   useEffect(() => {
     let active = true
@@ -868,7 +898,11 @@ export function BlockEditor({
       hoverPosRef.current = typeof pos === 'number' && pos >= 0 ? pos : null
       const type = node?.type.name
       // Collapsing briefly reports no node; retain the last valid rail layout.
-      if (type && gutterRef.current) gutterRef.current.dataset.nodeType = type
+      if (type && gutterRef.current) {
+        gutterRef.current.dataset.nodeType = type
+        // Heading level drives the rail's first-line vertical nudge in CSS.
+        gutterRef.current.dataset.nodeLevel = String(node?.attrs.level ?? '')
+      }
     },
     [],
   )
@@ -937,7 +971,7 @@ export function BlockEditor({
           {/* Notion-style block gutter: add + drag on hover. */}
           <DragHandle
             editor={editor}
-            // Floating UI centers the gutter against blocks of every height.
+            // Floating UI pins the gutter to each block's top-left corner.
             computePositionConfig={DRAG_POSITION_CONFIG}
             // Every root block is draggable; list items remain independently
             // movable without targeting paragraphs inside other components.
@@ -1043,36 +1077,65 @@ export function BlockEditor({
             >
               <ToolbarIcon type="math" />
             </button>
-            {TEXT_ALIGNMENTS.map((alignment) => (
-              <button
-                key={alignment}
-                type="button"
-                aria-label={`Align ${alignment}`}
-                title={`Align ${alignment}`}
-                aria-pressed={
-                  alignment === 'left'
-                    ? !TEXT_ALIGNMENTS.some(
-                        (other) =>
-                          other !== 'left' &&
-                          editor.isActive({ textAlign: other }),
-                      )
-                    : editor.isActive({ textAlign: alignment })
+            <button
+              ref={alignBtnRef}
+              type="button"
+              aria-label="Text alignment"
+              title="Text alignment"
+              aria-expanded={alignOpen}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setAlignOpen(!alignOpen)}
+            >
+              <ToolbarIcon
+                type={
+                  TEXT_ALIGNMENTS.find(
+                    (a) => a !== 'left' && editor.isActive({ textAlign: a }),
+                  ) ?? 'left'
                 }
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() =>
-                  editor.chain().focus().setTextAlign(alignment).run()
-                }
+              />
+            </button>
+            {alignOpen && (
+              <div
+                ref={alignPanelRef}
+                className="notes-align-popover"
+                role="listbox"
+                aria-label="Text alignment"
               >
-                <ToolbarIcon type={alignment} />
-              </button>
-            ))}
+                {TEXT_ALIGNMENTS.map((alignment) => (
+                  <button
+                    key={alignment}
+                    type="button"
+                    role="option"
+                    aria-selected={
+                      alignment === 'left'
+                        ? !TEXT_ALIGNMENTS.some(
+                            (other) =>
+                              other !== 'left' &&
+                              editor.isActive({ textAlign: other }),
+                          )
+                        : editor.isActive({ textAlign: alignment })
+                    }
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      editor.chain().focus().setTextAlign(alignment).run()
+                      setAlignOpen(false)
+                    }}
+                  >
+                    <ToolbarIcon type={alignment} />
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               type="button"
+              className="notes-toolbar-pencil"
               aria-label="Colors"
-              title="Highlight and block color"
+              title="Text color, highlight and block color"
               aria-expanded={colorsOpen}
               aria-pressed={
-                editor.isActive('highlight') || Boolean(activeBlockColor)
+                editor.isActive('highlight') ||
+                Boolean(activeBlockColor) ||
+                editor.isActive('textColor')
               }
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => setColorsOpen(!colorsOpen)}
@@ -1097,8 +1160,111 @@ export function BlockEditor({
                 ref={colorPanelRef}
                 className="notes-swatch-rows"
                 role="dialog"
-                aria-label="Highlight and block colors"
+                aria-label="Text, highlight and block colors"
               >
+                <div
+                  className="notes-swatch-section"
+                  role="group"
+                  aria-label="Text color"
+                >
+                  <span className="notes-swatch-label">Text</span>
+                  <div className="notes-swatch-options">
+                    {/* Favourites replace the built-in palette; the named
+                        defaults only show while no favourites are saved. */}
+                    {settings.favorite_text_colors.length === 0 &&
+                      COLOR_NAMES.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          className={`notes-swatch text-${name}`}
+                          aria-label={`Text color ${name}`}
+                          aria-pressed={editor.isActive('textColor', {
+                            color: name,
+                          })}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            editor.chain().focus().toggleTextColor(name).run()
+                            setColorsOpen(false)
+                          }}
+                        />
+                      ))}
+                    {settings.favorite_text_colors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className="notes-swatch"
+                        style={
+                          {
+                            background: color,
+                            '--sw-on': onColor(color),
+                          } as React.CSSProperties
+                        }
+                        aria-label={`Text color ${color}`}
+                        aria-pressed={editor.isActive('textColor', { color })}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          editor.chain().focus().toggleTextColor(color).run()
+                          setColorsOpen(false)
+                        }}
+                      />
+                    ))}
+                    <label
+                      className={`notes-swatch notes-swatch-custom ${
+                        editor.isActive('textColor') &&
+                        !COLOR_NAMES.some((n) =>
+                          editor.isActive('textColor', { color: n }),
+                        ) &&
+                        !settings.favorite_text_colors.some((c) =>
+                          editor.isActive('textColor', { color: c }),
+                        )
+                          ? 'notes-swatch-active'
+                          : ''
+                      }`}
+                      title="Custom text color"
+                      style={
+                        {
+                          background: textCustomHex,
+                          '--sw-on': onColor(textCustomHex),
+                        } as React.CSSProperties
+                      }
+                    >
+                      <input
+                        type="color"
+                        aria-label="Custom text color"
+                        value={textCustomHex}
+                        onChange={(e) => {
+                          const hex = e.target.value
+                          setTextCustomHex(hex)
+                          editor.chain().focus().toggleTextColor(hex).run()
+                          setColorsOpen(false)
+                        }}
+                      />
+                      <svg
+                        className="notes-swatch-custom-icon"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                        <path d="M12.5 5.5l2 2" />
+                      </svg>
+                    </label>
+                    <button
+                      type="button"
+                      className="notes-swatch clear"
+                      aria-label="Remove text color"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        editor.chain().focus().unsetTextColor().run()
+                        setColorsOpen(false)
+                      }}
+                    />
+                  </div>
+                </div>
                 <div
                   className="notes-swatch-section"
                   role="group"
@@ -1106,26 +1272,100 @@ export function BlockEditor({
                 >
                   <span className="notes-swatch-label">Highlight</span>
                   <div className="notes-swatch-options">
-                    {COLOR_NAMES.map((name) => (
+                    {settings.favorite_highlight_colors.length === 0 &&
+                      COLOR_NAMES.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          className={`notes-swatch mark-${name}`}
+                          aria-label={`Highlight ${name}`}
+                          aria-pressed={editor.isActive('highlight', {
+                            color: name,
+                          })}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            editor
+                              .chain()
+                              .focus()
+                              .toggleHighlight({ color: name })
+                              .run()
+                            setColorsOpen(false)
+                          }}
+                        />
+                      ))}
+                    {settings.favorite_highlight_colors.map((color) => (
                       <button
-                        key={name}
+                        key={color}
                         type="button"
-                        className={`notes-swatch mark-${name}`}
-                        aria-label={`Highlight ${name}`}
-                        aria-pressed={editor.isActive('highlight', {
-                          color: name,
-                        })}
+                        className="notes-swatch"
+                        style={
+                          {
+                            background: color,
+                            '--sw-on': onColor(color),
+                          } as React.CSSProperties
+                        }
+                        aria-label={`Highlight ${color}`}
+                        aria-pressed={editor.isActive('highlight', { color })}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
                           editor
                             .chain()
                             .focus()
-                            .toggleHighlight({ color: name })
+                            .toggleHighlight({ color })
                             .run()
                           setColorsOpen(false)
                         }}
                       />
                     ))}
+                    <label
+                      className={`notes-swatch notes-swatch-custom ${
+                        editor.isActive('highlight') &&
+                        !COLOR_NAMES.some((n) =>
+                          editor.isActive('highlight', { color: n }),
+                        ) &&
+                        !settings.favorite_highlight_colors.some((c) =>
+                          editor.isActive('highlight', { color: c }),
+                        )
+                          ? 'notes-swatch-active'
+                          : ''
+                      }`}
+                      title="Custom highlight color"
+                      style={
+                        {
+                          background: highlightCustomHex,
+                          '--sw-on': onColor(highlightCustomHex),
+                        } as React.CSSProperties
+                      }
+                    >
+                      <input
+                        type="color"
+                        aria-label="Custom highlight color"
+                        value={highlightCustomHex}
+                        onChange={(e) => {
+                          const hex = e.target.value
+                          setHighlightCustomHex(hex)
+                          editor
+                            .chain()
+                            .focus()
+                            .toggleHighlight({ color: hex })
+                            .run()
+                          setColorsOpen(false)
+                        }}
+                      />
+                      <svg
+                        className="notes-swatch-custom-icon"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                        <path d="M12.5 5.5l2 2" />
+                      </svg>
+                    </label>
                     <button
                       type="button"
                       className="notes-swatch clear"
@@ -1145,20 +1385,84 @@ export function BlockEditor({
                 >
                   <span className="notes-swatch-label">Block</span>
                   <div className="notes-swatch-options">
-                    {COLOR_NAMES.map((name) => (
+                    {settings.favorite_block_colors.length === 0 &&
+                      COLOR_NAMES.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          className={`notes-swatch block-${name}`}
+                          aria-label={`Block color ${name}`}
+                          aria-pressed={activeBlockColor === name}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            setSelectedBlockColor(editor, name)
+                            setColorsOpen(false)
+                          }}
+                        />
+                      ))}
+                    {settings.favorite_block_colors.map((color) => (
                       <button
-                        key={name}
+                        key={color}
                         type="button"
-                        className={`notes-swatch block-${name}`}
-                        aria-label={`Block color ${name}`}
-                        aria-pressed={activeBlockColor === name}
+                        className="notes-swatch"
+                        style={
+                          {
+                            background: color,
+                            '--sw-on': onColor(color),
+                          } as React.CSSProperties
+                        }
+                        aria-label={`Block color ${color}`}
+                        aria-pressed={activeBlockColor === color}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
-                          setSelectedBlockColor(editor, name)
+                          setSelectedBlockColor(editor, color)
                           setColorsOpen(false)
                         }}
                       />
                     ))}
+                    <label
+                      className={`notes-swatch notes-swatch-custom ${
+                        activeBlockColor &&
+                        !COLOR_NAMES.some((n) => activeBlockColor === n) &&
+                        !settings.favorite_block_colors.includes(
+                          activeBlockColor,
+                        )
+                          ? 'notes-swatch-active'
+                          : ''
+                      }`}
+                      title="Custom block color"
+                      style={
+                        {
+                          background: blockCustomHex,
+                          '--sw-on': onColor(blockCustomHex),
+                        } as React.CSSProperties
+                      }
+                    >
+                      <input
+                        type="color"
+                        aria-label="Custom block color"
+                        value={blockCustomHex}
+                        onChange={(e) => {
+                          const hex = e.target.value
+                          setBlockCustomHex(hex)
+                          setSelectedBlockColor(editor, hex)
+                          setColorsOpen(false)
+                        }}
+                      />
+                      <svg
+                        className="notes-swatch-custom-icon"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                        <path d="M12.5 5.5l2 2" />
+                      </svg>
+                    </label>
                     <button
                       type="button"
                       className="notes-swatch clear"

@@ -102,7 +102,7 @@ export function PageView({
           style={
             page.cover.startsWith('gradient:')
               ? undefined
-              : { backgroundImage: `url(${page.cover})` }
+              : { backgroundImage: `url("${page.cover}")` }
           }
         >
           <button

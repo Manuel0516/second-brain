@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
+import { FavoriteEmojiEditor } from '../../components/FavoritesEditor'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
@@ -208,6 +209,17 @@ export function GeneralSettings() {
           Manage your profile, preferences, and account data.
         </p>
       </div>
+
+      {/* Favourite emojis */}
+      <SettingsCard
+        title="Favourite emojis"
+        description="Shown first in the icon picker, used by calendar events and notes pages."
+      >
+        <FavoriteEmojiEditor
+          emojis={settings.favorite_emojis}
+          onChange={(favorite_emojis) => patch({ favorite_emojis })}
+        />
+      </SettingsCard>
 
       {/* Profile */}
       <SettingsCard

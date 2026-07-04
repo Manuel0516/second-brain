@@ -395,23 +395,25 @@ function OverviewTree({
             style={{ paddingLeft: 10 + depth * 20 }}
             onClick={() => onOpen(page.id)}
           >
-            <span className="notes-overview-icon" aria-hidden="true">
-              {page.icon || (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4 1.5h5.5L13 5v9.5H4z" />
-                  <path d="M9.5 1.5V5H13" />
-                </svg>
-              )}
-            </span>
+            {page.icon || page.type === 'folder' ? (
+              <span className="notes-overview-icon" aria-hidden="true">
+                {page.icon || (
+                  <svg
+                    className="notes-folder-icon"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M2.5 5.5a1 1 0 011-1h4l2 2h7a1 1 0 011 1v8a1 1 0 01-1 1h-13a1 1 0 01-1-1z" />
+                  </svg>
+                )}
+              </span>
+            ) : null}
             <span className="notes-overview-title">
               {page.title || 'Untitled'}
             </span>

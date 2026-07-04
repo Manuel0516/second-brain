@@ -200,6 +200,10 @@ class UserSettings(Base):
     # Notes editor
     notes_bullet_style: Mapped[str] = mapped_column(String(16), default="disc", nullable=False)
     notes_numbered_style: Mapped[str] = mapped_column(String(16), default="decimal", nullable=False)
+    favorite_text_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    favorite_highlight_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    favorite_block_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    favorite_covers: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

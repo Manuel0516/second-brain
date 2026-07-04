@@ -77,6 +77,7 @@ class BacklinkResponse(BaseModel):
     relation: str
     title: str
     icon: str | None
+    page_type: str | None = None
 
 
 class LinkedNodeResponse(BaseModel):
@@ -87,6 +88,7 @@ class LinkedNodeResponse(BaseModel):
     direction: Literal["incoming", "outgoing"]
     title: str
     icon: str | None
+    page_type: str | None = None
 
 
 class LinkCreate(BaseModel):
@@ -135,6 +137,7 @@ class SearchResultResponse(BaseModel):
     id: str
     title: str
     icon: str | None
+    page_type: str | None = None
 
 
 async def _owned_page(
@@ -156,22 +159,24 @@ async def _node_details(
     session: AsyncSession,
     *,
     include_deleted: bool = False,
-) -> tuple[str, str | None] | None:
+) -> tuple[str, str | None, str | None] | None:
     if node_type == "page":
-        query = select(Page.title, Page.icon).where(Page.id == node_id, Page.user_id == user.id)
+        query = select(Page.title, Page.icon, Page.type).where(
+            Page.id == node_id, Page.user_id == user.id
+        )
         if not include_deleted:
             query = query.where(Page.deleted_at.is_(None))
-        row = (await session.execute(query)).one_or_none()
-        return (row.title, row.icon) if row else None
+        page_row = (await session.execute(query)).one_or_none()
+        return (page_row.title, page_row.icon, page_row.type) if page_row else None
     if node_type == "event":
-        row = (
+        event_row = (
             await session.execute(
                 select(CalendarEvent.title, CalendarEvent.icon)
                 .join(Calendar)
                 .where(CalendarEvent.id == node_id, Calendar.user_id == user.id)
             )
         ).one_or_none()
-        return (row.title, row.icon) if row else None
+        return (event_row.title, event_row.icon, None) if event_row else None
     return None
 
 
@@ -494,6 +499,7 @@ async def get_backlinks(
                     relation=link.relation,
                     title=details[0],
                     icon=details[1],
+                    page_type=details[2],
                 )
             )
     return result
@@ -510,7 +516,9 @@ async def search_nodes(
         select(Page).where(Page.user_id == user.id, Page.deleted_at.is_(None))
     )
     results = [
-        SearchResultResponse(type="page", id=page.id, title=page.title, icon=page.icon)
+        SearchResultResponse(
+            type="page", id=page.id, title=page.title, icon=page.icon, page_type=page.type
+        )
         for page in pages
         if needle in f"{page.title} {_plain_text(page.content)}".casefold()
     ]
@@ -615,6 +623,7 @@ async def get_event_links(
                     direction="outgoing" if outgoing else "incoming",
                     title=details[0],
                     icon=details[1],
+                    page_type=details[2],
                 )
             )
     return result

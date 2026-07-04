@@ -131,6 +131,10 @@ One row per user, created on first write (lazy creation).
 | dim_past_events | Boolean | Whether past events render at lower opacity. |
 | notes_bullet_style | String(16) | Notes list marker: disc / circle / square / dash. |
 | notes_numbered_style | String(16) | decimal / lower-alpha / upper-alpha / lower-roman / upper-roman. |
+| favorite_text_colors | JSON | Array of hex colors saved for the notes toolbar's text color picker. |
+| favorite_highlight_colors | JSON | Array of hex colors saved for the notes toolbar's highlight picker. |
+| favorite_block_colors | JSON | Array of hex colors saved for the notes toolbar's block color picker. |
+| favorite_covers | JSON | Array of favorite cover image URLs shown first in the page cover picker. |
 
 ---
 

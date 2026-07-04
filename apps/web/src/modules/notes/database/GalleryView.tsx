@@ -28,7 +28,7 @@ export function GalleryView({
             }`}
             style={
               record.cover && !record.cover.startsWith('gradient:')
-                ? { backgroundImage: `url(${record.cover})` }
+                ? { backgroundImage: `url("${record.cover}")` }
                 : undefined
             }
             aria-hidden="true"

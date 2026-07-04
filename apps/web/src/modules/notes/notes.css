@@ -603,12 +603,8 @@
 .notes-editor .tiptap ol {
   padding-left: 1.4em;
 }
-.notes-editor .tiptap ul:not([data-type='taskList']) {
-  list-style: disc;
-}
-.notes-editor .tiptap ol {
-  list-style: decimal;
-}
+/* List marker types live in listMarkers.css (settings-driven, depth-cycled).
+   This file only owns the marker colour and spacing. */
 .notes-editor .tiptap li::marker {
   color: var(--text-tertiary);
 }
@@ -854,6 +850,60 @@
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
+/* Semantic text color — theme-safe token values for preset names. */
+.notes-editor [data-text-color='accent'] {
+  color: var(--accent);
+}
+.notes-editor [data-text-color='warm'] {
+  color: #d4a63a;
+}
+.notes-editor [data-text-color='neutral'] {
+  color: #9b9790;
+}
+.notes-editor [data-text-color='contrast'] {
+  color: #d4cfc6;
+}
+
+/* Text alignment popover — single dropdown from the align button. */
+.notes-align-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  animation: popIn 120ms ease-out both;
+}
+.notes-align-popover button {
+  min-width: 30px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.notes-align-popover button:hover,
+.notes-align-popover button[aria-selected='true'] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.notes-align-popover button[aria-selected='true'] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
 /* Highlight + block-color palette inside the selection toolbar. */
 .notes-swatch-rows {
   position: absolute;
@@ -861,9 +911,8 @@
   right: 0;
   z-index: 5;
   display: grid;
-  width: 228px;
-  gap: 10px;
-  padding: 10px;
+  gap: 0;
+  padding: 5px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
   background: var(--bg-elevated);
@@ -872,7 +921,12 @@
 }
 .notes-swatch-section {
   display: grid;
-  gap: 6px;
+  gap: 5px;
+  padding: 6px 5px;
+}
+.notes-swatch-section + .notes-swatch-section {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
 }
 .notes-swatch-label {
   color: var(--text-tertiary);
@@ -882,28 +936,29 @@
 }
 .notes-swatch-options {
   display: grid;
-  grid-template-columns: repeat(5, 28px);
-  gap: 8px;
+  grid-template-columns: repeat(6, 21px);
+  gap: 6px;
 }
 .notes-swatch {
   position: relative;
-  width: 28px;
-  height: 28px;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
   min-width: 0;
   padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-strong);
   cursor: pointer;
-  transition:
-    border-color 0.14s ease,
-    box-shadow 0.14s ease;
+  transition: transform 0.12s;
 }
 .notes-swatch:hover {
-  border-color: var(--accent);
+  transform: scale(1.12);
 }
 .notes-swatch[aria-pressed='true'] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-tint);
+  border-color: var(--bg-base);
+  box-shadow: 0 0 0 2px var(--sw-on, var(--text-primary));
 }
 .notes-swatch.mark-accent {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
@@ -929,17 +984,80 @@
 .notes-swatch.block-contrast {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
+.notes-swatch.text-accent {
+  background: var(--accent);
+}
+.notes-swatch.text-warm {
+  background: #e8c77e;
+}
+.notes-swatch.text-neutral {
+  background: #9b9790;
+}
+.notes-swatch.text-contrast {
+  background: #f0ede5;
+}
 .notes-swatch.clear {
   overflow: hidden;
-  background: transparent;
+  background: var(--bg-raised);
 }
 .notes-swatch.clear::after {
   content: '';
   position: absolute;
-  width: 36px;
-  height: 1px;
+  width: 30px;
+  height: 1.5px;
   background: var(--text-tertiary);
   transform: rotate(-45deg);
+}
+/* Custom color swatch — native <input type="color"> hidden behind a pencil
+   icon that inherits --sw-on for legibility on any background. */
+.notes-swatch-custom {
+  position: relative;
+  display: inline-grid !important;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  background: var(--accent);
+  cursor: pointer;
+  transition:
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.16s ease;
+}
+.notes-swatch-custom:hover {
+  transform: scale(1.18);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    var(--shadow-sm);
+}
+.notes-swatch-custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.notes-swatch-custom-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 15px;
+  height: 15px;
+  color: var(--sw-on, var(--text-primary));
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  opacity: 0.85;
+}
+.notes-swatch-custom:hover .notes-swatch-custom-icon {
+  opacity: 1;
+}
+.notes-swatch-active {
+  border-color: var(--bg-base);
+  box-shadow: 0 0 0 2px var(--sw-on, var(--text-primary));
 }
 
 /* Code block: language header + token-mapped lowlight colors. */
@@ -1177,7 +1295,7 @@
   animation: popIn 120ms ease-out both;
 }
 .notes-selection-toolbar button {
-  min-width: 30px;
+  min-width: 26px;
   display: grid;
   place-items: center;
   text-align: center;
@@ -1185,10 +1303,10 @@
 }
 .notes-slash-menu button,
 .notes-selection-toolbar button {
-  min-height: 32px;
+  min-height: 26px;
   padding: 6px 10px;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -1204,8 +1322,21 @@
 }
 .notes-selection-toolbar button:hover,
 .notes-selection-toolbar button[aria-pressed='true'] {
-  background: var(--bg-raised);
   color: var(--text-primary);
+}
+/* Colour swatches live inside the toolbar's popover, but must keep their
+   own circle geometry — undo the generic toolbar button sizing above. */
+.notes-selection-toolbar button.notes-swatch {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+/* Visual separator before the pencil/color button, grouping it apart. */
+.notes-toolbar-pencil {
+  margin-left: 4px;
+  border-left: 1px solid var(--border) !important;
 }
 .notes-link-popover {
   position: absolute;
@@ -1277,21 +1408,35 @@
 }
 
 /* ── Notion-style block gutter (drag handle + add) ───────────────── */
+/* Floating UI anchors the rail to each block's top-left corner
+   (placement left-start). --rail-x sets the lane: the default keeps a
+   4px gap to the text edge; headings and bullet/numbered items move a
+   full lane left so the collapse toggle (−24px…−2px) and the hanging
+   list markers stay clear of the grip. --rail-y drops the 24px rail
+   onto the centre of the block's FIRST text line (line-height 1.75). */
 .notes-block-gutter {
+  --rail-x: -4px;
+  --rail-y: 1.5px; /* (1.75 × 15.5px − 24px) / 2 */
   display: flex;
   align-items: center;
   gap: 4px;
+  transform: translate(var(--rail-x), var(--rail-y));
   transition: transform 0.15s ease;
 }
 .notes-block-gutter[data-node-type='heading'] {
-  /* Keep heading toggles and list markers in their own adjacent lane. */
-  transform: translateX(-12px);
+  --rail-x: -28px;
+  --rail-y: 11px; /* h1: 1.75 × 1.7em line box */
 }
-.notes-block-gutter:is(
-  [data-node-type='listItem'],
-  [data-node-type='taskItem']
-) {
-  transform: translateX(-12px);
+.notes-block-gutter[data-node-type='heading'][data-node-level='2'] {
+  --rail-y: 7px; /* 1.75 × 1.4em */
+}
+.notes-block-gutter[data-node-type='heading'][data-node-level='3'] {
+  --rail-y: 4px; /* 1.75 × 1.18em */
+}
+/* Bullet/numbered markers hang left of the li box — clear them.
+   Task items keep the default lane: the checkbox sits inside the box. */
+.notes-block-gutter[data-node-type='listItem'] {
+  --rail-x: -28px;
 }
 .notes-block-add,
 .notes-block-grip {
@@ -1526,6 +1671,10 @@
   color: var(--text-tertiary);
   font-size: 15px;
   line-height: 1;
+}
+.notes-folder-icon {
+  color: var(--text-primary);
+  opacity: 0.85;
 }
 .notes-overview-title {
   min-width: 0;
@@ -2205,24 +2354,14 @@
   .notes-tree-row {
     min-height: 44px;
   }
-  /* Fixed-width control rail: node changes must not resize or animate the
-     floating handle while a heading is expanded/collapsed. */
+  /* Same lanes as desktop (--rail-x/--rail-y), but the rail must not
+     animate while a heading is expanded/collapsed. */
   .notes-block-gutter {
-    transform: none;
     transition: none;
-  }
-  .notes-block-gutter[data-node-type='heading'] {
-    transform: translateX(-22px);
   }
   .notes-block-gutter[data-node-type='heading'] .notes-block-add {
     visibility: hidden;
     pointer-events: none;
-  }
-  .notes-block-gutter:is(
-    [data-node-type='listItem'],
-    [data-node-type='taskItem']
-  ) {
-    transform: none;
   }
   .notes-heading-toggle svg,
   .notes-block-gutter[data-node-type='heading'] .notes-block-grip svg {

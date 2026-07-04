@@ -75,6 +75,7 @@ describe('EventEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: '☕' }))
 
     fireEvent.click(screen.getByRole('switch', { name: 'Notes' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create new note' }))
     fireEvent.change(screen.getByLabelText('Note title'), {
       target: { value: 'Project notes' },
     })
@@ -162,6 +163,7 @@ describe('EventEditor', () => {
       target: { value: 'Planning' },
     })
     fireEvent.click(screen.getByRole('switch', { name: 'Notes' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Create new note' }))
     await waitFor(() =>
       expect(screen.getByLabelText('Folder')).toBeInTheDocument(),
     )

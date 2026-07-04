@@ -37,6 +37,10 @@ class SettingsResponse(BaseModel):
     dim_past_events: bool
     notes_bullet_style: BulletStyle
     notes_numbered_style: NumberedStyle
+    favorite_text_colors: list[str]
+    favorite_highlight_colors: list[str]
+    favorite_block_colors: list[str]
+    favorite_covers: list[str]
 
 
 class SettingsPatch(BaseModel):
@@ -54,6 +58,10 @@ class SettingsPatch(BaseModel):
     dim_past_events: bool | None = None
     notes_bullet_style: BulletStyle | None = None
     notes_numbered_style: NumberedStyle | None = None
+    favorite_text_colors: list[str] | None = Field(default=None, max_length=24)
+    favorite_highlight_colors: list[str] | None = Field(default=None, max_length=24)
+    favorite_block_colors: list[str] | None = Field(default=None, max_length=24)
+    favorite_covers: list[str] | None = Field(default=None, max_length=12)
 
     @field_validator("favorite_emojis")
     @classmethod
@@ -64,7 +72,12 @@ class SettingsPatch(BaseModel):
                     raise ValueError("Each emoji must be at most 8 characters")
         return value
 
-    @field_validator("favorite_colors")
+    @field_validator(
+        "favorite_colors",
+        "favorite_text_colors",
+        "favorite_highlight_colors",
+        "favorite_block_colors",
+    )
     @classmethod
     def validate_colors(cls, value: list[str] | None) -> list[str] | None:
         if value is not None:
@@ -74,6 +87,15 @@ class SettingsPatch(BaseModel):
             for color in value:
                 if not pattern.match(color):
                     raise ValueError(f"Invalid hex color: {color}")
+        return value
+
+    @field_validator("favorite_covers")
+    @classmethod
+    def validate_covers(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None:
+            for cover in value:
+                if not cover or len(cover) > 2048:
+                    raise ValueError("Cover URL must be 1-2048 characters")
         return value
 
 
@@ -124,6 +146,10 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         dim_past_events=s.dim_past_events,
         notes_bullet_style=s.notes_bullet_style,
         notes_numbered_style=s.notes_numbered_style,
+        favorite_text_colors=s.favorite_text_colors,
+        favorite_highlight_colors=s.favorite_highlight_colors,
+        favorite_block_colors=s.favorite_block_colors,
+        favorite_covers=s.favorite_covers,
     )
 
 
