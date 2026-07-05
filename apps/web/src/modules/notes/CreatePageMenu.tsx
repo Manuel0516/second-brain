@@ -30,6 +30,7 @@ export function CreatePageMenu({
       anchorRef={anchorRef}
       open={open}
       onClose={onClose}
+      align="end"
       className="notes-create-menu"
       role="menu"
       ariaLabel="New page type"

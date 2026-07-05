@@ -1,9 +1,11 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
+from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
@@ -48,9 +50,15 @@ class ExerciseResponse(BaseModel):
     updated_at: datetime
 
 
+SessionStatus = Literal["planned", "active", "completed"]
+
+
 class SessionCreate(BaseModel):
     date: datetime
     type: str = Field(min_length=1, max_length=255)
+    status: SessionStatus = "completed"
+    scheduled_at: datetime | None = None
+    plan: list[str] | None = Field(default=None, max_length=50)
     notes: dict[str, object] | None = Field(
         default=None, description="Tiptap-compatible block JSON"
     )
@@ -59,6 +67,9 @@ class SessionCreate(BaseModel):
 class SessionPatch(BaseModel):
     date: datetime | None = None
     type: str | None = Field(default=None, min_length=1, max_length=255)
+    status: SessionStatus | None = None
+    scheduled_at: datetime | None = None
+    plan: list[str] | None = Field(default=None, max_length=50)
     notes: dict[str, object] | None = None
 
 
@@ -69,6 +80,9 @@ class SessionResponse(BaseModel):
     user_id: str
     date: datetime
     type: str
+    status: str
+    scheduled_at: datetime | None
+    plan: list[str] | None
     notes: dict[str, object]
     created_at: datetime
     updated_at: datetime
@@ -77,10 +91,15 @@ class SessionResponse(BaseModel):
 class SetEntryCreate(BaseModel):
     exercise_id: str
     set_number: int = Field(ge=1)
-    reps: int = Field(ge=0)
-    # ponytail: DB stores weight as Integer; Pydantic accepts int for consistency.
-    weight: int | None = Field(default=None, ge=0)
+    # Nullable since 018: cardio sets have no rep count
+    reps: int | None = Field(default=None, ge=0)
+    weight: float | None = Field(default=None, ge=0)
+    # Cardio fields — pace is derived (duration/distance), never stored
+    distance_km: float | None = Field(default=None, gt=0)
+    duration_min: float | None = Field(default=None, gt=0)
     rpe: int | None = Field(default=None, ge=1, le=10)
+    # Subjective per-set rating: 1 (dying/too tired) .. 5 (felt great)
+    feeling: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=500)
 
 
@@ -88,9 +107,11 @@ class SetEntryPatch(BaseModel):
     exercise_id: str | None = None
     set_number: int | None = Field(default=None, ge=1)
     reps: int | None = Field(default=None, ge=0)
-    # ponytail: DB stores weight as Integer; Pydantic accepts int for consistency.
-    weight: int | None = Field(default=None, ge=0)
+    weight: float | None = Field(default=None, ge=0)
+    distance_km: float | None = Field(default=None, gt=0)
+    duration_min: float | None = Field(default=None, gt=0)
     rpe: int | None = Field(default=None, ge=1, le=10)
+    feeling: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=500)
 
 
@@ -101,9 +122,12 @@ class SetEntryResponse(BaseModel):
     workout_session_id: str
     exercise_id: str
     set_number: int
-    reps: int
-    weight: int | None
+    reps: int | None
+    weight: float | None
+    distance_km: float | None
+    duration_min: float | None
     rpe: int | None
+    feeling: int | None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -166,16 +190,36 @@ class GoalResponse(BaseModel):
 
 
 class ExerciseStats(BaseModel):
+    """Per-exercise stats — `category` tells the frontend which field set applies."""
+
+    category: Literal["strength", "cardio"]
     exercise: ExerciseResponse
-    personal_records: list[dict[str, object]]
-    estimated_1rm: float | None
-    volume_by_week: list[dict[str, object]]
-    progression: list[dict[str, object]]
+    # Strength fields
+    personal_records: list[dict[str, object]] = Field(default_factory=list)
+    estimated_1rm: float | None = None
+    volume_by_week: list[dict[str, object]] = Field(default_factory=list)
+    progression: list[dict[str, object]] = Field(default_factory=list)
+    # Cardio fields — pace = duration_min / distance_km
+    total_distance_km: float | None = None
+    total_duration_min: float | None = None
+    best_pace_min_per_km: float | None = None
+    distance_over_time: list[dict[str, object]] = Field(default_factory=list)
+    pace_over_time: list[dict[str, object]] = Field(default_factory=list)
+    weekly: list[dict[str, object]] = Field(default_factory=list)
 
 
 class BodyWeightStats(BaseModel):
     metrics: list[dict[str, object]]
     trend: float | None
+
+
+class OverviewStats(BaseModel):
+    """Payload for the Overview landing graphs (Phase F3)."""
+
+    weight_series: list[dict[str, object]]  # [{date, weight}]
+    top_exercise: dict[str, object] | None  # {exercise: {...}, progression: [...]}
+    feeling_series: list[dict[str, object]]  # [{date, feeling}] avg per session
+    sessions_last_30_days: int
 
 
 # ── Helper Functions ────────────────────────────────────────────────────
@@ -392,7 +436,11 @@ async def exercise_stats(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> ExerciseStats:
-    """PR history, estimated 1RM, weekly volume, and progression for an exercise."""
+    """PR history, estimated 1RM, weekly volume, and progression for an exercise.
+
+    Cardio exercises get a distance/pace payload instead — `category` in the
+    response tells the frontend which field set applies.
+    """
     exercise = await _owned_exercise(exercise_id, user, session)
 
     cutoff = datetime.now(UTC) - timedelta(days=days)
@@ -405,11 +453,15 @@ async def exercise_stats(
             .where(
                 SetEntry.exercise_id == exercise_id,
                 WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
                 WorkoutSession.date >= cutoff,
             )
             .order_by(WorkoutSession.date.asc(), SetEntry.set_number.asc())
         )
     ).all()
+
+    if exercise.category == "cardio":
+        return _cardio_stats(exercise, rows)
 
     # ── Personal records: max weight per rep count ──
     reps_map: dict[int, dict[str, object]] = {}
@@ -473,11 +525,62 @@ async def exercise_stats(
     progression = sorted(day_map.values(), key=lambda x: str(x["date"]))
 
     return ExerciseStats(
+        category="strength",
         exercise=ExerciseResponse.model_validate(exercise),
         personal_records=prs,
         estimated_1rm=best_1rm,
         volume_by_week=volume_data,
         progression=progression,
+    )
+
+
+def _cardio_stats(
+    exercise: Exercise, rows: Sequence[Row[tuple[SetEntry, datetime]]]
+) -> ExerciseStats:
+    """Distance/pace payload for cardio exercises (pace = duration_min / distance_km)."""
+    total_distance = 0.0
+    total_duration = 0.0
+    best_pace: float | None = None
+    distance_over_time: list[dict[str, object]] = []
+    pace_over_time: list[dict[str, object]] = []
+    week_map: dict[str, dict[str, object]] = {}
+
+    for entry, date in rows:
+        distance = entry.distance_km or 0.0
+        duration = entry.duration_min or 0.0
+        total_distance += distance
+        total_duration += duration
+        date_str = date.isoformat()[:10] if date else ""
+
+        if distance > 0:
+            distance_over_time.append({"date": date_str, "distance_km": distance})
+        if distance > 0 and duration > 0:
+            pace = round(duration / distance, 2)
+            pace_over_time.append({"date": date_str, "pace": pace})
+            if best_pace is None or pace < best_pace:
+                best_pace = pace
+
+        if date is not None:
+            iso = date.isocalendar()
+            week_key = f"{iso[0]}-W{iso[1]:02d}"
+            if week_key not in week_map:
+                week_map[week_key] = {"week": week_key, "distance_km": 0.0, "duration_min": 0.0}
+            week_map[week_key]["distance_km"] = (
+                float(week_map[week_key]["distance_km"]) + distance  # type: ignore[arg-type]
+            )
+            week_map[week_key]["duration_min"] = (
+                float(week_map[week_key]["duration_min"]) + duration  # type: ignore[arg-type]
+            )
+
+    return ExerciseStats(
+        category="cardio",
+        exercise=ExerciseResponse.model_validate(exercise),
+        total_distance_km=round(total_distance, 2),
+        total_duration_min=round(total_duration, 1),
+        best_pace_min_per_km=best_pace,
+        distance_over_time=distance_over_time,
+        pace_over_time=pace_over_time,
+        weekly=sorted(week_map.values(), key=lambda x: str(x["week"])),
     )
 
 
@@ -519,6 +622,125 @@ async def body_weight_stats(
         trend = round(sum(weights) / len(weights), 1)
 
     return BodyWeightStats(metrics=metric_list, trend=trend)
+
+
+@router.get("/fitness/stats/overview", response_model=OverviewStats)
+async def overview_stats(
+    days: int = Query(default=90, ge=7, le=365),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> OverviewStats:
+    """Highlight graphs for the Overview landing tab (Phase F3).
+
+    One call feeds every landing graph so the tab renders with a single
+    round-trip: body-weight series, top-exercise progression, feeling trend.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # ── Body weight series ──
+    metrics = (
+        await session.scalars(
+            select(BodyMetric)
+            .where(
+                BodyMetric.user_id == user.id,
+                BodyMetric.date >= cutoff,
+                BodyMetric.weight.is_not(None),
+            )
+            .order_by(BodyMetric.date.asc())
+        )
+    ).all()
+    weight_series: list[dict[str, object]] = [
+        {"date": m.date.isoformat()[:10], "weight": m.weight} for m in metrics
+    ]
+
+    # ── Top exercise (most sets logged in window) + its progression ──
+    top_row = (
+        await session.execute(
+            select(SetEntry.exercise_id, func.count(SetEntry.id).label("n"))
+            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+            .where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= cutoff,
+            )
+            .group_by(SetEntry.exercise_id)
+            .order_by(func.count(SetEntry.id).desc())
+            .limit(1)
+        )
+    ).first()
+
+    top_exercise: dict[str, object] | None = None
+    if top_row is not None:
+        exercise = await session.get(Exercise, top_row.exercise_id)
+        if exercise is not None:
+            prog_rows = (
+                await session.execute(
+                    select(
+                        WorkoutSession.date,
+                        func.max(SetEntry.weight).label("max_weight"),
+                        func.max(SetEntry.reps).label("max_reps"),
+                    )
+                    .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+                    .where(
+                        WorkoutSession.user_id == user.id,
+                        WorkoutSession.status == "completed",
+                        WorkoutSession.date >= cutoff,
+                        SetEntry.exercise_id == exercise.id,
+                    )
+                    .group_by(WorkoutSession.date)
+                    .order_by(WorkoutSession.date.asc())
+                )
+            ).all()
+            top_exercise = {
+                "exercise": ExerciseResponse.model_validate(exercise).model_dump(),
+                "progression": [
+                    {
+                        "date": row.date.isoformat()[:10],
+                        "max_weight": row.max_weight,
+                        "max_reps": row.max_reps,
+                    }
+                    for row in prog_rows
+                ],
+            }
+
+    # ── Feeling trend (avg per session date) ──
+    feeling_rows = (
+        await session.execute(
+            select(WorkoutSession.date, func.avg(SetEntry.feeling).label("feeling"))
+            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+            .where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= cutoff,
+                SetEntry.feeling.is_not(None),
+            )
+            .group_by(WorkoutSession.date)
+            .order_by(WorkoutSession.date.asc())
+        )
+    ).all()
+    feeling_series: list[dict[str, object]] = [
+        {"date": row.date.isoformat()[:10], "feeling": round(float(row.feeling), 2)}
+        for row in feeling_rows
+    ]
+
+    # ── Session count (fixed 30-day window, independent of `days`) ──
+    month_cutoff = datetime.now(UTC) - timedelta(days=30)
+    session_count = (
+        await session.scalar(
+            select(func.count(WorkoutSession.id)).where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= month_cutoff,
+            )
+        )
+    ) or 0
+
+    return OverviewStats(
+        weight_series=weight_series,
+        top_exercise=top_exercise,
+        feeling_series=feeling_series,
+        sessions_last_30_days=session_count,
+    )
 
 
 # ── Exercise Endpoints ──────────────────────────────────────────────────
@@ -589,13 +811,18 @@ async def delete_exercise(
 async def list_sessions(
     from_date: datetime | None = Query(None),
     to_date: datetime | None = Query(None),
+    status_filter: SessionStatus | None = Query(None, alias="status"),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[WorkoutSession]:
     query = select(WorkoutSession).where(WorkoutSession.user_id == user.id)
+    if status_filter is not None:
+        query = query.where(WorkoutSession.status == status_filter)
     if from_date is not None:
         query = query.where(WorkoutSession.date >= from_date)
-    else:
+    elif status_filter != "planned":
+        # Planned sessions are returned regardless of date; everything else
+        # defaults to the trailing 30-day window.
         query = query.where(WorkoutSession.date >= datetime.now(UTC) - timedelta(days=30))
     if to_date is not None:
         query = query.where(WorkoutSession.date <= to_date)
@@ -615,32 +842,38 @@ async def create_session(
         user_id=user.id,
         date=data.date,
         type=data.type,
+        status=data.status,
+        scheduled_at=data.scheduled_at,
         notes=data.notes or {},
     )
     session.add(ws)
     await session.flush()
 
-    # ── Calendar integration ──
-    fitness_cal = await _find_or_create_fitness_calendar(user, session)
-    start_of_day = datetime(data.date.year, data.date.month, data.date.day, tzinfo=UTC)
-    event = CalendarEvent(
-        calendar_id=fitness_cal.id,
-        title=f"Workout: {data.type}",
-        start_at=start_of_day,
-        end_at=start_of_day + timedelta(hours=1),
-        created_by="system:fitness",
-    )
-    session.add(event)
-    await session.flush()
+    # ── Calendar integration (completed sessions only) ──
+    # Planned sessions originate from calendar events (see the calendar.py
+    # hook), so creating an event here would produce duplicates; active
+    # sessions get their event when they are completed.
+    if data.status == "completed":
+        fitness_cal = await _find_or_create_fitness_calendar(user, session)
+        start_of_day = datetime(data.date.year, data.date.month, data.date.day, tzinfo=UTC)
+        event = CalendarEvent(
+            calendar_id=fitness_cal.id,
+            title=f"Workout: {data.type}",
+            start_at=start_of_day,
+            end_at=start_of_day + timedelta(hours=1),
+            created_by="system:fitness",
+        )
+        session.add(event)
+        await session.flush()
 
-    link = Link(
-        source_type="event",
-        source_id=event.id,
-        target_type="workout_session",
-        target_id=ws.id,
-        relation="logged_from",
-    )
-    session.add(link)
+        link = Link(
+            source_type="event",
+            source_id=event.id,
+            target_type="workout_session",
+            target_id=ws.id,
+            relation="logged_from",
+        )
+        session.add(link)
 
     await session.commit()
     await session.refresh(ws)
@@ -738,6 +971,8 @@ async def create_set_entry(
         reps=data.reps,
         weight=data.weight,
         rpe=data.rpe,
+        distance_km=data.distance_km,
+        duration_min=data.duration_min,
         notes=data.notes,
     )
     session.add(entry)

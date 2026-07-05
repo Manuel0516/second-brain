@@ -279,7 +279,7 @@ export function Calendar() {
         animation: 'fadeUp .4s cubic-bezier(.16,1,.3,1) both',
       }}
     >
-      {/* ── Rail ── */}
+      {/* ── Rail (always visible on desktop, toggles with sidebar on mobile) ── */}
       {(!isMobile || sidebarOpen) && (
         <AppRail active="calendar" onNavigate={navigate} />
       )}
@@ -325,211 +325,330 @@ export function Calendar() {
             style={{
               ['--enter-delay' as string]: '50ms',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '18px 28px 14px',
+              padding: isMobile ? '12px 14px' : '18px 28px 14px',
               borderBottom: '1px solid var(--border)',
               flexShrink: 0,
-              gap: 12,
-              flexWrap: 'wrap',
               animation: 'fadeDown .35s cubic-bezier(.16,1,.3,1) both',
             }}
           >
-            {/* Date nav */}
             <div
-              className="cal-topbar-nav"
-              style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+              style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'stretch' : 'center',
+                justifyContent: isMobile ? 'center' : 'space-between',
+                gap: 12,
+                width: '100%',
+                position: isMobile ? 'relative' : undefined,
+              }}
             >
+              {/* Date nav */}
+              <div
+                className="cal-topbar-nav"
+                style={{
+                  display: 'flex',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  alignItems: 'center',
+                  gap: isMobile ? 10 : 12,
+                  flex: isMobile ? '1 1 100%' : undefined,
+                }}
+              >
+                {isMobile ? (
+                  <>
+                    {/* Row 1: toggle absolute left + centered title */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%',
+                        position: 'relative',
+                      }}
+                    >
+                      <button
+                        onClick={() => setSidebarOpen((open) => !open)}
+                        aria-label={
+                          sidebarOpen ? 'Hide navigation' : 'Show navigation'
+                        }
+                        aria-pressed={sidebarOpen}
+                        style={{
+                          ...navBtnStyle,
+                          position: 'absolute',
+                          left: 0,
+                        }}
+                      >
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                          <path d="M7.5 3.5v13" />
+                        </svg>
+                      </button>
+                      <h2
+                        style={{
+                          fontSize: 17,
+                          fontWeight: 700,
+                          letterSpacing: '-.01em',
+                          color: 'var(--text-primary)',
+                          margin: 0,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {formatTitle(view, cursor, days, isMobile)}
+                      </h2>
+                    </div>
+                    {/* Row 2: nav arrows + Today button */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <button
+                        style={navBtnStyle}
+                        onClick={() => shift(-1)}
+                        aria-label="Previous"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        onClick={goToday}
+                        style={{
+                          height: 26,
+                          padding: '0 10px',
+                          background:
+                            'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
+                          border: 'none',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          transition: 'background .15s',
+                        }}
+                      >
+                        Today
+                      </button>
+                      <button
+                        style={navBtnStyle}
+                        onClick={() => shift(1)}
+                        aria-label="Next"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setSidebarOpen((open) => !open)}
+                      aria-label={
+                        sidebarOpen ? 'Hide navigation' : 'Show navigation'
+                      }
+                      aria-pressed={sidebarOpen}
+                      style={navBtnStyle}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = 'var(--bg-raised)')
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background =
+                          'var(--bg-elevated)')
+                      }
+                    >
+                      <svg
+                        width="15"
+                        height="15"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                        <path d="M7.5 3.5v13" />
+                      </svg>
+                    </button>
+                    <h2
+                      style={{
+                        fontSize: 17,
+                        fontWeight: 700,
+                        letterSpacing: '-.01em',
+                        color: 'var(--text-primary)',
+                        margin: 0,
+                      }}
+                    >
+                      {formatTitle(view, cursor, days, isMobile)}
+                    </h2>
+                    <div style={{ display: 'flex', gap: 2 }}>
+                      <button
+                        style={navBtnStyle}
+                        onClick={() => shift(-1)}
+                        aria-label="Previous"
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background =
+                            'var(--bg-raised)')
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background =
+                            'var(--bg-elevated)')
+                        }
+                      >
+                        ‹
+                      </button>
+                      <button
+                        style={navBtnStyle}
+                        onClick={() => shift(1)}
+                        aria-label="Next"
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background =
+                            'var(--bg-raised)')
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background =
+                            'var(--bg-elevated)')
+                        }
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <button
+                      onClick={goToday}
+                      style={{
+                        height: 26,
+                        padding: '0 10px',
+                        background:
+                          'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
+                        border: 'none',
+                        borderRadius: 6,
+                        fontSize: 11.5,
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        transition: 'background .15s',
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background =
+                          'color-mix(in srgb, var(--text-tertiary) 18%, transparent)')
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background =
+                          'color-mix(in srgb, var(--text-tertiary) 12%, transparent)')
+                      }
+                    >
+                      Today
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* View pills */}
+              <div
+                style={{
+                  position: 'relative',
+                  display: 'flex',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: 3,
+                  alignSelf: isMobile ? 'center' : undefined,
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 3,
+                    left: 3 + VIEWS.indexOf(view) * PILL_WIDTH,
+                    width: PILL_WIDTH,
+                    height: 'calc(100% - 6px)',
+                    background: 'var(--bg-raised)',
+                    borderRadius: 6,
+                    transition:
+                      'left .22s cubic-bezier(.16,1,.3,1), width .22s cubic-bezier(.16,1,.3,1)',
+                    zIndex: 0,
+                  }}
+                />
+                {VIEWS.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      navDir.current = VIEWS.indexOf(v) - VIEWS.indexOf(view)
+                      animateNav.current = true
+                      setView(v)
+                    }}
+                    style={{
+                      position: 'relative',
+                      zIndex: 1,
+                      width: PILL_WIDTH,
+                      padding: '5px 0',
+                      border: 'none',
+                      background: 'transparent',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      textTransform: 'capitalize',
+                      cursor: 'pointer',
+                      transition: 'color .2s',
+                      color:
+                        view === v
+                          ? 'var(--text-primary)'
+                          : 'var(--text-tertiary)',
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              {/* New event */}
               <button
-                onClick={() => setSidebarOpen((open) => !open)}
-                aria-label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
-                aria-pressed={sidebarOpen}
-                style={navBtnStyle}
+                aria-label="New event"
+                onClick={() => createAt(new Date())}
+                style={{
+                  ...(isMobile
+                    ? { position: 'absolute', top: 2, right: 0 }
+                    : { flexShrink: 0 }),
+                  width: 34,
+                  height: 34,
+                  background: 'var(--accent-tint)',
+                  border: '1px solid var(--accent-tint-border)',
+                  borderRadius: 8,
+                  color: 'var(--accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'background .15s',
+                  zIndex: 4,
+                }}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = 'var(--bg-raised)')
+                  (e.currentTarget.style.background =
+                    'color-mix(in srgb, var(--accent) 18%, transparent)')
                 }
                 onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'var(--bg-elevated)')
+                  (e.currentTarget.style.background = 'var(--accent-tint)')
                 }
               >
                 <svg
-                  width="15"
-                  height="15"
+                  width="14"
+                  height="14"
                   viewBox="0 0 20 20"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.6"
+                  strokeWidth="2"
                   strokeLinecap="round"
-                  strokeLinejoin="round"
                 >
-                  <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
-                  <path d="M7.5 3.5v13" />
+                  <path d="M10 4v12M4 10h12" />
                 </svg>
               </button>
-              <h2
-                style={{
-                  fontSize: 17,
-                  fontWeight: 700,
-                  letterSpacing: '-.01em',
-                  color: 'var(--text-primary)',
-                  margin: 0,
-                }}
-              >
-                {formatTitle(view, cursor, days, isMobile)}
-              </h2>
-              <div style={{ display: 'flex', gap: 2 }}>
-                <button
-                  style={navBtnStyle}
-                  onClick={() => shift(-1)}
-                  aria-label="Previous"
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = 'var(--bg-raised)')
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = 'var(--bg-elevated)')
-                  }
-                >
-                  ‹
-                </button>
-                <button
-                  style={navBtnStyle}
-                  onClick={() => shift(1)}
-                  aria-label="Next"
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = 'var(--bg-raised)')
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = 'var(--bg-elevated)')
-                  }
-                >
-                  ›
-                </button>
-              </div>
-              <button
-                onClick={goToday}
-                style={{
-                  height: 26,
-                  padding: '0 10px',
-                  background:
-                    'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
-                  border: 'none',
-                  borderRadius: 6,
-                  fontSize: 11.5,
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'background .15s',
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background =
-                    'color-mix(in srgb, var(--text-tertiary) 18%, transparent)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background =
-                    'color-mix(in srgb, var(--text-tertiary) 12%, transparent)')
-                }
-              >
-                Today
-              </button>
             </div>
-
-            {/* View pills */}
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: 3,
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: 3 + VIEWS.indexOf(view) * PILL_WIDTH,
-                  width: PILL_WIDTH,
-                  height: 'calc(100% - 6px)',
-                  background: 'var(--bg-raised)',
-                  borderRadius: 6,
-                  transition:
-                    'left .22s cubic-bezier(.16,1,.3,1), width .22s cubic-bezier(.16,1,.3,1)',
-                  zIndex: 0,
-                }}
-              />
-              {VIEWS.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => {
-                    navDir.current = VIEWS.indexOf(v) - VIEWS.indexOf(view)
-                    animateNav.current = true
-                    setView(v)
-                  }}
-                  style={{
-                    position: 'relative',
-                    zIndex: 1,
-                    width: PILL_WIDTH,
-                    padding: '5px 0',
-                    border: 'none',
-                    background: 'transparent',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    textTransform: 'capitalize',
-                    cursor: 'pointer',
-                    transition: 'color .2s',
-                    color:
-                      view === v
-                        ? 'var(--text-primary)'
-                        : 'var(--text-tertiary)',
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            {/* New event */}
-            <button
-              className="cal-new-event"
-              aria-label="New event"
-              onClick={() => createAt(new Date())}
-              style={{
-                height: 34,
-                padding: '0 14px',
-                background: 'var(--accent-tint)',
-                border: '1px solid var(--accent-tint-border)',
-                borderRadius: 8,
-                color: 'var(--accent)',
-                fontSize: 12.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                cursor: 'pointer',
-                transition: 'background .15s',
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background =
-                  'color-mix(in srgb, var(--accent) 18%, transparent)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = 'var(--accent-tint)')
-              }
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M10 4v12M4 10h12" />
-              </svg>
-              <span className="cal-new-event-label">New event</span>
-            </button>
           </div>
 
           {/* View body */}
@@ -639,6 +758,9 @@ export function Calendar() {
           }}
           onSaved={saved}
           onOpenNote={setOpenNotePageId}
+          onOpenFitness={(sessionId) =>
+            navigate(`/fitness?session=${sessionId}`)
+          }
           onDraftChange={setDraftPreview}
         />
       )}

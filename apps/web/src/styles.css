@@ -34,6 +34,13 @@
   --accent-tint: rgba(34, 211, 238, 0.12);
   --accent-tint-border: rgba(34, 211, 238, 0.15);
 
+  /* workout feeling scale: difficult -> excellent */
+  --feeling-1: #e5484d;
+  --feeling-2: #e5732a;
+  --feeling-3: #d9b13b;
+  --feeling-4: #8fbf4d;
+  --feeling-5: #46a758;
+
   /* shadows */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -60,6 +67,11 @@
   --accent: #0c8aa3;
   --accent-tint: rgba(12, 138, 163, 0.1);
   --accent-tint-border: rgba(12, 138, 163, 0.2);
+  --feeling-1: #c73e43;
+  --feeling-2: #c65f20;
+  --feeling-3: #a77e08;
+  --feeling-4: #628d28;
+  --feeling-5: #2e873f;
   --shadow-sm: 0 2px 8px rgba(20, 18, 30, 0.08);
   --shadow-md: 0 4px 16px rgba(20, 18, 30, 0.08);
 }
@@ -80,6 +92,11 @@
     --accent: #0c8aa3;
     --accent-tint: rgba(12, 138, 163, 0.1);
     --accent-tint-border: rgba(12, 138, 163, 0.2);
+    --feeling-1: #c73e43;
+    --feeling-2: #c65f20;
+    --feeling-3: #a77e08;
+    --feeling-4: #628d28;
+    --feeling-5: #2e873f;
     --shadow-sm: 0 2px 8px rgba(20, 18, 30, 0.08);
     --shadow-md: 0 4px 16px rgba(20, 18, 30, 0.08);
   }
@@ -916,7 +933,7 @@ input[type='color'] {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: grab;
+  cursor: pointer;
   touch-action: none;
 }
 .allday-event:active {
@@ -2540,23 +2557,9 @@ input[type='color'] {
     grid-template-columns: 1fr;
   }
 
-  /* Topbar: center the rows and declutter on small screens. */
+  /* Topbar compact padding only — layout is handled by component inline styles. */
   .cal-topbar {
-    justify-content: center !important;
-    gap: 8px !important;
     padding: 12px 14px !important;
-  }
-  .cal-topbar-nav {
-    flex: 1 1 100%;
-    justify-content: center;
-  }
-  .cal-new-event-label {
-    display: none;
-  }
-  .cal-new-event {
-    width: 36px !important;
-    padding: 0 !important;
-    gap: 0 !important;
   }
 }
 
@@ -2645,6 +2648,14 @@ input[type='color'] {
 .event-linked-list {
   display: grid;
   gap: 6px;
+}
+.event-linked-empty {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text-tertiary);
+  font: 400 12px var(--font-ui);
+  line-height: 1.5;
+  text-align: center;
 }
 .event-linked-item {
   min-height: 40px;
@@ -2855,4 +2866,49 @@ input[type='color'] {
 .dropdown-option.active {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* ── Event editor: fitness workout-type cards (Phase 4 fitness plan) ── */
+.type-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.type-card {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.type-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+}
+.type-card.active {
+  border-color: var(--accent-tint-border);
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+.type-card svg {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+.type-card.active svg {
+  opacity: 1;
+}
+.event-editor textarea.workout-notes {
+  min-height: 52px;
+  height: 52px;
 }

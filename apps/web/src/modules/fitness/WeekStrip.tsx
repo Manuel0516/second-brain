@@ -4,6 +4,8 @@ export interface WeekDay {
   isToday: boolean
   hasSession: boolean
   sessionType: string | null
+  /** Status of the day's session, if any — drives the WeekStrip badge. */
+  sessionStatus: 'completed' | 'planned' | 'active' | null
   hasEvent: boolean
 }
 
@@ -16,8 +18,12 @@ export function WeekStrip({ weekDays }: Props) {
     <div style={{ display: 'flex', gap: '6px', marginBottom: '28px' }}>
       {weekDays.map((d) => {
         const isToday = d.isToday
-        const isDone = d.hasSession
-        const hasPlanned = d.hasEvent && !d.hasSession
+        const isDone = d.sessionStatus === 'completed'
+        const hasPlanned =
+          !isDone &&
+          (d.sessionStatus === 'planned' ||
+            d.sessionStatus === 'active' ||
+            d.hasEvent)
 
         // Base colors by state
         let bg: string
@@ -51,10 +57,10 @@ export function WeekStrip({ weekDays }: Props) {
           opacity = isToday ? 1 : 0.45
         }
 
-        const type = d.hasSession
+        const type = isDone
           ? d.sessionType
-          : d.hasEvent
-            ? 'Planned'
+          : hasPlanned
+            ? d.sessionType || 'Planned'
             : 'Rest'
 
         return (

@@ -7,6 +7,40 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0090](0090-fitness-history-set-responsive-layout.md) | Fitness history edit set row responsive layout | 2026-07-06 | accepted |
+| [0089](0089-logpast-set-title-font-and-center-add-button.md) | LogPastModal set title font and center Add Set button | 2026-07-06 | accepted |
+| [0088](0088-exercisestats-confirmdialog.md) | ExerciseStats replace window.confirm with ConfirmDialog | 2026-07-06 | accepted |
+| [0087](0087-cardio-tiles-stack-mobile.md) | Cardio stat tiles stack vertically on mobile | 2026-07-06 | accepted |
+| [0086](0086-cardio-skip-rest-timer.md) | Cardio exercises skip rest timer in live session | 2026-07-06 | accepted |
+| [0085](0085-logpast-set-row-alignment.md) | LogPastModal set row alignment fix | 2026-07-06 | accepted |
+| [0084](0084-fitness-mobile-css-refinements.md) | Fitness mobile CSS refinements (stat tiles + history cards) | 2026-07-06 | accepted |
+| [0083](0083-logpast-modal-ux-overhaul.md) | LogPastModal UX overhaul: card-based flow | 2026-07-06 | accepted |
+| [0082](0082-live-row-css-polish.md) | CSS polish: center feeling dots, shorten header row | 2026-07-05 | accepted |
+| [0081](0081-cardio-default-1-set.md) | Cardio exercises default to 1 set | 2026-07-05 | accepted |
+| [0080](0080-exercisestats-chart-threshold-fix.md) | ExerciseStats chart threshold fix | 2026-07-05 | accepted |
+| [0079](0079-fit-live-row-polish.md) | Fit live row polish (CSS refinement) | 2026-07-05 | accepted |
+| [0078](0078-stats-exercise-cardio-strength-split.md) | Stats tab exercise list split into Cardio/Strength card grids | 2026-07-05 | accepted |
+| [0077](0077-sessionwizard-exercise-card-grid.md) | SessionWizard exercise card grid | 2026-07-05 | accepted |
+| [0076](0076-cardio-logpast-and-update-fix.md) | Cardio LogPast modal support + updateSetEntry cardio fields | 2026-07-05 | accepted |
+| [0075](0075-explicit-exercise-category-picker.md) | Explicit exercise category picker and visual category badges | 2026-07-05 | accepted |
+| [0074](0074-fitness-connection-icons-and-notes.md) | Fitness connection icons and notes | 2026-07-05 | accepted |
+| [0073](0073-linked-note-controls-follow-toggle.md) | Linked note controls follow toggle | 2026-07-05 | accepted |
+| [0072](0072-workout-link-dumbbell-icon.md) | Workout link dumbbell icon | 2026-07-05 | accepted |
+| [0071](0071-fitness-page-load-guard.md) | Fitness page load guard | 2026-07-05 | accepted |
+| [0069](0069-fit-live-set-redesign.md) | Live set card redesign (CSS grid, JSX restructure, responsive) | 2026-07-05 | accepted |
+| [0068](0068-fitness-topbar-calendar-parity.md) | Fitness topbar calendar parity | 2026-07-05 | accepted |
+| [0067](0067-eventeditor-fitness-type-cards.md) | EventEditor fitness type cards + workout-session linking | 2026-07-05 | accepted |
+| [0066](0066-fitness-planned-sessions-cardio-overhaul.md) | Fitness planned sessions + cardio overhaul (migration 018, lifecycle, calendar hook, UI rework) | 2026-07-05 | accepted |
+| [0065](0065-restore-event-connection-cards.md) | Restore event connection cards | 2026-07-05 | accepted |
+| [0064](0064-hide-fitness-card-in-event-edit.md) | Hide Fitness card in event edit | 2026-07-05 | accepted |
+| [0063](0063-planned-workout-link-rollback.md) | Planned workout link rollback | 2026-07-05 | accepted |
+| [0062](0062-workout-history-live-session-and-event-links.md) | Workout history, live session, and event links | 2026-07-05 | accepted |
+| [0061](0061-all-day-event-click-fix.md) | All-day event click fix + cursor (pointer on hover, grabbing on hold) | 2026-07-05 | accepted |
+| [0060](0060-body-metric-split-and-calendar-fixes.md) | BodyMetricLog split, Calendar new-event pin, exercise buttons center | 2026-07-05 | accepted |
+| [0059](0059-fitness-header-center.md) | Mobile topbar layouts (Fitness, Calendar, Notes) | 2026-07-05 | accepted |
+| [0058](0058-navbar-rail-consistency-fix.md) | Navbar/AppRail consistency fix (Calendar + Notes on mobile) | 2026-07-05 | accepted |
+| [0057](0057-fitness-f3-ui-rework.md) | Fitness F3 UI rework | 2026-07-05 | accepted |
+| [0056](0056-fitness-ui-fixes.md) | Fitness UI fixes: AppRail, red crosses, chart hover, LogPastModal set entries | 2026-07-05 | accepted |
 | [0055](0055-fitness-post-f2-fixes.md) | Fitness post-F2 fixes: deep session editing, goal UI, stats, sidebar toggle, pagination | 2026-07-04 | accepted |
 | [0054](0054-opencode-pro-agent-team.md) | OpenCode Pro agent team configuration | 2026-07-04 | accepted |
 | [0053](0053-fitness-core.md) | Fitness module (Phases F1 + F1.1 + F2): backend, UI, live data, goals, stats, recharts | 2026-07-04 | accepted |

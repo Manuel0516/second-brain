@@ -1,14 +1,44 @@
 import { useEffect, useState } from 'react'
-import type { WorkoutSession, SetEntry } from './api'
+import { Dropdown } from '../../components/Dropdown'
+import type { SetEntry, WorkoutSession } from './api'
 import {
+  createSetEntry,
   deleteSession,
+  deleteSetEntry,
+  fetchExercises,
   fetchSessions,
   fetchSetEntries,
   updateSession,
   updateSetEntry,
-  deleteSetEntry,
-  fetchExercises,
 } from './api'
+
+const FEELING_LABELS = ['Dying', 'Rough', 'OK', 'Good', 'Great']
+
+function noteText(notes: Record<string, unknown>): string {
+  const content = Array.isArray(notes.content) ? notes.content : []
+  return content
+    .flatMap((block) =>
+      block && typeof block === 'object' && Array.isArray(block.content)
+        ? block.content
+        : [],
+    )
+    .map((node) =>
+      node && typeof node === 'object' && typeof node.text === 'string'
+        ? node.text
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n')
+}
+
+function noteDoc(text: string): Record<string, unknown> {
+  return {
+    type: 'doc',
+    content: text.trim()
+      ? [{ type: 'paragraph', content: [{ type: 'text', text: text.trim() }] }]
+      : [],
+  }
+}
 
 export function SessionForm() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
@@ -19,16 +49,17 @@ export function SessionForm() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editType, setEditType] = useState('')
   const [editDate, setEditDate] = useState('')
+  const [editNote, setEditNote] = useState('')
   const [editSets, setEditSets] = useState<SetEntry[]>([])
   const [exerciseNames, setExerciseNames] = useState<Record<string, string>>({})
-  const [savingSet, setSavingSet] = useState<string | null>(null)
+  const [addExerciseId, setAddExerciseId] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
 
   async function reloadSessions() {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchSessions()
-      setSessions(data)
+      setSessions(await fetchSessions())
     } catch {
       setError('Failed to load sessions')
     } finally {
@@ -43,7 +74,101 @@ export function SessionForm() {
       .finally(() => setLoading(false))
   }, [])
 
-  async function handleDelete(sessionId: string) {
+  async function startEditing(session: WorkoutSession) {
+    setEditingId(session.id)
+    setEditType(session.type)
+    setEditDate(new Date(session.date).toISOString().slice(0, 10))
+    setEditNote(noteText(session.notes))
+    setAddExerciseId('')
+    setError(null)
+    try {
+      const [sets, exercises] = await Promise.all([
+        fetchSetEntries(session.id),
+        fetchExercises(),
+      ])
+      setEditSets(sets)
+      setExerciseNames(
+        Object.fromEntries(
+          exercises.map((exercise) => [exercise.id, exercise.name]),
+        ),
+      )
+    } catch {
+      setEditSets([])
+      setError('Failed to load workout details')
+    }
+  }
+
+  async function saveSession(sessionId: string) {
+    setBusy('session')
+    try {
+      await updateSession(sessionId, {
+        date: new Date(`${editDate}T12:00:00Z`).toISOString(),
+        type: editType.trim(),
+        notes: noteDoc(editNote),
+      })
+      setEditingId(null)
+      await reloadSessions()
+    } catch {
+      setError('Failed to save workout')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function updateSet(
+    setId: string,
+    data: Partial<Pick<SetEntry, 'reps' | 'weight' | 'feeling' | 'notes'>>,
+  ) {
+    if (!editingId) return
+    setBusy(setId)
+    try {
+      const updated = await updateSetEntry(editingId, setId, data)
+      setEditSets((current) =>
+        current.map((set) => (set.id === setId ? updated : set)),
+      )
+    } catch {
+      setError('Failed to update set')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function removeSet(setId: string) {
+    if (!editingId) return
+    setBusy(setId)
+    try {
+      await deleteSetEntry(editingId, setId)
+      setEditSets((current) => current.filter((set) => set.id !== setId))
+    } catch {
+      setError('Failed to delete set')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function addSet(exerciseId: string) {
+    if (!editingId || !exerciseId) return
+    setBusy('add')
+    try {
+      const existing = editSets.filter((set) => set.exercise_id === exerciseId)
+      const last = existing.at(-1)
+      const created = await createSetEntry(editingId, {
+        exercise_id: exerciseId,
+        set_number: existing.length
+          ? Math.max(...existing.map((set) => set.set_number)) + 1
+          : 1,
+        reps: last?.reps ?? 8,
+        weight: last?.weight ?? null,
+      })
+      setEditSets((current) => [...current, created])
+    } catch {
+      setError('Failed to add set')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function removeSession(sessionId: string) {
     setDeleting(sessionId)
     try {
       await deleteSession(sessionId)
@@ -55,466 +180,282 @@ export function SessionForm() {
     }
   }
 
-  async function startEditing(session: WorkoutSession) {
-    setEditingId(session.id)
-    setEditType(session.type)
-    setEditDate(new Date(session.date).toISOString().slice(0, 10))
-    // Fetch sets for this session
-    try {
-      const sets = await fetchSetEntries(session.id)
-      setEditSets(sets)
-      // Also fetch exercise names
-      const exercises = await fetchExercises()
-      const map: Record<string, string> = {}
-      exercises.forEach((e) => {
-        map[e.id] = e.name
-      })
-      setExerciseNames(map)
-    } catch {
-      setEditSets([])
-    }
-  }
-
-  async function handleSaveEdit(sessionId: string) {
-    try {
-      const d = new Date(editDate + 'T12:00:00Z')
-      await updateSession(sessionId, {
-        date: d.toISOString(),
-        type: editType.trim(),
-      })
-      setEditingId(null)
-      await reloadSessions()
-    } catch {
-      setError('Failed to save')
-    }
-  }
-
-  async function handleUpdateSet(
-    setId: string,
-    field: 'reps' | 'weight',
-    value: number | null,
-  ) {
-    if (!editingId) return
-    setSavingSet(setId)
-    try {
-      await updateSetEntry(editingId, setId, { [field]: value })
-      // Optimistic update in local state
-      setEditSets((prev) =>
-        prev.map((s) => (s.id === setId ? { ...s, [field]: value } : s)),
-      )
-    } catch {
-      setError('Failed to update set')
-    } finally {
-      setSavingSet(null)
-    }
-  }
-
-  async function handleDeleteSet(setId: string) {
-    if (!editingId) return
-    try {
-      await deleteSetEntry(editingId, setId)
-      setEditSets((prev) => prev.filter((s) => s.id !== setId))
-    } catch {
-      setError('Failed to delete set')
-    }
-  }
-
-  function formatDate(iso: string): string {
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
-
+  const groups = Object.entries(
+    editSets.reduce<Record<string, SetEntry[]>>((result, set) => {
+      ;(result[set.exercise_id] ??= []).push(set)
+      return result
+    }, {}),
+  )
   const visibleSessions = showAll ? sessions : sessions.slice(0, 3)
-  const hasMore = sessions.length > 3
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    minHeight: '34px',
-    border: '1px solid rgba(255,240,200,0.09)',
-    borderRadius: 'var(--r-sm)',
-    background: 'var(--bg-raised)',
-    color: 'var(--text-primary)',
-    font: '400 13px var(--font-ui)',
-    padding: '6px 8px',
-    outline: 'none',
-    boxSizing: 'border-box',
-  }
 
   return (
-    <div className="fitness-section" style={{ display: 'grid', gap: '20px' }}>
+    <section className="fit-history" aria-labelledby="workout-history-title">
+      <h3 id="workout-history-title" className="fitness-section-title">
+        Recent Sessions
+      </h3>
       {error && (
-        <p style={{ color: '#d9573f', fontSize: '12px', margin: 0 }}>{error}</p>
+        <p className="fit-form-error" role="alert">
+          {error}
+        </p>
       )}
+      {loading ? (
+        <p className="fit-empty">Loading...</p>
+      ) : sessions.length === 0 ? (
+        <p className="fit-empty">
+          No sessions yet. Log your first workout above.
+        </p>
+      ) : (
+        <div className="fit-history-list">
+          {visibleSessions.map((session, index) => (
+            <article
+              key={session.id}
+              className={`fit-history-session${editingId === session.id ? ' editing' : ''}`}
+              style={{ animationDelay: `${index * 40}ms` }}
+            >
+              {editingId === session.id ? (
+                <div className="fit-history-editor">
+                  <div className="fit-history-fields">
+                    <label className="cal-field">
+                      <span>Date</span>
+                      <input
+                        type="date"
+                        value={editDate}
+                        onChange={(event) => setEditDate(event.target.value)}
+                      />
+                    </label>
+                    <label className="cal-field">
+                      <span>Workout</span>
+                      <input
+                        value={editType}
+                        onChange={(event) => setEditType(event.target.value)}
+                        placeholder="Workout type"
+                      />
+                    </label>
+                  </div>
+                  <label className="cal-field">
+                    <span>Workout note</span>
+                    <textarea
+                      value={editNote}
+                      onChange={(event) => setEditNote(event.target.value)}
+                      placeholder="How did the workout go?"
+                      rows={2}
+                    />
+                  </label>
 
-      {/* Sessions List */}
-      <div>
-        <h3 className="fitness-section-title" style={{ margin: '0 0 12px' }}>
-          Recent Sessions
-        </h3>
-        {loading ? (
-          <p
-            style={{
-              color: 'var(--text-tertiary)',
-              fontSize: '13px',
-              margin: 0,
-            }}
-          >
-            Loading…
-          </p>
-        ) : sessions.length === 0 ? (
-          <p
-            style={{
-              color: 'var(--text-tertiary)',
-              fontSize: '13px',
-              margin: 0,
-            }}
-          >
-            No sessions yet. Log your first workout above.
-          </p>
-        ) : (
-          <div style={{ display: 'grid', gap: '6px' }}>
-            {visibleSessions.map((session, i) => (
-              <div
-                key={session.id}
-                style={{
-                  display: 'grid',
-                  gap: '6px',
-                  padding: editingId === session.id ? '8px 14px' : '10px 14px',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--r-md)',
-                  animation: 'springUp 0.5s cubic-bezier(.16,1,.3,1) both',
-                  animationDelay: `${i * 40}ms`,
-                }}
-              >
-                {editingId === session.id ? (
-                  <div style={{ display: 'grid', gap: '6px', padding: '0' }}>
-                    <input
-                      type="date"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      style={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      value={editType}
-                      onChange={(e) => setEditType(e.target.value)}
-                      placeholder="Session type"
-                      style={inputStyle}
-                    />
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        onClick={() => handleSaveEdit(session.id)}
-                        style={{
-                          padding: '5px 12px',
-                          background: 'var(--accent-tint)',
-                          border: '1px solid var(--accent-tint-border)',
-                          borderRadius: '6px',
-                          color: 'var(--accent)',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
+                  <div className="fit-history-exercises">
+                    {groups.map(([exerciseId, sets]) => (
+                      <section
+                        className="fit-history-exercise"
+                        key={exerciseId}
                       >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        style={{
-                          padding: '5px 12px',
-                          background: 'transparent',
-                          border: '1px solid rgba(255,240,200,0.09)',
-                          borderRadius: '6px',
-                          color: 'var(--text-tertiary)',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {/* Sets for this session */}
-                    {editSets.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: '10px',
-                          borderTop: '1px solid rgba(255,240,200,0.06)',
-                          paddingTop: '10px',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontFamily: 'JetBrains Mono, monospace',
-                            fontSize: '9.5px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '.07em',
-                            color: 'var(--text-tertiary)',
-                            marginBottom: '6px',
-                          }}
-                        >
-                          Sets ({editSets.length})
-                        </div>
-                        <div style={{ display: 'grid', gap: '4px' }}>
-                          {/* Header */}
-                          <div
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 50px 55px 24px',
-                              gap: '6px',
-                              alignItems: 'center',
-                              padding: '0 2px',
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontFamily: 'JetBrains Mono, monospace',
-                                fontSize: '9px',
-                                color: 'var(--text-tertiary)',
-                              }}
-                            >
-                              Exercise
+                        <header>
+                          <div>
+                            <h4>{exerciseNames[exerciseId] || 'Exercise'}</h4>
+                            <span>
+                              {sets.length} {sets.length === 1 ? 'set' : 'sets'}
                             </span>
-                            <span
-                              style={{
-                                fontFamily: 'JetBrains Mono, monospace',
-                                fontSize: '9px',
-                                color: 'var(--text-tertiary)',
-                                textAlign: 'center',
-                              }}
-                            >
-                              Reps
-                            </span>
-                            <span
-                              style={{
-                                fontFamily: 'JetBrains Mono, monospace',
-                                fontSize: '9px',
-                                color: 'var(--text-tertiary)',
-                                textAlign: 'center',
-                              }}
-                            >
-                              Weight
-                            </span>
-                            <span />
                           </div>
-                          {editSets.map((set) => (
-                            <div
-                              key={set.id}
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 50px 55px 24px',
-                                gap: '6px',
-                                alignItems: 'center',
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: '12px',
-                                  color: 'var(--text-primary)',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {exerciseNames[set.exercise_id] || 'Exercise'} ·
-                                S{set.set_number}
-                              </span>
-                              <input
-                                type="number"
-                                defaultValue={set.reps}
-                                onBlur={(e) => {
-                                  const v = parseInt(e.target.value, 10)
-                                  if (!isNaN(v) && v !== set.reps)
-                                    handleUpdateSet(set.id, 'reps', v)
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter')
-                                    (e.target as HTMLInputElement).blur()
-                                }}
-                                style={{
-                                  ...inputStyle,
-                                  textAlign: 'center',
-                                  fontFamily: 'JetBrains Mono, monospace',
-                                  fontSize: '12px',
-                                  padding: '4px 6px',
-                                  minHeight: '28px',
-                                }}
-                              />
-                              <input
-                                type="number"
-                                defaultValue={set.weight ?? ''}
-                                placeholder="—"
-                                onBlur={(e) => {
-                                  const v = e.target.value
-                                    ? parseFloat(e.target.value)
-                                    : null
-                                  if (v !== set.weight)
-                                    handleUpdateSet(set.id, 'weight', v)
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter')
-                                    (e.target as HTMLInputElement).blur()
-                                }}
-                                style={{
-                                  ...inputStyle,
-                                  textAlign: 'center',
-                                  fontFamily: 'JetBrains Mono, monospace',
-                                  fontSize: '12px',
-                                  padding: '4px 6px',
-                                  minHeight: '28px',
-                                }}
-                              />
-                              <button
-                                onClick={() => handleDeleteSet(set.id)}
-                                disabled={savingSet === set.id}
-                                title="Delete set"
-                                style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  display: 'grid',
-                                  placeItems: 'center',
-                                  border: '0',
-                                  borderRadius: '4px',
-                                  background: 'transparent',
-                                  color: '#d9573f',
-                                  cursor: 'pointer',
-                                  fontSize: '9px',
-                                  opacity: savingSet === set.id ? 0.5 : 1,
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
+                          <button
+                            className="fit-secondary-button"
+                            type="button"
+                            onClick={() => void addSet(exerciseId)}
+                            disabled={busy === 'add'}
+                          >
+                            + Set
+                          </button>
+                        </header>
+                        <div className="fit-history-set-list">
+                          {sets
+                            .sort((a, b) => a.set_number - b.set_number)
+                            .map((set) => (
+                              <div className="fit-history-set" key={set.id}>
+                                <strong>S{set.set_number}</strong>
+                                <label>
+                                  <span>Reps</span>
+                                  <input
+                                    type="number"
+                                    defaultValue={set.reps ?? ''}
+                                    min={0}
+                                    onBlur={(event) => {
+                                      const value = Number(event.target.value)
+                                      if (
+                                        Number.isFinite(value) &&
+                                        value !== set.reps
+                                      )
+                                        void updateSet(set.id, { reps: value })
+                                    }}
+                                  />
+                                </label>
+                                <label>
+                                  <span>Weight</span>
+                                  <input
+                                    type="number"
+                                    defaultValue={set.weight ?? ''}
+                                    min={0}
+                                    step="0.5"
+                                    placeholder="-"
+                                    onBlur={(event) => {
+                                      const value = event.target.value
+                                        ? Number(event.target.value)
+                                        : null
+                                      if (value !== set.weight)
+                                        void updateSet(set.id, {
+                                          weight: value,
+                                        })
+                                    }}
+                                  />
+                                </label>
+                                <fieldset
+                                  className="fit-feeling"
+                                  aria-label={`Set ${set.set_number} feeling`}
+                                >
+                                  {FEELING_LABELS.map((label, feelingIndex) => {
+                                    const feeling = feelingIndex + 1
+                                    return (
+                                      <button
+                                        key={label}
+                                        type="button"
+                                        className={
+                                          set.feeling === feeling
+                                            ? 'active'
+                                            : ''
+                                        }
+                                        aria-label={label}
+                                        aria-pressed={set.feeling === feeling}
+                                        title={label}
+                                        onClick={() =>
+                                          void updateSet(set.id, {
+                                            feeling:
+                                              set.feeling === feeling
+                                                ? null
+                                                : feeling,
+                                          })
+                                        }
+                                      >
+                                        <span />
+                                      </button>
+                                    )
+                                  })}
+                                </fieldset>
+                                <label className="fit-history-set-note">
+                                  <span>Set note</span>
+                                  <input
+                                    defaultValue={set.notes ?? ''}
+                                    maxLength={500}
+                                    placeholder="Add a note"
+                                    onBlur={(event) => {
+                                      const value =
+                                        event.target.value.trim() || null
+                                      if (value !== set.notes)
+                                        void updateSet(set.id, { notes: value })
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  className="fit-remove-button"
+                                  type="button"
+                                  aria-label={`Delete set ${set.set_number}`}
+                                  onClick={() => void removeSet(set.id)}
+                                  disabled={busy === set.id}
+                                >
+                                  x
+                                </button>
+                              </div>
+                            ))}
                         </div>
-                      </div>
-                    )}
-                    {editSets.length === 0 && (
-                      <div
-                        style={{
-                          marginTop: '8px',
-                          fontSize: '11px',
-                          color: 'var(--text-tertiary)',
-                        }}
-                      >
-                        No sets logged for this session.
-                      </div>
+                      </section>
+                    ))}
+                    {!groups.length && (
+                      <p className="fit-empty">
+                        No sets logged for this workout.
+                      </p>
                     )}
                   </div>
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div
-                        style={{
-                          color: 'var(--text-primary)',
-                          fontSize: '13px',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {session.type}
-                      </div>
-                      <div
-                        style={{
-                          color: 'var(--text-tertiary)',
-                          font: '400 11px var(--font-mono)',
-                          marginTop: '2px',
-                        }}
-                      >
-                        {formatDate(session.date)}
-                      </div>
-                    </div>
+
+                  <div className="fit-history-add">
+                    <Dropdown
+                      ariaLabel="Exercise to add"
+                      value={addExerciseId}
+                      onChange={setAddExerciseId}
+                      placeholder="Choose exercise"
+                      options={Object.entries(exerciseNames).map(
+                        ([value, label]) => ({ value, label }),
+                      )}
+                    />
                     <button
-                      onClick={() => startEditing(session)}
-                      title="Edit session"
-                      style={{
-                        width: '28px',
-                        height: '28px',
-                        display: 'grid',
-                        placeItems: 'center',
-                        border: '0',
-                        borderRadius: 'var(--r-sm)',
-                        background: 'transparent',
-                        color: 'var(--text-tertiary)',
-                        cursor: 'pointer',
-                        fontSize: '11px',
-                        transition: 'background 0.14s ease, color 0.14s ease',
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e2) => {
-                        e2.currentTarget.style.background = 'var(--bg-raised)'
-                      }}
-                      onMouseLeave={(e2) => {
-                        e2.currentTarget.style.background = 'transparent'
-                      }}
+                      className="fit-secondary-button"
+                      type="button"
+                      onClick={() => void addSet(addExerciseId)}
+                      disabled={!addExerciseId || busy === 'add'}
                     >
-                      ✎
+                      {busy === 'add' ? 'Adding...' : 'Add set'}
+                    </button>
+                  </div>
+                  <div className="fit-history-actions">
+                    <button
+                      className="fit-primary-button"
+                      type="button"
+                      onClick={() => void saveSession(session.id)}
+                      disabled={!editType.trim() || busy === 'session'}
+                    >
+                      {busy === 'session' ? 'Saving...' : 'Save workout'}
                     </button>
                     <button
-                      onClick={() => handleDelete(session.id)}
+                      className="fit-secondary-button"
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="fit-history-summary">
+                  <div>
+                    <h4>{session.type}</h4>
+                    <time dateTime={session.date}>
+                      {new Date(session.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </time>
+                    {noteText(session.notes) && (
+                      <p>{noteText(session.notes)}</p>
+                    )}
+                  </div>
+                  <div className="fit-history-actions">
+                    <button
+                      className="fit-secondary-button"
+                      type="button"
+                      onClick={() => void startEditing(session)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="fit-remove-button text"
+                      type="button"
+                      onClick={() => void removeSession(session.id)}
                       disabled={deleting === session.id}
-                      title="Delete session"
-                      style={{
-                        width: '28px',
-                        height: '28px',
-                        display: 'grid',
-                        placeItems: 'center',
-                        border: '0',
-                        borderRadius: 'var(--r-sm)',
-                        background: 'transparent',
-                        color:
-                          deleting === session.id
-                            ? 'var(--text-tertiary)'
-                            : '#d9573f',
-                        cursor: 'pointer',
-                        fontSize: '11px',
-                        transition: 'background 0.14s ease, color 0.14s ease',
-                        opacity: deleting === session.id ? 0.5 : 1,
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e2) => {
-                        e2.currentTarget.style.background = 'var(--bg-raised)'
-                      }}
-                      onMouseLeave={(e2) => {
-                        e2.currentTarget.style.background = 'transparent'
-                      }}
                     >
-                      ✕
+                      {deleting === session.id ? 'Deleting...' : 'Delete'}
                     </button>
                   </div>
-                )}
-              </div>
-            ))}
-            {hasMore && (
-              <button
-                onClick={() => setShowAll(!showAll)}
-                style={{
-                  width: '100%',
-                  padding: '7px',
-                  marginTop: '6px',
-                  background: 'transparent',
-                  border: '1px dashed rgba(255,240,200,0.09)',
-                  borderRadius: '7px',
-                  color: 'var(--text-tertiary)',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  transition: 'border-color .15s, color .15s',
-                }}
-              >
-                {showAll ? 'Show less' : 'Show all (' + sessions.length + ')'}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+                </div>
+              )}
+            </article>
+          ))}
+          {sessions.length > 3 && (
+            <button
+              className="fit-show-all"
+              type="button"
+              onClick={() => setShowAll((current) => !current)}
+            >
+              {showAll ? 'Show less' : `Show all (${sessions.length})`}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   )
 }

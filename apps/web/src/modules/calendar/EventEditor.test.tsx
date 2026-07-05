@@ -186,7 +186,8 @@ describe('EventEditor', () => {
     )
   })
 
-  it('edit mode shows a toggle-only notes card and unlinks on toggle-off', async () => {
+  it('edit mode keeps links in one card and unlinks explicitly', async () => {
+    let linked = true
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation((input, init) => {
@@ -194,28 +195,32 @@ describe('EventEditor', () => {
         if (url.endsWith('/links'))
           return Promise.resolve(
             new Response(
-              JSON.stringify([
-                {
-                  id: 'link-1',
-                  target_type: 'page',
-                  target_id: 'page-1',
-                  relation: 'note',
-                  direction: 'outgoing',
-                  title: 'Sprint notes',
-                  icon: null,
-                },
-              ]),
+              JSON.stringify(
+                linked
+                  ? [
+                      {
+                        id: 'link-1',
+                        target_type: 'page',
+                        target_id: 'page-1',
+                        relation: 'note',
+                        direction: 'outgoing',
+                        title: 'Sprint notes',
+                        icon: null,
+                      },
+                    ]
+                  : [],
+              ),
               { status: 200 },
             ),
           )
-        if (init?.method === 'DELETE')
+        if (init?.method === 'DELETE') {
+          linked = false
           return Promise.resolve(new Response(null, { status: 204 }))
+        }
         return Promise.resolve(
           new Response(JSON.stringify({ id: 'event-1' }), { status: 200 }),
         )
       })
-    const onSaved = vi.fn()
-
     render(
       <EventEditor
         calendars={[
@@ -235,28 +240,30 @@ describe('EventEditor', () => {
           end_at: '2026-06-27T11:15:00.000Z',
         }}
         onClose={vi.fn()}
-        onSaved={onSaved}
+        onSaved={vi.fn()}
       />,
     )
 
-    // Links load → toggle reflects reality; the Linked card appears.
-    const toggle = await screen.findByRole('switch', { name: 'Notes' })
-    await waitFor(() => expect(toggle).toBeChecked())
+    expect(await screen.findByText('Sprint notes')).toBeVisible()
+    expect(screen.getByText('Linked · 1')).toBeVisible()
+    expect(screen.getByRole('switch', { name: 'Notes' })).toBeVisible()
+    expect(screen.getByRole('switch', { name: 'Fitness' })).toBeVisible()
+    expect(screen.getByPlaceholderText('Link a note or folder…')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Create new note' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Notes' }))
+    expect(screen.queryByPlaceholderText('Link a note or folder…')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create new note' })).toBeNull()
     expect(screen.getByText('Sprint notes')).toBeVisible()
-    // Toggle-only: no note title field inside the connections card.
-    expect(screen.queryByLabelText('Note title')).toBeNull()
 
-    fireEvent.click(toggle)
-    expect(screen.queryByText('Sprint notes')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), {
-      timeout: 2_000,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink Sprint notes' }))
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/links/link-1',
       expect.objectContaining({ method: 'DELETE' }),
     )
+    await waitFor(() => expect(screen.queryByText('Sprint notes')).toBeNull())
   })
 
   it('shows the saved icon when editing an existing event', () => {

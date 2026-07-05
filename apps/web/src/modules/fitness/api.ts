@@ -16,6 +16,10 @@ export interface WorkoutSession {
   user_id: string
   date: string
   type: string
+  // ponytail: additive — status/scheduled_at/plan land with the 018 migration
+  status: 'planned' | 'active' | 'completed'
+  scheduled_at: string | null
+  plan: string[] | null
   notes: Record<string, unknown>
   created_at: string
   updated_at: string
@@ -26,9 +30,12 @@ export interface SetEntry {
   workout_session_id: string
   exercise_id: string
   set_number: number
-  reps: number
+  reps: number | null
   weight: number | null
+  distance_km: number | null
+  duration_min: number | null
   rpe: number | null
+  feeling: number | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -131,7 +138,14 @@ export async function createSession(data: {
 
 export async function updateSession(
   sessionId: string,
-  data: { date?: string; type?: string; notes?: Record<string, unknown> },
+  data: {
+    date?: string
+    type?: string
+    notes?: Record<string, unknown>
+    status?: 'planned' | 'active' | 'completed'
+    scheduled_at?: string | null
+    plan?: string[] | null
+  },
 ): Promise<WorkoutSession> {
   const res = await apiCall(`/api/fitness/sessions/${sessionId}`, {
     method: 'PATCH',
@@ -162,9 +176,12 @@ export async function createSetEntry(
   data: {
     exercise_id: string
     set_number: number
-    reps: number
+    reps?: number | null
     weight?: number | null
+    distance_km?: number | null
+    duration_min?: number | null
     rpe?: number | null
+    feeling?: number | null
     notes?: string | null
   },
 ): Promise<SetEntry> {
@@ -197,9 +214,12 @@ export async function updateSetEntry(
   sessionId: string,
   setId: string,
   data: {
-    reps?: number
+    reps?: number | null
     weight?: number | null
+    distance_km?: number | null
+    duration_min?: number | null
     rpe?: number | null
+    feeling?: number | null
     notes?: string | null
     exercise_id?: string
     set_number?: number
@@ -260,6 +280,8 @@ export async function deleteBodyMetric(metricId: string): Promise<void> {
 // ── Stats ──────────────────────────────────────────────────────────────
 
 export interface ExerciseStats {
+  // ponytail: additive — category + cardio fields land with the 018 migration
+  category?: 'strength' | 'cardio'
   exercise: { id: string; name: string; category: string }
   personal_records: { reps: number; max_weight: number; date: string }[]
   estimated_1rm: number | null
@@ -269,6 +291,12 @@ export interface ExerciseStats {
     session_count: number
   }[]
   progression: { date: string; max_weight: number; max_reps: number }[]
+  total_distance_km?: number | null
+  total_duration_min?: number | null
+  best_pace_min_per_km?: number | null
+  distance_over_time?: { date: string; distance_km: number }[]
+  pace_over_time?: { date: string; pace: number }[]
+  weekly?: { week: string; distance_km: number; duration_min: number }[]
 }
 
 export interface BodyWeightStats {
@@ -288,10 +316,30 @@ export async function fetchExerciseStats(
   return res.json()
 }
 
+export interface OverviewStats {
+  weight_series: { date: string; weight: number }[]
+  top_exercise: {
+    exercise: { id: string; name: string; category: string }
+    progression: { date: string; max_weight: number; max_reps: number }[]
+  } | null
+  feeling_series: { date: string; feeling: number }[]
+  sessions_last_30_days: number
+}
+
+export async function fetchStatsOverview(days = 90): Promise<OverviewStats> {
+  const res = await apiCall(`/api/fitness/stats/overview?days=${days}`)
+  if (!res.ok) throw new Error('Failed to fetch overview stats')
+  return res.json()
+}
+
 export async function fetchBodyWeightStats(): Promise<BodyWeightStats> {
   const res = await apiCall('/api/fitness/stats/body-weight')
   if (!res.ok) throw new Error('Failed to fetch body weight stats')
-  return res.json()
+  const data = await res.json()
+  return {
+    metrics: Array.isArray(data.metrics) ? data.metrics : [],
+    trend: typeof data.trend === 'number' ? data.trend : null,
+  }
 }
 
 // ── Goals ─────────────────────────────────────────────────────────────
@@ -323,4 +371,28 @@ export async function deleteGoal(goalId: string): Promise<void> {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error('Failed to delete goal')
+}
+
+// ── Planned sessions / exercise cleanup (later waves) ───────────────────
+// ponytail: additive only — fetchSessions/updateSession above stay as-is,
+// these cover the status filter and exercise-delete callers coming next.
+
+export async function fetchPlannedSessions(
+  status: 'planned' | 'active' | 'completed' = 'planned',
+): Promise<WorkoutSession[]> {
+  const res = await apiCall(
+    `/api/fitness/sessions?status=${encodeURIComponent(status)}`,
+  )
+  if (!res.ok) throw new Error('Failed to fetch sessions')
+  return res.json()
+}
+
+export async function deleteExercise(exerciseId: string): Promise<void> {
+  const res = await apiCall(`/api/fitness/exercises/${exerciseId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || 'Failed to delete exercise')
+  }
 }

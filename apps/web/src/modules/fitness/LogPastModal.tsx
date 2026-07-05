@@ -1,13 +1,26 @@
-import { useState } from 'react'
-import { createSession } from './api'
+import { useState, useEffect } from 'react'
+import { Segmented } from '../../components/Segmented'
+import { CategoryBadge, isCardioName } from './exerciseLibrary'
+import {
+  createSession,
+  fetchExercises,
+  createExercise,
+  createSetEntry,
+  type Exercise,
+} from './api'
+import { SESSION_TYPES } from './sessionTypes'
 
-const SESSION_TYPES = ['Push', 'Pull', 'Legs', 'Upper', 'Cardio', 'Custom']
-
-interface ExerciseRow {
-  name: string
-  sets: string
+interface SetDraft {
   reps: string
   weight: string
+  distance_km: string
+  duration_min: string
+}
+
+interface ExerciseDraft {
+  name: string
+  category: 'strength' | 'cardio' | 'mobility' | null
+  sets: SetDraft[]
 }
 
 interface Props {
@@ -16,31 +29,119 @@ interface Props {
   onSaved: () => void
 }
 
+function emptySet(): SetDraft {
+  return { reps: '', weight: '', distance_km: '', duration_min: '' }
+}
+
 export function LogPastModal({ open, onClose, onSaved }: Props) {
   const [sessionType, setSessionType] = useState('Push')
+  const [defaultCategory, setDefaultCategory] = useState<
+    'strength' | 'cardio' | 'mobility'
+  >('strength')
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [duration] = useState('60')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [knownExercises, setKnownExercises] = useState<Exercise[]>([])
+  const [exercises, setExercises] = useState<ExerciseDraft[]>([])
+  const [searchText, setSearchText] = useState('')
 
-  // Up to 5 exercise rows
-  const [exercises, setExercises] = useState<ExerciseRow[]>([
-    { name: '', sets: '3', reps: '8', weight: '' },
-  ])
+  useEffect(() => {
+    if (open) {
+      fetchExercises()
+        .then(setKnownExercises)
+        .catch(() => setKnownExercises([]))
+    }
+  }, [open])
 
-  function updateRow(idx: number, field: keyof ExerciseRow, value: string) {
+  const searchTextLower = searchText.trim().toLowerCase()
+  const searchHasMatch = Boolean(
+    searchTextLower &&
+    knownExercises.some((ex) => ex.name.toLowerCase() === searchTextLower),
+  )
+  const searchIsUnknown = Boolean(searchTextLower && !searchHasMatch)
+
+  function addExercise() {
+    const name = searchText.trim()
+    if (!name) return
+
+    // ponytail: skip if already in the list
+    if (exercises.some((ex) => ex.name.toLowerCase() === name.toLowerCase())) {
+      setSearchText('')
+      return
+    }
+
+    const matched = knownExercises.find(
+      (ex) => ex.name.toLowerCase() === name.toLowerCase(),
+    )
+
+    const category: ExerciseDraft['category'] = matched
+      ? matched.category
+      : defaultCategory
+
+    setExercises((prev) => [
+      ...prev,
+      {
+        name,
+        category,
+        sets: [emptySet()],
+      },
+    ])
+    setSearchText('')
+  }
+
+  function removeExercise(idx: number) {
+    setExercises((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateSet(
+    exIdx: number,
+    setIdx: number,
+    field: keyof SetDraft,
+    value: string,
+  ) {
     setExercises((prev) =>
-      prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)),
+      prev.map((ex, i) => {
+        if (i !== exIdx) return ex
+        return {
+          ...ex,
+          sets: ex.sets.map((s, j) =>
+            j === setIdx ? { ...s, [field]: value } : s,
+          ),
+        }
+      }),
     )
   }
 
-  function addRow() {
-    if (exercises.length >= 5) return
-    setExercises((prev) => [
-      ...prev,
-      { name: '', sets: '3', reps: '', weight: '' },
-    ])
+  function addSet(exIdx: number) {
+    setExercises((prev) =>
+      prev.map((ex, i) => {
+        if (i !== exIdx) return ex
+        const last = ex.sets.at(-1)
+        return {
+          ...ex,
+          sets: [...ex.sets, last ? { ...last } : emptySet()],
+        }
+      }),
+    )
+  }
+
+  function removeSet(exIdx: number, setIdx: number) {
+    setExercises((prev) =>
+      prev.map((ex, i) => {
+        if (i !== exIdx) return ex
+        return { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) }
+      }),
+    )
+  }
+
+  function setExerciseCategory(
+    exIdx: number,
+    category: 'strength' | 'cardio' | 'mobility',
+  ) {
+    setExercises((prev) =>
+      prev.map((ex, i) => (i === exIdx ? { ...ex, category } : ex)),
+    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -51,7 +152,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
     setError(null)
     try {
       const d = new Date(date + 'T12:00:00Z')
-      await createSession({
+      const session = await createSession({
         date: d.toISOString(),
         type: sessionType,
         notes: {
@@ -71,8 +172,47 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
           ],
         },
       })
+
+      const existingExercises = await fetchExercises()
+      for (const draft of filled) {
+        let exercise = existingExercises.find(
+          (ex) => ex.name.toLowerCase() === draft.name.trim().toLowerCase(),
+        )
+        if (!exercise) {
+          exercise = await createExercise({
+            name: draft.name.trim(),
+            category: draft.category || 'strength',
+          })
+          existingExercises.push(exercise)
+        }
+        const isCardio =
+          exercise.category === 'cardio' || isCardioName(draft.name)
+
+        for (let s = 0; s < draft.sets.length; s++) {
+          const set = draft.sets[s]
+          if (isCardio) {
+            await createSetEntry(session.id, {
+              exercise_id: exercise.id,
+              set_number: s + 1,
+              distance_km: set.distance_km ? parseFloat(set.distance_km) : null,
+              duration_min: set.duration_min
+                ? parseFloat(set.duration_min)
+                : null,
+            })
+          } else {
+            await createSetEntry(session.id, {
+              exercise_id: exercise.id,
+              set_number: s + 1,
+              reps: parseInt(set.reps, 10) || 0,
+              weight: set.weight ? parseInt(set.weight, 10) : null,
+            })
+          }
+        }
+      }
+
       // Reset form
-      setExercises([{ name: '', sets: '3', reps: '8', weight: '' }])
+      setExercises([])
+      setSearchText('')
       setNotes('')
       onSaved()
       onClose()
@@ -85,26 +225,9 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
 
   if (!open) return null
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '8px 10px',
-    background: 'var(--bg-raised)',
-    border: '1px solid rgba(255,240,200,0.09)',
-    borderRadius: '7px',
-    color: 'var(--text-primary)',
-    fontSize: '13px',
-    outline: 'none',
-    boxSizing: 'border-box',
-  }
-
-  const monoInputStyle: React.CSSProperties = {
-    ...inputStyle,
-    textAlign: 'center' as const,
-    fontFamily: 'JetBrains Mono, monospace',
-  }
-
   return (
     <div
+      className="fit-logpast-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -112,79 +235,19 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
         if (e.key === 'Escape') onClose()
       }}
       role="presentation"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 120,
-        background: 'rgba(0,0,0,.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        style={{
-          width: '480px',
-          maxWidth: '94vw',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-strong)',
-          borderRadius: '16px',
-          boxShadow: '0 24px 64px rgba(0,0,0,.6)',
-          animation: 'springIn .38s cubic-bezier(.16,1,.3,1) both',
-          padding: '24px',
-        }}
-      >
+      <div className="fit-logpast-modal" role="dialog" aria-modal="true">
         {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-          }}
-        >
+        <div className="fit-logpast-header">
           <div>
-            <h3
-              style={{
-                fontSize: '18px',
-                fontWeight: 700,
-                letterSpacing: '-.015em',
-                color: 'var(--text-primary)',
-                margin: '0 0 4px',
-              }}
-            >
-              Log past workout
-            </h3>
-            <p
-              style={{
-                fontSize: '12px',
-                color: 'var(--text-tertiary)',
-                margin: 0,
-              }}
-            >
-              Record a session you already completed.
-            </p>
+            <h3>Log past workout</h3>
+            <p>Record a session you already completed.</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              width: '28px',
-              height: '28px',
-              background: 'rgba(255,240,200,0.06)',
-              border: 'none',
-              borderRadius: '6px',
-              color: 'var(--text-tertiary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
+            className="fit-logpast-close"
+            aria-label="Close"
           >
             ✕
           </button>
@@ -194,305 +257,293 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
           onSubmit={handleSubmit}
           style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
         >
-          {/* Type + Date/Time row */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '10px',
-            }}
-          >
-            {/* Session type pills */}
+          {/* Session meta: type pills + date */}
+          <div className="fit-logpast-meta">
             <div>
-              <div
-                style={{
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: '10px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '.07em',
-                  color: 'var(--text-tertiary)',
-                  marginBottom: '6px',
-                }}
-              >
-                Session type
-              </div>
-              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+              <div className="fit-logpast-label">Session type</div>
+              <div className="fit-logpast-pills">
                 {SESSION_TYPES.map((t) => (
                   <button
                     type="button"
                     key={t}
                     onClick={() => setSessionType(t)}
-                    style={{
-                      padding: '5px 11px',
-                      borderRadius: '99px',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      background:
-                        sessionType === t
-                          ? 'var(--accent-tint)'
-                          : 'rgba(255,240,200,0.05)',
-                      color:
-                        sessionType === t
-                          ? 'var(--accent)'
-                          : 'var(--text-tertiary)',
-                      border:
-                        sessionType === t
-                          ? '1px solid var(--accent-tint-border)'
-                          : '1px solid rgba(255,240,200,0.07)',
-                      fontWeight: sessionType === t ? 600 : 400,
-                      transition:
-                        'background .15s, color .15s, border-color .15s',
-                    }}
+                    className={`fit-type-pill${sessionType === t ? ' active' : ''}`}
                   >
                     {t}
                   </button>
                 ))}
               </div>
             </div>
-            {/* Date + Duration */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '8px',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '.07em',
-                    color: 'var(--text-tertiary)',
-                    marginBottom: '6px',
-                  }}
-                >
-                  Date
-                </div>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <div
-                  style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '.07em',
-                    color: 'var(--text-tertiary)',
-                    marginBottom: '6px',
-                  }}
-                >
-                  Duration
-                </div>
-                <input
-                  type="number"
-                  value={duration}
-                  readOnly
-                  placeholder="60 min"
-                  style={{ ...inputStyle, opacity: 0.5 }}
-                />
-              </div>
-            </div>
+            <label className="cal-field">
+              <span>Date</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </label>
           </div>
 
-          {/* Exercises grid header */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 48px 48px 60px',
-              gap: '6px',
-              alignItems: 'center',
-              padding: '0 2px',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '9.5px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-              }}
-            >
-              Exercise
-            </div>
-            <div
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '9.5px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-                textAlign: 'center',
-              }}
-            >
-              Sets
-            </div>
-            <div
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '9.5px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-                textAlign: 'center',
-              }}
-            >
-              Reps
-            </div>
-            <div
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '9.5px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-                textAlign: 'center',
-              }}
-            >
-              Weight
-            </div>
-          </div>
-
-          {/* Exercise rows */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            {exercises.map((row, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 48px 48px 60px',
-                  gap: '6px',
-                  alignItems: 'center',
+          {/* Exercise search + add */}
+          <div>
+            <div className="fitness-section-title">Exercises</div>
+            <div className="fit-logpast-search">
+              <input
+                list="fit-logpast-datalist"
+                placeholder="Search or add exercise…"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addExercise()
+                  }
                 }}
+                className="fit-logpast-search-input"
+              />
+              <datalist id="fit-logpast-datalist">
+                {knownExercises.map((ex) => (
+                  <option key={ex.id} value={ex.name} />
+                ))}
+              </datalist>
+              <button
+                type="button"
+                className="fit-secondary-button"
+                onClick={addExercise}
+                disabled={!searchText.trim()}
               >
-                <input
-                  value={row.name}
-                  onChange={(e) => updateRow(idx, 'name', e.target.value)}
-                  placeholder="Exercise…"
-                  style={inputStyle}
-                />
-                <input
-                  type="number"
-                  value={row.sets}
-                  onChange={(e) => updateRow(idx, 'sets', e.target.value)}
-                  style={monoInputStyle}
-                />
-                <input
-                  type="number"
-                  value={row.reps}
-                  onChange={(e) => updateRow(idx, 'reps', e.target.value)}
-                  placeholder="8"
-                  style={monoInputStyle}
-                />
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    padding: '8px 8px',
-                    background: 'var(--bg-raised)',
-                    border: '1px solid rgba(255,240,200,0.09)',
-                    borderRadius: '7px',
-                  }}
-                >
-                  <input
-                    type="number"
-                    value={row.weight}
-                    onChange={(e) => updateRow(idx, 'weight', e.target.value)}
-                    placeholder="—"
-                    style={{
-                      width: '100%',
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--fit-accent)',
-                      fontSize: '13px',
-                      textAlign: 'center',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontWeight: 600,
-                      outline: 'none',
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '9px',
-                      color: 'var(--text-tertiary) ',
-                    }}
-                  >
-                    kg
-                  </span>
+                + Add
+              </button>
+            </div>
+
+            {/* Default category picker — only when typing an unknown name */}
+            {searchIsUnknown && (
+              <div
+                className="fit-category-picker"
+                style={{ marginTop: '10px' }}
+              >
+                <div className="fit-logpast-label">
+                  Category for new exercises
                 </div>
+                <Segmented
+                  value={defaultCategory}
+                  options={['strength', 'cardio', 'mobility']}
+                  onChange={(v) =>
+                    setDefaultCategory(v as 'strength' | 'cardio' | 'mobility')
+                  }
+                  labels={{
+                    strength: 'Strength',
+                    cardio: 'Cardio',
+                    mobility: 'Mobility',
+                  }}
+                  ariaLabel="Default exercise category"
+                />
               </div>
-            ))}
+            )}
           </div>
 
-          {/* Add exercise button */}
-          {exercises.length < 5 && (
-            <button
-              type="button"
-              onClick={addRow}
-              style={{
-                width: '100%',
-                padding: '8px',
-                background: 'transparent',
-                border: '1px dashed rgba(255,240,200,0.09)',
-                borderRadius: '7px',
-                color: 'var(--text-tertiary)',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-                marginTop: '4px',
-              }}
-            >
-              <svg
-                width="11"
-                height="11"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-              >
-                <path d="M10 4v12M4 10h12" />
-              </svg>
-              Add exercise
-            </button>
+          {/* Exercise cards */}
+          {exercises.length > 0 && (
+            <div className="fit-history-exercises">
+              {exercises.map((draft, exIdx) => {
+                const isCardio =
+                  draft.category === 'cardio' || isCardioName(draft.name)
+                const wasMatched = knownExercises.some(
+                  (ex) => ex.name.toLowerCase() === draft.name.toLowerCase(),
+                )
+
+                return (
+                  <section className="fit-history-exercise" key={exIdx}>
+                    <header>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <h4>{draft.name}</h4>
+                        {draft.category ? (
+                          <CategoryBadge category={draft.category} />
+                        ) : (
+                          <Segmented
+                            value={defaultCategory}
+                            options={['strength', 'cardio', 'mobility']}
+                            onChange={(v) =>
+                              setExerciseCategory(
+                                exIdx,
+                                v as 'strength' | 'cardio' | 'mobility',
+                              )
+                            }
+                            labels={{
+                              strength: 'Str',
+                              cardio: 'Card',
+                              mobility: 'Mob',
+                            }}
+                            ariaLabel={`Category for ${draft.name}`}
+                          />
+                        )}
+                        {/* Allow changing category for unmatched exercises */}
+                        {draft.category && !wasMatched && (
+                          <Segmented
+                            value={draft.category}
+                            options={['strength', 'cardio', 'mobility']}
+                            onChange={(v) =>
+                              setExerciseCategory(
+                                exIdx,
+                                v as 'strength' | 'cardio' | 'mobility',
+                              )
+                            }
+                            labels={{
+                              strength: 'Str',
+                              cardio: 'Card',
+                              mobility: 'Mob',
+                            }}
+                            ariaLabel={`Change category for ${draft.name}`}
+                          />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="fit-remove-button"
+                        aria-label={`Remove ${draft.name}`}
+                        onClick={() => removeExercise(exIdx)}
+                      >
+                        ×
+                      </button>
+                    </header>
+
+                    <div className="fit-history-set-list">
+                      {draft.sets.map((set, setIdx) => (
+                        <div className="fit-logpast-set" key={setIdx}>
+                          <strong>S{setIdx + 1}</strong>
+                          {isCardio ? (
+                            <>
+                              <label>
+                                <span>min</span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.1"
+                                  value={set.duration_min}
+                                  onChange={(e) =>
+                                    updateSet(
+                                      exIdx,
+                                      setIdx,
+                                      'duration_min',
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="—"
+                                />
+                              </label>
+                              <label>
+                                <span>km</span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.01"
+                                  value={set.distance_km}
+                                  onChange={(e) =>
+                                    updateSet(
+                                      exIdx,
+                                      setIdx,
+                                      'distance_km',
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="—"
+                                />
+                              </label>
+                            </>
+                          ) : (
+                            <>
+                              <label>
+                                <span>Reps</span>
+                                <input
+                                  type="number"
+                                  value={set.reps}
+                                  onChange={(e) =>
+                                    updateSet(
+                                      exIdx,
+                                      setIdx,
+                                      'reps',
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="8"
+                                />
+                              </label>
+                              <label>
+                                <span>kg</span>
+                                <input
+                                  type="number"
+                                  value={set.weight}
+                                  onChange={(e) =>
+                                    updateSet(
+                                      exIdx,
+                                      setIdx,
+                                      'weight',
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="—"
+                                />
+                              </label>
+                            </>
+                          )}
+                          {draft.sets.length > 1 && (
+                            <button
+                              type="button"
+                              className="fit-remove-button"
+                              aria-label={`Remove set ${setIdx + 1}`}
+                              onClick={() => removeSet(exIdx, setIdx)}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="fit-logpast-add-set">
+                      <button
+                        type="button"
+                        className="fit-secondary-button"
+                        onClick={() => addSet(exIdx)}
+                      >
+                        + Set
+                      </button>
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
           )}
 
           {/* Notes */}
-          <div>
-            <div
-              style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '10px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-                marginBottom: '6px',
-              }}
-            >
-              Notes / PRs
-            </div>
-            <input
+          <label className="cal-field">
+            <span>Notes / PRs</span>
+            <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Bench PR 92 kg · felt strong today…"
-              style={inputStyle}
+              style={{
+                minHeight: '60px',
+                resize: 'vertical',
+                border: '1px solid var(--border-strong)',
+                borderRadius: 'var(--r-md)',
+                background: 'var(--bg-base)',
+                color: 'var(--text-primary)',
+                font: '400 13px var(--font-ui)',
+                padding: '8px 10px',
+                boxSizing: 'border-box',
+              }}
             />
-          </div>
+          </label>
 
           {error && (
-            <p style={{ color: '#d9573f', fontSize: '12px', margin: 0 }}>
+            <p className="fit-form-error" role="alert">
               {error}
             </p>
           )}
@@ -500,19 +551,9 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
           {/* Submit */}
           <button
             type="submit"
+            className="fit-primary-button"
             disabled={submitting}
-            style={{
-              width: '100%',
-              height: '42px',
-              background: 'var(--accent-tint)',
-              border: '1px solid var(--accent-tint-border)',
-              borderRadius: '9px',
-              color: 'var(--accent)',
-              fontSize: '13.5px',
-              fontWeight: 600,
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.6 : 1,
-            }}
+            style={{ width: '100%', height: '42px' }}
           >
             {submitting ? 'Logging…' : 'Log workout'}
           </button>

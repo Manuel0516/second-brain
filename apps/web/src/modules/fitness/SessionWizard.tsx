@@ -1,72 +1,215 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Segmented } from '../../components/Segmented'
 import {
   EXERCISE_LIBRARY,
   PREV_PERFORMANCE,
+  CategoryBadge,
   type ActiveSession,
 } from './exerciseLibrary'
+import { newSet } from './LiveSession'
+import { SESSION_TYPES, SessionTypeIcon } from './sessionTypes'
+import {
+  fetchExercises,
+  updateSession,
+  type Exercise,
+  type WorkoutSession,
+} from './api'
 
-const SESSION_TYPES = [
-  { type: 'Push', icon: '󰙪', desc: 'Chest · Shoulders · Tris' },
-  { type: 'Pull', icon: '󰙪', desc: 'Back · Biceps · RDL' },
-  { type: 'Legs', icon: '󰙪', desc: 'Quads · Hamstrings · Glutes' },
-  { type: 'Upper', icon: '󰙪', desc: 'Full upper body' },
-  { type: 'Lower', icon: '󰙪', desc: 'Full lower body' },
-  { type: 'Custom', icon: '󰏗', desc: 'Build your own' },
-]
+const TYPE_META: Record<string, { desc: string }> = {
+  Push: { desc: 'Chest · Shoulders · Tris' },
+  Pull: { desc: 'Back · Biceps · RDL' },
+  Legs: { desc: 'Quads · Hamstrings · Glutes' },
+  Upper: { desc: 'Full upper body' },
+  Cardio: { desc: 'Running · Cycling · Rowing' },
+  Custom: { desc: 'Build your own' },
+}
 
 interface Props {
   open: boolean
   onClose: () => void
-  onStart: (session: ActiveSession) => void
+  onStart: (session: ActiveSession, sourceSessionId?: string) => void
+  /** Plan/start an existing planned session instead of an ad-hoc one — type
+   *  is fixed, exercises pre-fill from `plan`. */
+  planningSession?: WorkoutSession | null
+  /** Called after "Save plan" (no live session started) so the caller reloads. */
+  onPlanned?: () => void
 }
 
-export function SessionWizard({ open, onClose, onStart }: Props) {
+export function SessionWizard({
+  open,
+  onClose,
+  onStart,
+  planningSession,
+  onPlanned,
+}: Props) {
+  const isPlanning = !!planningSession
   const [step, setStep] = useState(1)
   const [sessionType, setSessionType] = useState('')
   const [selectedExercises, setSelectedExercises] = useState<string[]>([])
-  const [customEx, setCustomEx] = useState('')
+  const [exerciseSearch, setExerciseSearch] = useState('')
+  const [showCreateFlow, setShowCreateFlow] = useState(false)
+  const [customCategory, setCustomCategory] = useState<
+    'strength' | 'cardio' | 'mobility'
+  >('strength')
+  const [exerciseCategories, setExerciseCategories] = useState<
+    Record<string, string>
+  >({})
+  const [dbExercises, setDbExercises] = useState<Exercise[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    fetchExercises()
+      .then(setDbExercises)
+      .catch(() => setDbExercises([]))
+    if (planningSession) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSessionType(planningSession.type)
+      setSelectedExercises(
+        planningSession.plan && planningSession.plan.length > 0
+          ? planningSession.plan
+          : [],
+      )
+      setStep(2)
+    } else {
+      setStep(1)
+      setSessionType('')
+      setSelectedExercises([])
+    }
+    setExerciseSearch('')
+    setShowCreateFlow(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, planningSession?.id])
 
   if (!open) return null
 
   const library = sessionType ? EXERCISE_LIBRARY[sessionType] || [] : []
-  const maxEx =
-    sessionType === 'Custom' ? library.length : Math.min(7, library.length)
+
+  // Merge DB exercises + library suggestions, deduped by name (case-insensitive).
+  // DB exercises take priority for category info.
+  const allCandidates = (() => {
+    const seen = new Set<string>()
+    const result: { name: string; category: string }[] = []
+    for (const ex of dbExercises) {
+      const key = ex.name.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({ name: ex.name, category: ex.category })
+      }
+    }
+    const libCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
+    for (const name of library) {
+      const key = name.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({ name, category: libCategory })
+      }
+    }
+    return result
+  })()
+
+  const searchTerm = exerciseSearch.trim().toLowerCase()
+  const filteredCandidates = searchTerm
+    ? allCandidates.filter((c) => c.name.toLowerCase().includes(searchTerm))
+    : allCandidates
+  const showEmpty = searchTerm.length > 0 && filteredCandidates.length === 0
 
   function selectType(type: string) {
     setSessionType(type)
-    const defaults = (EXERCISE_LIBRARY[type] || []).slice(0, 5)
-    setSelectedExercises(defaults)
+    setSelectedExercises([])
+    setExerciseCategories({})
   }
 
-  function toggleEx(name: string) {
+  function toggleEx(name: string, category?: string) {
     setSelectedExercises((prev) =>
       prev.includes(name) ? prev.filter((e) => e !== name) : [...prev, name],
     )
+    if (category) {
+      setExerciseCategories((prev) => {
+        if (prev[name]) {
+          const next = { ...prev }
+          delete next[name]
+          return next
+        }
+        return { ...prev, [name]: category }
+      })
+    }
   }
 
-  function addCustom() {
-    const n = customEx.trim()
-    if (!n || selectedExercises.includes(n)) return
-    setSelectedExercises((prev) => [...prev, n])
-    setCustomEx('')
+  function addCustom(name: string, category: string) {
+    if (!name || selectedExercises.includes(name)) return
+    setSelectedExercises((prev) => [...prev, name])
+    setExerciseCategories((prev) => ({ ...prev, [name]: category }))
+    setExerciseSearch('')
+    setShowCreateFlow(false)
+    setCustomCategory('strength')
   }
 
-  function handleStart() {
-    const exs = selectedExercises.map((name) => ({
-      name,
-      prev: PREV_PERFORMANCE[name] || '—',
-      sets: [
-        { w: '', r: '', done: false },
-        { w: '', r: '', done: false },
-        { w: '', r: '', done: false },
-      ],
-    }))
-    onStart({ type: sessionType, exercises: exs })
-    // Reset
+  function buildActiveSession(): ActiveSession {
+    return {
+      type: sessionType,
+      exercises: selectedExercises.map((name) => {
+        const cat = exerciseCategories[name] as
+          | 'strength'
+          | 'cardio'
+          | 'mobility'
+          | undefined
+        return {
+          name,
+          prev: PREV_PERFORMANCE[name] || '—',
+          category: cat,
+          sets: Array.from({ length: cat === 'cardio' ? 1 : 3 }, () =>
+            newSet(cat),
+          ),
+        }
+      }),
+    }
+  }
+
+  function resetAndClose() {
     setStep(1)
     setSessionType('')
     setSelectedExercises([])
+    setExerciseCategories({})
     onClose()
+  }
+
+  function handleStart() {
+    onStart(buildActiveSession())
+    resetAndClose()
+  }
+
+  async function handleSavePlan() {
+    if (!planningSession) return
+    setSaving(true)
+    try {
+      await updateSession(planningSession.id, { plan: selectedExercises })
+      onPlanned?.()
+      resetAndClose()
+    } catch (err) {
+      console.error('Failed to save plan', err)
+      window.alert('Could not save the plan — try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleStartPlanned() {
+    if (!planningSession) return
+    setSaving(true)
+    try {
+      const updated = await updateSession(planningSession.id, {
+        plan: selectedExercises,
+        status: 'active',
+      })
+      onStart(buildActiveSession(), updated.id)
+      resetAndClose()
+    } catch (err) {
+      console.error('Failed to start session', err)
+      window.alert('Could not start the session — try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function goToStep2() {
@@ -75,6 +218,7 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
   }
 
   function goBack() {
+    if (isPlanning) return
     setStep(1)
   }
 
@@ -135,7 +279,6 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
   })
 
   const typeIconStyle = (selected: boolean): React.CSSProperties => ({
-    fontSize: '20px',
     color: selected ? 'var(--fit-accent)' : 'var(--text-tertiary)',
     display: 'block',
     marginBottom: '8px',
@@ -200,8 +343,8 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
         </div>
 
         <div style={{ padding: '20px 24px 24px', overflowY: 'auto', flex: 1 }}>
-          {/* STEP 1 — session type */}
-          {step === 1 && (
+          {/* STEP 1 — session type (skipped when planning an existing session) */}
+          {step === 1 && !isPlanning && (
             <div style={{ animation: 'fadeUp .22s ease both' }}>
               <h3
                 style={{
@@ -231,29 +374,32 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
                   marginBottom: '20px',
                 }}
               >
-                {SESSION_TYPES.map((st) => (
-                  <button
-                    key={st.type}
-                    onClick={() => selectType(st.type)}
-                    style={typeBtnStyle(st.type)}
-                  >
-                    <span style={typeIconStyle(sessionType === st.type)}>
-                      {st.icon}
-                    </span>
-                    <div style={typeLabelStyle(sessionType === st.type)}>
-                      {st.type}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        color: 'var(--text-tertiary)',
-                        marginTop: '2px',
-                      }}
+                {SESSION_TYPES.map((type) => {
+                  const meta = TYPE_META[type]
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => selectType(type)}
+                      style={typeBtnStyle(type)}
                     >
-                      {st.desc}
-                    </div>
-                  </button>
-                ))}
+                      <span style={typeIconStyle(sessionType === type)}>
+                        <SessionTypeIcon type={type} size={18} />
+                      </span>
+                      <div style={typeLabelStyle(sessionType === type)}>
+                        {type}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-tertiary)',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {meta.desc}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
               <button
                 onClick={goToStep2}
@@ -289,22 +435,24 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
                   marginBottom: '5px',
                 }}
               >
-                <button
-                  onClick={goBack}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-tertiary)',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: 0,
-                  }}
-                >
-                  ←
-                </button>
+                {!isPlanning && (
+                  <button
+                    onClick={goBack}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-tertiary)',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: 0,
+                    }}
+                  >
+                    ←
+                  </button>
+                )}
                 <h3
                   style={{
                     fontSize: '18px',
@@ -328,137 +476,95 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
                 ready.
               </p>
 
-              {/* Exercise toggles */}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  marginBottom: '14px',
+              {/* Search input */}
+              <input
+                value={exerciseSearch}
+                onChange={(e) => {
+                  setExerciseSearch(e.target.value)
+                  setShowCreateFlow(false)
                 }}
-              >
-                {library.slice(0, maxEx).map((name) => {
-                  const selected = selectedExercises.includes(name)
-                  const prev = PREV_PERFORMANCE[name] || '—'
-                  return (
-                    <button
-                      key={name}
-                      onClick={() => toggleEx(name)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '11px 14px',
-                        borderRadius: '9px',
-                        border: `1px solid ${selected ? 'var(--fit-accent-border)' : 'rgba(255,240,200,0.07)'}`,
-                        background: selected
-                          ? 'var(--fit-accent-tint)'
-                          : 'var(--bg-raised)',
-                        cursor: 'pointer',
-                        textAlign: 'left' as const,
-                        transition: 'border-color .18s, background .18s',
-                        width: '100%',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '5px',
-                          border: `1.5px solid ${selected ? 'var(--fit-accent)' : 'rgba(255,240,200,0.12)'}`,
-                          background: selected
-                            ? 'var(--fit-accent)'
-                            : 'transparent',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          transition: 'all .15s',
-                        }}
-                      >
-                        {selected && (
-                          <svg
-                            width="10"
-                            height="10"
-                            viewBox="0 0 20 20"
-                            fill="none"
-                            stroke="white"
-                            strokeWidth="2.8"
-                            strokeLinecap="round"
-                          >
-                            <path d="M4 10l4 4L17 6" />
-                          </svg>
-                        )}
-                      </div>
-                      <span
-                        style={{
-                          fontSize: '13.5px',
-                          fontWeight: 600,
-                          color: selected
-                            ? 'var(--fit-accent)'
-                            : 'var(--text-primary)',
-                        }}
-                      >
-                        {name}
-                      </span>
-                      <span
-                        style={{
-                          marginLeft: 'auto',
-                          fontFamily: 'JetBrains Mono, monospace',
-                          fontSize: '10px',
-                          color: 'var(--text-tertiary)',
-                        }}
-                      >
-                        {prev}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && showEmpty && !showCreateFlow) {
+                    e.preventDefault()
+                    setShowCreateFlow(true)
+                  }
+                }}
+                placeholder="Search exercises…"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  background: 'var(--bg-raised)',
+                  border: '1px solid rgba(255,240,200,0.09)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  marginBottom: '10px',
+                }}
+              />
 
-              {/* Custom exercise input */}
-              <div
-                style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}
-              >
-                <input
-                  value={customEx}
-                  onChange={(e) => setCustomEx(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addCustom()
-                    }
-                  }}
-                  placeholder="Add custom exercise…"
-                  style={{
-                    flex: 1,
-                    padding: '9px 12px',
-                    background: 'var(--bg-raised)',
-                    border: '1px solid rgba(255,240,200,0.09)',
-                    borderRadius: '8px',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <button
-                  onClick={addCustom}
-                  style={{
-                    height: '38px',
-                    padding: '0 14px',
-                    background: 'rgba(255,240,200,0.07)',
-                    border: '1px solid rgba(255,240,200,0.09)',
-                    borderRadius: '8px',
-                    color: 'var(--text-secondary)',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    transition: 'background .15s',
-                  }}
+              {/* Card grid or empty state */}
+              {showEmpty ? (
+                <div
+                  className="fit-empty inset"
+                  style={{ marginBottom: '16px' }}
                 >
-                  Add
-                </button>
-              </div>
+                  <p style={{ margin: '0 0 12px' }}>
+                    No exercise matches &ldquo;{exerciseSearch.trim()}&rdquo;
+                  </p>
+                  {!showCreateFlow ? (
+                    <button
+                      className="fit-ex-create"
+                      onClick={() => setShowCreateFlow(true)}
+                    >
+                      + Create &ldquo;{exerciseSearch.trim()}&rdquo;
+                    </button>
+                  ) : (
+                    <div
+                      className="fit-category-picker"
+                      style={{ marginTop: '0' }}
+                    >
+                      <Segmented
+                        value={customCategory}
+                        options={['strength', 'cardio', 'mobility']}
+                        onChange={(v) => {
+                          const cat = v as 'strength' | 'cardio' | 'mobility'
+                          setCustomCategory(cat)
+                          addCustom(exerciseSearch.trim(), cat)
+                        }}
+                        labels={{
+                          strength: 'Strength',
+                          cardio: 'Cardio',
+                          mobility: 'Mobility',
+                        }}
+                        ariaLabel="Custom exercise category"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="fit-ex-grid" style={{ marginBottom: '16px' }}>
+                  {filteredCandidates.map((c, i) => {
+                    const selected = selectedExercises.includes(c.name)
+                    return (
+                      <button
+                        key={c.name}
+                        className={`fit-ex-card${selected ? ' selected' : ''}`}
+                        onClick={() => toggleEx(c.name, c.category)}
+                        style={
+                          {
+                            '--enter-delay': `${i * 30}ms`,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <span className="fit-ex-card-name">{c.name}</span>
+                        <CategoryBadge category={c.category} />
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Selected summary */}
               <div
@@ -488,26 +594,71 @@ export function SessionWizard({ open, onClose, onStart }: Props) {
                 </span>
               </div>
 
-              <button
-                onClick={handleStart}
-                disabled={!canStart}
-                style={{
-                  width: '100%',
-                  height: '42px',
-                  background: canStart
-                    ? 'var(--accent-tint)'
-                    : 'rgba(255,240,200,0.04)',
-                  border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
-                  borderRadius: '9px',
-                  color: canStart ? 'var(--accent)' : 'var(--text-tertiary)',
-                  fontSize: '13.5px',
-                  fontWeight: 600,
-                  cursor: canStart ? 'pointer' : 'default',
-                  transition: 'background .2s, color .2s, border-color .2s',
-                }}
-              >
-                Start session →
-              </button>
+              {isPlanning ? (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleSavePlan}
+                    disabled={!canStart || saving}
+                    style={{
+                      flex: 1,
+                      height: '42px',
+                      background: 'rgba(255,240,200,0.07)',
+                      border: '1px solid rgba(255,240,200,0.09)',
+                      borderRadius: '9px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '13.5px',
+                      fontWeight: 600,
+                      cursor: canStart && !saving ? 'pointer' : 'default',
+                      opacity: canStart && !saving ? 1 : 0.5,
+                    }}
+                  >
+                    Save plan
+                  </button>
+                  <button
+                    onClick={handleStartPlanned}
+                    disabled={!canStart || saving}
+                    style={{
+                      flex: 1,
+                      height: '42px',
+                      background: canStart
+                        ? 'var(--accent-tint)'
+                        : 'rgba(255,240,200,0.04)',
+                      border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
+                      borderRadius: '9px',
+                      color: canStart
+                        ? 'var(--accent)'
+                        : 'var(--text-tertiary)',
+                      fontSize: '13.5px',
+                      fontWeight: 600,
+                      cursor: canStart && !saving ? 'pointer' : 'default',
+                      transition: 'background .2s, color .2s, border-color .2s',
+                    }}
+                  >
+                    Start now →
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleStart}
+                  disabled={!canStart}
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    background: canStart
+                      ? 'var(--accent-tint)'
+                      : 'rgba(255,240,200,0.04)',
+                    border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
+                    borderRadius: '9px',
+                    color: canStart ? 'var(--accent)' : 'var(--text-tertiary)',
+                    fontSize: '13.5px',
+                    fontWeight: 600,
+                    cursor: canStart ? 'pointer' : 'default',
+                    transition: 'background .2s, color .2s, border-color .2s',
+                  }}
+                >
+                  Start session →
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -107,16 +107,16 @@ export function Notes() {
     }
   }, [])
   useEffect(() => {
-    const mobile = window.matchMedia('(max-width: 640px)')
     const drawer = window.matchMedia('(max-width: 800px)')
-    const updateMobile = () => setIsMobile(mobile.matches)
     const updateDrawer = () => setSidebarOpen(!drawer.matches)
-    mobile.addEventListener('change', updateMobile)
     drawer.addEventListener('change', updateDrawer)
-    return () => {
-      mobile.removeEventListener('change', updateMobile)
-      drawer.removeEventListener('change', updateDrawer)
-    }
+    return () => drawer.removeEventListener('change', updateDrawer)
+  }, [])
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 640px)')
+    const update = () => setIsMobile(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
   }, [])
 
   const selected = pages.find((page) => page.id === pageId)
@@ -267,44 +267,97 @@ export function Notes() {
           />
         )}
         <div className="notes-main">
-          <div className="notes-topbar">
-            <button
-              type="button"
-              className="notes-nav-btn"
-              aria-label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
-              aria-pressed={sidebarOpen}
-              onClick={() => setSidebarOpen((open) => !open)}
+          <div
+            className="notes-topbar"
+            style={
+              isMobile
+                ? {
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    gap: 10,
+                    padding: '12px 14px 10px',
+                    position: 'relative',
+                  }
+                : { position: 'relative' }
+            }
+          >
+            <div
+              style={
+                isMobile
+                  ? {
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      position: 'relative',
+                    }
+                  : { display: 'contents' }
+              }
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+              <button
+                type="button"
+                className="notes-nav-btn"
+                aria-label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
+                aria-pressed={sidebarOpen}
+                onClick={() => setSidebarOpen((open) => !open)}
+                style={
+                  isMobile
+                    ? { position: 'absolute', left: 0, flexShrink: 0 }
+                    : undefined
+                }
               >
-                <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
-                <path d="M7.5 3.5v13" />
-              </svg>
-            </button>
-            <h2 className="notes-topbar-title">
-              {trash ? 'Trash' : selected?.title || 'Notes'}
-            </h2>
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                  <path d="M7.5 3.5v13" />
+                </svg>
+              </button>
+              <h2
+                className="notes-topbar-title"
+                style={
+                  isMobile ? { textAlign: 'center', flex: 'none' } : undefined
+                }
+              >
+                {trash ? 'Trash' : selected?.title || 'Notes'}
+              </h2>
+            </div>
             <button
               ref={newPageRef}
               type="button"
-              className="cal-new-event notes-new-page"
               aria-label="New page"
               aria-expanded={createMenu === 'topbar'}
               onClick={() =>
                 setCreateMenu(createMenu === 'topbar' ? null : 'topbar')
               }
+              style={{
+                position: 'absolute',
+                top: isMobile ? 12 : 14,
+                right: isMobile ? 14 : 20,
+                width: 26,
+                height: 26,
+                background: 'var(--accent-tint)',
+                border: '1px solid var(--accent-tint-border)',
+                borderRadius: 8,
+                color: 'var(--accent)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background .15s',
+                zIndex: 4,
+              }}
             >
               <svg
-                width="12"
-                height="12"
+                width="14"
+                height="14"
                 viewBox="0 0 20 20"
                 fill="none"
                 stroke="currentColor"
@@ -313,7 +366,6 @@ export function Notes() {
               >
                 <path d="M10 4v12M4 10h12" />
               </svg>
-              <span className="cal-new-event-label">New page</span>
             </button>
             <CreatePageMenu
               anchorRef={newPageRef}

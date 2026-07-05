@@ -1,17 +1,50 @@
-import { useState, useRef, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { RestTimer } from './RestTimer'
-import { PREV_PERFORMANCE } from './exerciseLibrary'
-import type { ActiveSession } from './exerciseLibrary'
+import { Segmented } from '../../components/Segmented'
+import {
+  PREV_PERFORMANCE,
+  isCardioName,
+  CategoryBadge,
+} from './exerciseLibrary'
+import type {
+  ActiveExercise,
+  ActiveSession,
+  ActiveSet,
+} from './exerciseLibrary'
 
 interface Props {
   session: ActiveSession
   onUpdate: (session: ActiveSession) => void
   onFinish: () => void
+  /** Session-level note, edited near the finish action (event workout notes
+   * prefill this when a session was started from a planned/linked event). */
+  note?: string
+  onNoteChange?: (value: string) => void
 }
 
-export function LiveSession({ session, onUpdate, onFinish }: Props) {
+const FEELING_LABELS = ['Dying', 'Rough', 'OK', 'Good', 'Great']
+
+export function newSet(category: ActiveExercise['category']): ActiveSet {
+  return category === 'cardio'
+    ? { w: '', r: '', done: false, distance_km: '', duration_min: '' }
+    : { w: '', r: '', done: false }
+}
+
+export function LiveSession({
+  session,
+  onUpdate,
+  onFinish,
+  note = '',
+  onNoteChange,
+}: Props) {
   const [restCount, setRestCount] = useState(0)
   const [restTotal, setRestTotal] = useState(90)
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set())
+  const [addingExercise, setAddingExercise] = useState(false)
+  const [exerciseName, setExerciseName] = useState('')
+  const [newExerciseCategory, setNewExerciseCategory] = useState<
+    'strength' | 'cardio' | 'mobility'
+  >('strength')
   const restInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function startRest() {
@@ -19,448 +52,426 @@ export function LiveSession({ session, onUpdate, onFinish }: Props) {
     setRestCount(90)
     setRestTotal(90)
     restInterval.current = setInterval(() => {
-      setRestCount((c) => {
-        if (c <= 1) {
+      setRestCount((count) => {
+        if (count <= 1) {
           if (restInterval.current) clearInterval(restInterval.current)
           return 0
         }
-        return c - 1
+        return count - 1
       })
     }, 1000)
   }
 
-  function skipRest() {
-    if (restInterval.current) clearInterval(restInterval.current)
-    setRestCount(0)
-  }
-
-  // Cleanup interval on unmount
-  const cleanupRest = useCallback(() => {
-    if (restInterval.current) clearInterval(restInterval.current)
-  }, [])
-
-  function toggleSetDone(exIdx: number, setIdx: number) {
-    const exs = session.exercises.map((ex, i) => {
-      if (i !== exIdx) return ex
-      return {
-        ...ex,
-        sets: ex.sets.map((s, j) =>
-          j === setIdx ? { ...s, done: !s.done } : s,
-        ),
-      }
+  function updateExercise(exerciseIndex: number, update: ActiveExercise) {
+    onUpdate({
+      ...session,
+      exercises: session.exercises.map((exercise, index) =>
+        index === exerciseIndex ? update : exercise,
+      ),
     })
-    const set = session.exercises[exIdx].sets[setIdx]
-    if (!set.done) {
-      // Was unchecked → now checked
-      startRest()
-    }
-    onUpdate({ ...session, exercises: exs })
   }
 
-  function updateSetValue(
-    exIdx: number,
-    setIdx: number,
-    field: 'w' | 'r',
-    value: string,
+  function updateSet(
+    exerciseIndex: number,
+    setIndex: number,
+    data: Partial<ActiveSet>,
   ) {
-    const exs = session.exercises.map((ex, i) => {
-      if (i !== exIdx) return ex
-      return {
-        ...ex,
-        sets: ex.sets.map((s, j) =>
-          j === setIdx ? { ...s, [field]: value } : s,
-        ),
-      }
+    const exercise = session.exercises[exerciseIndex]
+    updateExercise(exerciseIndex, {
+      ...exercise,
+      sets: exercise.sets.map((set, index) =>
+        index === setIndex ? { ...set, ...data } : set,
+      ),
     })
-    onUpdate({ ...session, exercises: exs })
   }
 
-  function addSet(exIdx: number) {
-    const exs = session.exercises.map((ex, i) =>
-      i === exIdx
-        ? { ...ex, sets: [...ex.sets, { w: '', r: '', done: false }] }
-        : ex,
-    )
-    onUpdate({ ...session, exercises: exs })
+  function toggleDone(exerciseIndex: number, setIndex: number) {
+    const exercise = session.exercises[exerciseIndex]
+    const set = exercise.sets[setIndex]
+    updateSet(exerciseIndex, setIndex, { done: !set.done })
+    if (!set.done && exercise.category !== 'cardio') startRest()
   }
 
-  function removeSet(exIdx: number, setIdx: number) {
-    const exs = session.exercises.map((ex, i) =>
-      i === exIdx
-        ? { ...ex, sets: ex.sets.filter((_, j) => j !== setIdx) }
-        : ex,
-    )
-    onUpdate({ ...session, exercises: exs })
+  function addSet(exerciseIndex: number) {
+    const exercise = session.exercises[exerciseIndex]
+    updateExercise(exerciseIndex, {
+      ...exercise,
+      sets: [...exercise.sets, newSet(exercise.category)],
+    })
   }
 
-  function addExercise(name: string) {
+  function removeSet(exerciseIndex: number, setIndex: number) {
+    const exercise = session.exercises[exerciseIndex]
+    updateExercise(exerciseIndex, {
+      ...exercise,
+      sets: exercise.sets.filter((_, index) => index !== setIndex),
+    })
+  }
+
+  function toggleNote(exerciseIndex: number, setIndex: number) {
+    const key = `${exerciseIndex}-${setIndex}`
+    setOpenNotes((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function addExercise() {
+    const name = exerciseName.trim()
+    if (!name) return
+    const category = newExerciseCategory
     onUpdate({
       ...session,
       exercises: [
         ...session.exercises,
         {
           name,
-          prev: PREV_PERFORMANCE[name] || '—',
-          sets: [
-            { w: '', r: '', done: false },
-            { w: '', r: '', done: false },
-            { w: '', r: '', done: false },
-          ],
+          prev: PREV_PERFORMANCE[name] || '-',
+          category,
+          sets: Array.from({ length: category === 'cardio' ? 1 : 3 }, () =>
+            newSet(category),
+          ),
         },
       ],
     })
+    setExerciseName('')
+    setNewExerciseCategory('strength')
+    setAddingExercise(false)
   }
 
-  const setLabel = (n: number) => `S${n}`
+  function finish() {
+    if (restInterval.current) clearInterval(restInterval.current)
+    onFinish()
+  }
 
   return (
-    <div style={{ animation: 'springIn .4s cubic-bezier(.16,1,.3,1) both' }}>
-      {/* Live session header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '8px',
-              height: '8px',
-              background: 'var(--fit-accent)',
-              borderRadius: '50%',
-              animation: 'breathe 1.4s ease-in-out infinite',
-            }}
-          />
-          <span
-            style={{
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: '11px',
-              fontWeight: 600,
-              color: 'var(--fit-accent)',
-              letterSpacing: '.05em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Session live
-          </span>
+    <section className="fit-live" aria-labelledby="live-session-title">
+      <header className="fit-live-header">
+        <div className="fit-live-status">
+          <span aria-hidden="true" />
+          <strong id="live-session-title">Session live</strong>
         </div>
-        <button
-          onClick={() => {
-            cleanupRest()
-            onFinish()
-          }}
-          style={{
-            height: '32px',
-            padding: '0 14px',
-            background: 'var(--accent-tint)',
-            border: '1px solid var(--accent-tint-border)',
-            borderRadius: '7px',
-            color: 'var(--accent)',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Finish workout ✓
+        <button className="fit-primary-button" type="button" onClick={finish}>
+          Finish workout
         </button>
-      </div>
+      </header>
 
-      {/* Rest timer overlay */}
       {restCount > 0 && (
         <RestTimer
           restCount={restCount}
           restTotal={restTotal}
-          onSkip={skipRest}
+          onSkip={() => {
+            if (restInterval.current) clearInterval(restInterval.current)
+            setRestCount(0)
+          }}
         />
       )}
 
-      {/* Exercise cards */}
-      {session.exercises.map((exercise, exIdx) => (
-        <div
-          key={exercise.name}
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid rgba(255,240,200,0.07)',
-            borderRadius: '12px',
-            padding: '18px 20px',
-            marginBottom: '10px',
+      <div className="fit-live-exercises">
+        {session.exercises.map((exercise, exerciseIndex) => {
+          const isCardio = exercise.category === 'cardio'
+          return (
+            <article
+              className="fit-live-exercise"
+              key={`${exercise.name}-${exerciseIndex}`}
+            >
+              <header>
+                <div>
+                  <h3
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    {exercise.name}
+                    {exercise.category && (
+                      <CategoryBadge category={exercise.category} />
+                    )}
+                  </h3>
+                  <p>Previous: {exercise.prev}</p>
+                </div>
+                <button
+                  className="fit-secondary-button"
+                  type="button"
+                  onClick={() => addSet(exerciseIndex)}
+                >
+                  + Set
+                </button>
+              </header>
+
+              {exercise.sets.length === 0 ? (
+                <p className="fit-empty inset">
+                  No sets logged yet. Add a set to continue.
+                </p>
+              ) : (
+                <div className="fit-live-table">
+                  <div className="fit-live-row head" aria-hidden="true">
+                    <span>Set</span>
+                    <span>{isCardio ? 'km' : 'kg'}</span>
+                    <span>{isCardio ? 'min' : 'reps'}</span>
+                    <span>Feel</span>
+                    <span>Done</span>
+                    <span />
+                  </div>
+                  {exercise.sets.map((set, setIndex) => {
+                    const noteKey = `${exerciseIndex}-${setIndex}`
+                    return (
+                      <div
+                        className={`fit-live-row${set.done ? ' done' : ''}`}
+                        key={setIndex}
+                      >
+                        <strong className="fit-live-num">{setIndex + 1}</strong>
+
+                        {isCardio ? (
+                          <>
+                            <input
+                              className="fit-live-cell"
+                              type="number"
+                              inputMode="decimal"
+                              step="0.01"
+                              value={set.distance_km ?? ''}
+                              placeholder="-"
+                              aria-label={`${exercise.name} set ${setIndex + 1} distance`}
+                              onChange={(event) =>
+                                updateSet(exerciseIndex, setIndex, {
+                                  distance_km: event.target.value,
+                                })
+                              }
+                            />
+                            <input
+                              className="fit-live-cell"
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              value={set.duration_min ?? ''}
+                              placeholder="0"
+                              aria-label={`${exercise.name} set ${setIndex + 1} duration`}
+                              onChange={(event) =>
+                                updateSet(exerciseIndex, setIndex, {
+                                  duration_min: event.target.value,
+                                })
+                              }
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              className="fit-live-cell"
+                              type="number"
+                              inputMode="decimal"
+                              value={set.w}
+                              placeholder="-"
+                              aria-label={`${exercise.name} set ${setIndex + 1} weight`}
+                              onChange={(event) =>
+                                updateSet(exerciseIndex, setIndex, {
+                                  w: event.target.value,
+                                })
+                              }
+                            />
+                            <input
+                              className="fit-live-cell"
+                              type="number"
+                              inputMode="numeric"
+                              value={set.r}
+                              placeholder="0"
+                              aria-label={`${exercise.name} set ${setIndex + 1} reps`}
+                              onChange={(event) =>
+                                updateSet(exerciseIndex, setIndex, {
+                                  r: event.target.value,
+                                })
+                              }
+                            />
+                          </>
+                        )}
+
+                        <fieldset
+                          className="fit-feeling"
+                          aria-label={`${exercise.name} set ${setIndex + 1} feeling`}
+                        >
+                          {FEELING_LABELS.map((label, feelingIndex) => {
+                            const feeling = feelingIndex + 1
+                            return (
+                              <button
+                                key={label}
+                                type="button"
+                                className={
+                                  set.feeling === feeling ? 'active' : ''
+                                }
+                                aria-label={label}
+                                aria-pressed={set.feeling === feeling}
+                                title={label}
+                                onClick={() =>
+                                  updateSet(exerciseIndex, setIndex, {
+                                    feeling:
+                                      set.feeling === feeling ? null : feeling,
+                                  })
+                                }
+                              >
+                                <span />
+                              </button>
+                            )
+                          })}
+                        </fieldset>
+
+                        <button
+                          className="fit-live-check"
+                          type="button"
+                          aria-label={`Mark set ${setIndex + 1} ${set.done ? 'not done' : 'done'}`}
+                          aria-pressed={set.done}
+                          onClick={() => toggleDone(exerciseIndex, setIndex)}
+                        >
+                          <svg
+                            width="13"
+                            height="13"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M2.5 8.5l3.5 3.5 7.5-8" />
+                          </svg>
+                        </button>
+
+                        <div className="fit-live-tools">
+                          <button
+                            className={`fit-live-icon-btn${set.note ? ' active' : ''}`}
+                            type="button"
+                            aria-label={`${set.note ? 'Edit' : 'Add'} note for set ${setIndex + 1}`}
+                            aria-expanded={openNotes.has(noteKey)}
+                            onClick={() => toggleNote(exerciseIndex, setIndex)}
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M3 2.5h10v8H8l-3.5 3v-3H3z" />
+                            </svg>
+                          </button>
+                          <button
+                            className="fit-live-icon-btn danger"
+                            type="button"
+                            aria-label={`Remove set ${setIndex + 1}`}
+                            onClick={() => removeSet(exerciseIndex, setIndex)}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {openNotes.has(noteKey) && (
+                          <label className="fit-live-note">
+                            <input
+                              value={set.note ?? ''}
+                              maxLength={500}
+                              aria-label={`Set ${setIndex + 1} note`}
+                              placeholder="Technique, pain, or anything worth remembering"
+                              onChange={(event) =>
+                                updateSet(exerciseIndex, setIndex, {
+                                  note: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </article>
+          )
+        })}
+      </div>
+
+      {addingExercise ? (
+        <form
+          className="fit-add-exercise"
+          onSubmit={(event) => {
+            event.preventDefault()
+            addExercise()
           }}
         >
-          {/* Exercise header */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '14px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '16px', color: 'var(--fit-accent)' }}>
-                {/* ponytail: use text icon instead of nerd font for compatibility */}
-                ▩
-              </span>
-              <div>
-                <div
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  {exercise.name}
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'JetBrains Mono, monospace',
-                    fontSize: '10px',
-                    color: 'var(--text-tertiary)',
-                    marginTop: '1px',
-                  }}
-                >
-                  Prev: {exercise.prev}
-                </div>
-              </div>
-            </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <label className="cal-field">
+              <span>Exercise name</span>
+              <input
+                value={exerciseName}
+                onChange={(event) => {
+                  const val = event.target.value
+                  setExerciseName(val)
+                  // Smart-default: if typed name matches cardio library, switch picker
+                  if (isCardioName(val.trim())) {
+                    setNewExerciseCategory('cardio')
+                  }
+                }}
+                placeholder="e.g. Incline bench press"
+              />
+            </label>
             <button
-              onClick={() => addSet(exIdx)}
-              style={{
-                height: '28px',
-                padding: '0 11px',
-                background: 'var(--accent-tint)',
-                border: '1px solid var(--accent-tint-border)',
-                borderRadius: '6px',
-                color: 'var(--accent)',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              className="fit-primary-button"
+              type="submit"
+              disabled={!exerciseName.trim()}
             >
-              + Set
+              Add
+            </button>
+            <button
+              className="fit-secondary-button"
+              type="button"
+              onClick={() => setAddingExercise(false)}
+            >
+              Cancel
             </button>
           </div>
-
-          {/* Set rows */}
-          {exercise.sets.length === 0 ? (
-            <div
-              style={{
-                padding: '12px',
-                background: 'var(--bg-raised)',
-                borderRadius: '8px',
-                fontSize: '12.5px',
-                color: 'var(--text-tertiary)',
-                textAlign: 'center',
-                border: '1px dashed rgba(255,240,200,0.07)',
+          <div
+            className="fit-category-picker"
+            style={{ alignSelf: 'flex-start', maxWidth: '280px' }}
+          >
+            <Segmented
+              value={newExerciseCategory}
+              options={['strength', 'cardio', 'mobility']}
+              onChange={(v) =>
+                setNewExerciseCategory(v as 'strength' | 'cardio' | 'mobility')
+              }
+              labels={{
+                strength: 'Strength',
+                cardio: 'Cardio',
+                mobility: 'Mobility',
               }}
-            >
-              No sets logged yet — tap + Set to start
-            </div>
-          ) : (
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}
-            >
-              {exercise.sets.map((set, setIdx) => (
-                <div
-                  key={setIdx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '28px 1fr 1fr 36px 24px',
-                    gap: '8px',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '10px',
-                      color: 'var(--text-tertiary)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {setLabel(setIdx + 1)}
-                  </span>
-                  {/* Weight input */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '7px 10px',
-                      background: 'var(--bg-raised)',
-                      borderRadius: '7px',
-                      border: '1px solid rgba(255,240,200,0.07)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: 'JetBrains Mono, monospace',
-                        fontSize: '10px',
-                        color: 'var(--text-tertiary)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      kg
-                    </span>
-                    <input
-                      type="number"
-                      value={set.w}
-                      onChange={(e) =>
-                        updateSetValue(exIdx, setIdx, 'w', e.target.value)
-                      }
-                      placeholder="—"
-                      style={{
-                        width: '100%',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-primary)',
-                        fontSize: '13.5px',
-                        fontWeight: 600,
-                        fontFamily: 'JetBrains Mono, monospace',
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-                  {/* Reps input */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '7px 10px',
-                      background: 'var(--bg-raised)',
-                      borderRadius: '7px',
-                      border: '1px solid rgba(255,240,200,0.07)',
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: 'JetBrains Mono, monospace',
-                        fontSize: '10px',
-                        color: 'var(--text-tertiary)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      reps
-                    </span>
-                    <input
-                      type="number"
-                      value={set.r}
-                      onChange={(e) =>
-                        updateSetValue(exIdx, setIdx, 'r', e.target.value)
-                      }
-                      placeholder="0"
-                      style={{
-                        width: '100%',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-primary)',
-                        fontSize: '13.5px',
-                        fontWeight: 600,
-                        fontFamily: 'JetBrains Mono, monospace',
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-                  {/* Done checkmark */}
-                  <button
-                    onClick={() => toggleSetDone(exIdx, setIdx)}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '7px',
-                      border: set.done
-                        ? '1px solid var(--fit-accent-border)'
-                        : '1px solid rgba(255,240,200,0.09)',
-                      background: set.done
-                        ? 'var(--fit-accent-tint-deep)'
-                        : 'transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'background .15s',
-                    }}
-                  >
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke={
-                        set.done ? 'var(--fit-accent)' : 'var(--text-tertiary)'
-                      }
-                      strokeWidth={set.done ? '2.5' : '2'}
-                      strokeLinecap="round"
-                    >
-                      <path d="M4 10l4 4L17 6" />
-                    </svg>
-                  </button>
-                  {/* Delete set */}
-                  <button
-                    onClick={() => removeSet(exIdx, setIdx)}
-                    title="Remove set"
-                    style={{
-                      width: '22px',
-                      height: '22px',
-                      borderRadius: '5px',
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--text-tertiary)',
-                      cursor: 'pointer',
-                      fontSize: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      justifySelf: 'center',
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {/* Add exercise button */}
-      <button
-        onClick={() => {
-          const name = prompt('Exercise name:')
-          if (name?.trim()) addExercise(name.trim())
-        }}
-        style={{
-          width: '100%',
-          padding: '13px',
-          background: 'rgba(255,240,200,0.04)',
-          border: '1px dashed rgba(255,240,200,0.1)',
-          borderRadius: '10px',
-          color: 'var(--text-tertiary)',
-          fontSize: '13px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          cursor: 'pointer',
-          transition: 'background .15s, border-color .15s, color .15s',
-        }}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 20 20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
+              ariaLabel="Exercise category"
+            />
+          </div>
+        </form>
+      ) : (
+        <button
+          className="fit-add-exercise-trigger"
+          type="button"
+          onClick={() => setAddingExercise(true)}
         >
-          <path d="M10 4v12M4 10h12" />
-        </svg>
-        Add exercise
-      </button>
-    </div>
+          + Add exercise
+        </button>
+      )}
+
+      <label className="fit-live-note-section cal-field">
+        <span>Workout note</span>
+        <textarea
+          value={note}
+          maxLength={2000}
+          placeholder="How did it feel? Anything worth remembering for next time."
+          onChange={(event) => onNoteChange?.(event.target.value)}
+        />
+      </label>
+    </section>
   )
 }

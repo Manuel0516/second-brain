@@ -9,6 +9,7 @@ import { apiCall } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
 import { orderCalendars } from './order'
+import { SESSION_TYPES, SessionTypeIcon } from '../fitness/sessionTypes'
 import type { CalendarData, CalendarEvent, EventConnections } from './types'
 const MIN_SAVE_SPINNER_MS = 145
 
@@ -68,12 +69,13 @@ interface Props {
   onClose: () => void
   onSaved: () => void
   onOpenNote?: (pageId: string) => void
+  onOpenFitness?: (sessionId: string) => void
   onDraftChange?: (event: Partial<CalendarEvent>) => void
 }
 
 interface EventLink {
   id: string
-  target_type: 'page' | 'event'
+  target_type: 'page' | 'event' | 'workout_session'
   target_id: string
   relation: string
   direction: 'incoming' | 'outgoing'
@@ -83,13 +85,31 @@ interface EventLink {
 }
 
 function LinkIcon({
-  icon,
   pageType,
+  targetType,
 }: {
-  icon: string | null | undefined
   pageType: string | null | undefined
+  targetType?: string | null
 }) {
-  if (icon) return <span aria-hidden="true">{icon}</span>
+  // Monochrome SVG icons only — API-returned page emojis are intentionally
+  // ignored so linked items match the editor's line-icon style.
+  if (targetType === 'workout_session')
+    return (
+      <span aria-hidden="true">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 8v8M3 10v4M3 12h3M6 12h12M18 8v8M18 12h3M21 10v4" />
+        </svg>
+      </span>
+    )
   if (pageType === 'folder')
     return (
       <span aria-hidden="true">
@@ -107,7 +127,24 @@ function LinkIcon({
         </svg>
       </span>
     )
-  return null
+  return (
+    <span aria-hidden="true">
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M5 2.5h7l3.5 3.5v11.5h-10.5z" />
+        <path d="M12 2.5V6h3.5" />
+        <path d="M7.5 10h5M7.5 13h5" />
+      </svg>
+    </span>
+  )
 }
 
 function localValue(value: string) {
@@ -123,6 +160,7 @@ export function EventEditor({
   onClose,
   onSaved,
   onOpenNote,
+  onOpenFitness,
   onDraftChange,
 }: Props) {
   const { settings } = useSettings()
@@ -173,6 +211,26 @@ export function EventEditor({
     food_carbs: event.connections?.food?.carbs?.toString() ?? '',
     food_fat: event.connections?.food?.fat?.toString() ?? '',
   })
+  // Fitness workout-type card selection: mirrors form.workout_type, but keeps
+  // "Custom" highlighted while its text input is still empty.
+  const initialWorkoutType = event.connections?.fitness?.workout_type ?? ''
+  const [workoutTypeCard, setWorkoutTypeCard] = useState<string>(
+    initialWorkoutType
+      ? (SESSION_TYPES as readonly string[]).includes(initialWorkoutType)
+        ? initialWorkoutType
+        : 'Custom'
+      : '',
+  )
+  const [customWorkoutType, setCustomWorkoutType] = useState(
+    initialWorkoutType &&
+      !(SESSION_TYPES as readonly string[]).includes(initialWorkoutType)
+      ? initialWorkoutType
+      : '',
+  )
+  const selectWorkoutType = (type: string) => {
+    setWorkoutTypeCard(type)
+    set('workout_type', type === 'Custom' ? customWorkoutType : type)
+  }
   const [error, setError] = useState('')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(
     'idle',
@@ -268,6 +326,15 @@ export function EventEditor({
               current.connect_notes
                 ? current
                 : { ...current, connect_notes: true },
+            )
+          }
+          // A workout session created from this event (backend hook) flips
+          // the fitness toggle on too, even though the editor didn't set it.
+          if (links.some((link) => link.target_type === 'workout_session')) {
+            setForm((current) =>
+              current.connect_fitness
+                ? current
+                : { ...current, connect_fitness: true },
             )
           }
         }
@@ -428,6 +495,13 @@ export function EventEditor({
   const setTimePart = (key: TimeKey, time: string) =>
     set(key, `${datePart(form[key])}T${time}`)
 
+  // Once a workout session exists for this event, the fitness card just
+  // links to it — the type/notes were already consumed by the backend hook.
+  const fitnessLinked =
+    Boolean(event.id) &&
+    (eventLinks.some((link) => link.target_type === 'workout_session') ||
+      Boolean(event.connections?.fitness))
+
   const selectedCalendarId = form.calendar_id || orderedCalendars[0]?.id || ''
   const selectedCalendarColor =
     orderedCalendars.find((calendar) => calendar.id === selectedCalendarId)
@@ -486,8 +560,8 @@ export function EventEditor({
       if (form.connect_finance && !form.finance_category.trim()) {
         return fail('Add a finance category.')
       }
-      if (form.connect_fitness && !form.workout_type.trim()) {
-        return fail('Add a workout type.')
+      if (form.connect_fitness && !fitnessLinked && !form.workout_type.trim()) {
+        return fail('Select a workout type.')
       }
       if (form.connect_food && !form.food_name.trim()) {
         return fail('Add a food or meal name.')
@@ -639,17 +713,6 @@ export function EventEditor({
             }).catch(() => null)
           }
         }
-        // Edit mode, toggle switched off: remove every event↔note link.
-        // The note pages themselves survive in the tree.
-        if (event.id && !form.connect_notes) {
-          for (const link of eventLinks.filter(
-            (item) => item.target_type === 'page',
-          )) {
-            await apiCall(`/api/links/${link.id}`, {
-              method: 'DELETE',
-            }).catch(() => null)
-          }
-        }
         const remaining =
           MIN_SAVE_SPINNER_MS - (performance.now() - saveStartedAt)
         if (remaining > 0) {
@@ -669,7 +732,7 @@ export function EventEditor({
     [
       createNoteEnabled,
       event.id,
-      eventLinks,
+      fitnessLinked,
       form,
       icon,
       occurrenceStart,
@@ -881,21 +944,38 @@ export function EventEditor({
               </div>
             </fieldset>
 
-            {event.id && form.connect_notes && (
-              <fieldset className="editor-group">
-                <legend>Linked</legend>
+            {event.id && (
+              <fieldset className="editor-group event-linked-group">
+                <legend>
+                  Linked{eventLinks.length ? ` · ${eventLinks.length}` : ''}
+                </legend>
+                <p className="connection-help">
+                  Keep related notes and records beside this event.
+                </p>
                 <div className="event-linked-list">
                   {eventLinks.map((link) => (
                     <div key={link.id} className="event-linked-item">
-                      <LinkIcon icon={link.icon} pageType={link.page_type} />
+                      <LinkIcon
+                        pageType={link.page_type}
+                        targetType={link.target_type}
+                      />
                       <button
                         type="button"
                         className="event-linked-open"
-                        disabled={link.target_type !== 'page'}
-                        onClick={() =>
-                          link.target_type === 'page' &&
-                          closeWithAnimation(() => onOpenNote?.(link.target_id))
+                        disabled={
+                          link.target_type !== 'page' &&
+                          link.target_type !== 'workout_session'
                         }
+                        onClick={() => {
+                          if (link.target_type === 'page')
+                            closeWithAnimation(() =>
+                              onOpenNote?.(link.target_id),
+                            )
+                          else if (link.target_type === 'workout_session')
+                            closeWithAnimation(() =>
+                              onOpenFitness?.(link.target_id),
+                            )
+                        }}
                       >
                         <span className="event-linked-title">{link.title}</span>
                         <small>{link.relation}</small>
@@ -912,65 +992,72 @@ export function EventEditor({
                     </div>
                   ))}
                   {!eventLinks.length && (
-                    <p className="connection-help">No linked items yet.</p>
+                    <p className="event-linked-empty">
+                      {form.connect_notes
+                        ? 'Nothing linked yet. Search below or create a note.'
+                        : 'Nothing linked yet.'}
+                    </p>
                   )}
-                  <div className="event-link-search">
-                    <input
-                      type="text"
-                      placeholder="Link a note or folder…"
-                      value={noteQuery}
-                      onChange={(e) => setNoteQuery(e.target.value)}
-                    />
-                    {noteResults.length > 0 && (
-                      <div className="event-link-results" role="listbox">
-                        {noteResults.map((result) => (
-                          <button
-                            key={result.id}
-                            type="button"
-                            role="option"
-                            aria-selected={false}
-                            onClick={() => void linkExistingNote(result.id)}
-                          >
-                            <LinkIcon
-                              icon={result.icon}
-                              pageType={result.page_type}
-                            />
-                            <span>{result.title}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {newNoteOpen ? (
-                    <div className="connection-options">
-                      <FolderPicker
-                        value={form.note_folder_id}
-                        onChange={(id) => set('note_folder_id', id)}
-                      />
-                      <label>
-                        Note title
+                  {form.connect_notes && (
+                    <>
+                      <div className="event-link-search">
                         <input
-                          value={form.note_title}
-                          placeholder={form.title || 'Related note'}
-                          onChange={(e) => set('note_title', e.target.value)}
+                          type="text"
+                          placeholder="Link a note or folder…"
+                          value={noteQuery}
+                          onChange={(e) => setNoteQuery(e.target.value)}
                         />
-                      </label>
-                      <button
-                        type="button"
-                        className="ghost connection-open-note"
-                        onClick={() => void openEventNote()}
-                      >
-                        Create and open
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="ghost connection-open-note"
-                      onClick={() => setNewNoteOpen(true)}
-                    >
-                      Create new note
-                    </button>
+                        {noteResults.length > 0 && (
+                          <div className="event-link-results" role="listbox">
+                            {noteResults.map((result) => (
+                              <button
+                                key={result.id}
+                                type="button"
+                                role="option"
+                                aria-selected={false}
+                                onClick={() => void linkExistingNote(result.id)}
+                              >
+                                <LinkIcon pageType={result.page_type} />
+                                <span>{result.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {newNoteOpen ? (
+                        <div className="connection-options">
+                          <FolderPicker
+                            value={form.note_folder_id}
+                            onChange={(id) => set('note_folder_id', id)}
+                          />
+                          <label>
+                            Note title
+                            <input
+                              value={form.note_title}
+                              placeholder={form.title || 'Related note'}
+                              onChange={(e) =>
+                                set('note_title', e.target.value)
+                              }
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="ghost connection-open-note"
+                            onClick={() => void openEventNote()}
+                          >
+                            Create and open
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost connection-open-note"
+                          onClick={() => setNewNoteOpen(true)}
+                        >
+                          Create new note
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </fieldset>
@@ -1173,9 +1260,7 @@ export function EventEditor({
                       }}
                     />
                   </label>
-                  {/* Create mode collects the note draft here; edit mode is
-                      toggle-only — the Linked card manages everything. */}
-                  {form.connect_notes && !event.id && (
+                  {form.connect_notes && (
                     <div className="connection-options">
                       <label className="connection-check">
                         <input
@@ -1243,10 +1328,7 @@ export function EventEditor({
                                   setNoteResults([])
                                 }}
                               >
-                                <LinkIcon
-                                  icon={result.icon}
-                                  pageType={result.page_type}
-                                />
+                                <LinkIcon pageType={result.page_type} />
                                 <span>{result.title}</span>
                               </button>
                             ))}
@@ -1255,10 +1337,7 @@ export function EventEditor({
                       </div>
                       {pendingNoteLinks.map((pending) => (
                         <div key={pending.id} className="event-linked-item">
-                          <LinkIcon
-                            icon={pending.icon}
-                            pageType={pending.page_type}
-                          />
+                          <LinkIcon pageType={pending.page_type} />
                           <span className="event-linked-title">
                             {pending.title}
                           </span>
@@ -1374,29 +1453,64 @@ export function EventEditor({
                       type="checkbox"
                       role="switch"
                       checked={form.connect_fitness}
+                      disabled={fitnessLinked}
                       onChange={(e) => set('connect_fitness', e.target.checked)}
                     />
                   </label>
-                  {form.connect_fitness && (
-                    <div className="connection-options">
-                      <label>
-                        Workout type
-                        <input
-                          placeholder="Strength, run, mobility…"
-                          value={form.workout_type}
-                          onChange={(e) => set('workout_type', e.target.value)}
-                        />
-                      </label>
-                      <label>
-                        Workout notes
-                        <textarea
-                          rows={2}
-                          value={form.workout_notes}
-                          onChange={(e) => set('workout_notes', e.target.value)}
-                        />
-                      </label>
-                    </div>
-                  )}
+                  {form.connect_fitness &&
+                    (fitnessLinked ? (
+                      <p className="connection-help">
+                        Managed from the linked workout — open it from Linked
+                        above to edit exercises and notes.
+                      </p>
+                    ) : (
+                      <div className="connection-options">
+                        <div
+                          className="type-card-grid"
+                          role="radiogroup"
+                          aria-label="Workout type"
+                        >
+                          {SESSION_TYPES.map((t) => {
+                            const active = workoutTypeCard === t
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                className={`type-card ${active ? 'active' : ''}`}
+                                onClick={() => selectWorkoutType(t)}
+                              >
+                                <SessionTypeIcon type={t} />
+                                {t}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {workoutTypeCard === 'Custom' && (
+                          <input
+                            placeholder="Custom workout type"
+                            aria-label="Custom workout type"
+                            value={customWorkoutType}
+                            onChange={(e) => {
+                              setCustomWorkoutType(e.target.value)
+                              set('workout_type', e.target.value)
+                            }}
+                          />
+                        )}
+                        <label>
+                          Workout notes
+                          <textarea
+                            className="workout-notes"
+                            rows={1}
+                            value={form.workout_notes}
+                            onChange={(e) =>
+                              set('workout_notes', e.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+                    ))}
                 </div>
 
                 <div

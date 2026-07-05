@@ -9,7 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, DatabaseProperty, DatabaseView, Link, Page, User
+from app.models import (
+    Calendar,
+    CalendarEvent,
+    DatabaseProperty,
+    DatabaseView,
+    Link,
+    Page,
+    User,
+    WorkoutSession,
+)
 from app.routes.calendar import owned_event
 
 router = APIRouter(prefix="/api", tags=["notes"])
@@ -177,6 +186,19 @@ async def _node_details(
             )
         ).one_or_none()
         return (event_row.title, event_row.icon, None) if event_row else None
+    if node_type == "workout_session":
+        workout = (
+            await session.execute(
+                select(WorkoutSession.type, WorkoutSession.date, WorkoutSession.scheduled_at).where(
+                    WorkoutSession.id == node_id, WorkoutSession.user_id == user.id
+                )
+            )
+        ).one_or_none()
+        if workout is None:
+            return None
+        when = workout.date or workout.scheduled_at
+        title = f"{workout.type} · {when.date()}" if when else workout.type
+        return (title, None, None)
     return None
 
 
@@ -613,7 +635,7 @@ async def get_event_links(
         node_type = link.target_type if outgoing else link.source_type
         node_id = link.target_id if outgoing else link.source_id
         details = await _node_details(node_type, node_id, user, session)
-        if details and node_type in {"page", "event"}:
+        if details and node_type in {"page", "event", "workout_session"}:
             result.append(
                 LinkedNodeResponse(
                     id=link.id,

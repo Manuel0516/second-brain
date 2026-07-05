@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, Link, User
+from app.models import Calendar, CalendarEvent, Link, User, WorkoutSession
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -282,6 +282,39 @@ async def owned_event(event_id: str, user: User, session: AsyncSession) -> Calen
     return event
 
 
+def _plain_text_to_prosemirror(text: str) -> dict[str, object]:
+    """Wrap plain text in a minimal ProseMirror doc (empty doc when blank)."""
+    content = [{"type": "paragraph", "content": [{"type": "text", "text": text}]}] if text else []
+    return {"type": "doc", "content": content}
+
+
+async def _linked_planned_sessions(
+    session: AsyncSession, event_ids: list[str]
+) -> list[WorkoutSession]:
+    """Planned workout sessions linked to the given events via logged_from."""
+    if not event_ids:
+        return []
+    linked_ids = list(
+        await session.scalars(
+            select(Link.target_id).where(
+                Link.source_type == "event",
+                Link.source_id.in_(event_ids),
+                Link.target_type == "workout_session",
+                Link.relation == "logged_from",
+            )
+        )
+    )
+    if not linked_ids:
+        return []
+    rows = await session.scalars(
+        select(WorkoutSession).where(
+            WorkoutSession.id.in_(linked_ids),
+            WorkoutSession.status == "planned",
+        )
+    )
+    return list(rows)
+
+
 async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> None:
     if event_ids:
         await session.execute(
@@ -483,6 +516,31 @@ async def create_event(
     values["link"] = str(data.link) if data.link else None
     event = CalendarEvent(**values)
     session.add(event)
+
+    # ── Fitness hook: event -> planned workout session (one-directional) ──
+    fitness = data.connections.fitness
+    if fitness is not None:
+        await session.flush()
+        workout = WorkoutSession(
+            user_id=user.id,
+            type=fitness.workout_type,
+            status="planned",
+            scheduled_at=event.start_at,
+            date=event.start_at,
+            notes=_plain_text_to_prosemirror(fitness.notes or ""),
+        )
+        session.add(workout)
+        await session.flush()
+        session.add(
+            Link(
+                source_type="event",
+                source_id=event.id,
+                target_type="workout_session",
+                target_id=workout.id,
+                relation="logged_from",
+            )
+        )
+
     await session.commit()
     await session.refresh(event)
     return event_response(event)
@@ -527,6 +585,13 @@ async def patch_event(
         setattr(event, key, str(value) if key == "link" and value else value)
     if event.end_at <= event.start_at:
         raise HTTPException(status_code=422, detail="end_at must be after start_at")
+
+    # Rescheduling the event moves linked planned sessions along with it.
+    # Active/completed sessions are never touched.
+    if "start_at" in values:
+        for workout in await _linked_planned_sessions(session, [event.id]):
+            workout.scheduled_at = event.start_at
+
     await session.commit()
     await session.refresh(event)
     return event_response(event)
@@ -614,6 +679,10 @@ async def delete_event(
                 select(CalendarEvent.id).where(CalendarEvent.recurrence_parent_id == event.id)
             )
         )
+        # Deleting the event un-schedules linked planned sessions but keeps
+        # the session rows themselves.
+        for workout in await _linked_planned_sessions(session, event_ids):
+            workout.scheduled_at = None
         await _delete_event_links(session, event_ids)
         await session.delete(event)
         await session.commit()
@@ -636,6 +705,8 @@ async def delete_event(
                 )
             )
         )
+        for workout in await _linked_planned_sessions(session, override_ids):
+            workout.scheduled_at = None
         await _delete_event_links(session, override_ids)
         await session.execute(
             delete(CalendarEvent).where(
@@ -653,6 +724,8 @@ async def delete_event(
                 )
             )
         )
+        for workout in await _linked_planned_sessions(session, override_ids):
+            workout.scheduled_at = None
         await _delete_event_links(session, override_ids)
         await session.execute(
             delete(CalendarEvent).where(
