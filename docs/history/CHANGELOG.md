@@ -7,6 +7,12 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | # | Title | Date | Status |
 |---|-------|------|--------|
+| [0096](0096-logpastmodal-remove-set-always-visible.md) | LogPastModal remove set button always visible | 2026-07-06 | accepted |
+| [0095](0095-logpastmodal-single-row-flex.md) | LogPastModal single-row flex set card | 2026-07-06 | accepted |
+| [0094](0094-logpastmodal-flex-remove-button.md) | LogPastModal flex remove button alignment | 2026-07-06 | accepted |
+| [0093](0093-logpastmodal-remove-button-inline.md) | LogPastModal remove button stays inline with set inputs | 2026-07-06 | accepted |
+| [0092](0092-logpastmodal-shared-set-card.md) | LogPastModal uses the shared set card layout | 2026-07-06 | accepted |
+| [0091](0091-fitness-cardio-edit-and-set-list-wrap.md) | Fitness history cardio edit labels and wrapped set list | 2026-07-06 | accepted |
 | [0090](0090-fitness-history-set-responsive-layout.md) | Fitness history edit set row responsive layout | 2026-07-06 | accepted |
 | [0089](0089-logpast-set-title-font-and-center-add-button.md) | LogPastModal set title font and center Add Set button | 2026-07-06 | accepted |
 | [0088](0088-exercisestats-confirmdialog.md) | ExerciseStats replace window.confirm with ConfirmDialog | 2026-07-06 | accepted |

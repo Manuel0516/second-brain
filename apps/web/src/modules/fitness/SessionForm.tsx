@@ -11,6 +11,7 @@ import {
   updateSession,
   updateSetEntry,
 } from './api'
+import { CategoryBadge, isCardioName } from './exerciseLibrary'
 
 const FEELING_LABELS = ['Dying', 'Rough', 'OK', 'Good', 'Great']
 
@@ -52,6 +53,9 @@ export function SessionForm() {
   const [editNote, setEditNote] = useState('')
   const [editSets, setEditSets] = useState<SetEntry[]>([])
   const [exerciseNames, setExerciseNames] = useState<Record<string, string>>({})
+  const [exerciseCategories, setExerciseCategories] = useState<
+    Record<string, string>
+  >({})
   const [addExerciseId, setAddExerciseId] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -92,6 +96,11 @@ export function SessionForm() {
           exercises.map((exercise) => [exercise.id, exercise.name]),
         ),
       )
+      setExerciseCategories(
+        Object.fromEntries(
+          exercises.map((exercise) => [exercise.id, exercise.category]),
+        ),
+      )
     } catch {
       setEditSets([])
       setError('Failed to load workout details')
@@ -117,7 +126,12 @@ export function SessionForm() {
 
   async function updateSet(
     setId: string,
-    data: Partial<Pick<SetEntry, 'reps' | 'weight' | 'feeling' | 'notes'>>,
+    data: Partial<
+      Pick<
+        SetEntry,
+        'reps' | 'weight' | 'distance_km' | 'duration_min' | 'feeling' | 'notes'
+      >
+    >,
   ) {
     if (!editingId) return
     setBusy(setId)
@@ -152,13 +166,24 @@ export function SessionForm() {
     try {
       const existing = editSets.filter((set) => set.exercise_id === exerciseId)
       const last = existing.at(-1)
+      const exerciseCategory = exerciseCategories[exerciseId]
+      const cardio =
+        exerciseCategory === 'cardio' ||
+        isCardioName(exerciseNames[exerciseId] || '')
       const created = await createSetEntry(editingId, {
         exercise_id: exerciseId,
         set_number: existing.length
           ? Math.max(...existing.map((set) => set.set_number)) + 1
           : 1,
-        reps: last?.reps ?? 8,
-        weight: last?.weight ?? null,
+        ...(cardio
+          ? {
+              distance_km: last?.distance_km ?? null,
+              duration_min: last?.duration_min ?? null,
+            }
+          : {
+              reps: last?.reps ?? 8,
+              weight: last?.weight ?? null,
+            }),
       })
       setEditSets((current) => [...current, created])
     } catch {
@@ -250,7 +275,13 @@ export function SessionForm() {
                       >
                         <header>
                           <div>
-                            <h4>{exerciseNames[exerciseId] || 'Exercise'}</h4>
+                            <div className="fit-history-exercise-title">
+                              <h4>{exerciseNames[exerciseId] || 'Exercise'}</h4>
+                              {(exerciseCategories[exerciseId] === 'cardio' ||
+                                isCardioName(
+                                  exerciseNames[exerciseId] || '',
+                                )) && <CategoryBadge category="cardio" />}
+                            </div>
                             <span>
                               {sets.length} {sets.length === 1 ? 'set' : 'sets'}
                             </span>
@@ -268,43 +299,106 @@ export function SessionForm() {
                           {sets
                             .sort((a, b) => a.set_number - b.set_number)
                             .map((set) => (
-                              <div className="fit-history-set" key={set.id}>
+                              <div
+                                className="fit-history-set"
+                                key={set.id}
+                                data-cardio={
+                                  exerciseCategories[exerciseId] === 'cardio' ||
+                                  isCardioName(exerciseNames[exerciseId] || '')
+                                    ? 'true'
+                                    : 'false'
+                                }
+                              >
                                 <strong>S{set.set_number}</strong>
-                                <label>
-                                  <span>Reps</span>
-                                  <input
-                                    type="number"
-                                    defaultValue={set.reps ?? ''}
-                                    min={0}
-                                    onBlur={(event) => {
-                                      const value = Number(event.target.value)
-                                      if (
-                                        Number.isFinite(value) &&
-                                        value !== set.reps
-                                      )
-                                        void updateSet(set.id, { reps: value })
-                                    }}
-                                  />
-                                </label>
-                                <label>
-                                  <span>Weight</span>
-                                  <input
-                                    type="number"
-                                    defaultValue={set.weight ?? ''}
-                                    min={0}
-                                    step="0.5"
-                                    placeholder="-"
-                                    onBlur={(event) => {
-                                      const value = event.target.value
-                                        ? Number(event.target.value)
-                                        : null
-                                      if (value !== set.weight)
-                                        void updateSet(set.id, {
-                                          weight: value,
-                                        })
-                                    }}
-                                  />
-                                </label>
+                                {exerciseCategories[exerciseId] === 'cardio' ||
+                                isCardioName(
+                                  exerciseNames[exerciseId] || '',
+                                ) ? (
+                                  <>
+                                    <label>
+                                      <span>Distance</span>
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        defaultValue={set.distance_km ?? ''}
+                                        min={0}
+                                        placeholder="-"
+                                        onBlur={(event) => {
+                                          const value = event.target.value
+                                            ? Number(event.target.value)
+                                            : null
+                                          if (value !== set.distance_km)
+                                            void updateSet(set.id, {
+                                              distance_km: value,
+                                            })
+                                        }}
+                                      />
+                                    </label>
+                                    <label>
+                                      <span>Time</span>
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.1"
+                                        defaultValue={set.duration_min ?? ''}
+                                        min={0}
+                                        placeholder="-"
+                                        onBlur={(event) => {
+                                          const value = event.target.value
+                                            ? Number(event.target.value)
+                                            : null
+                                          if (value !== set.duration_min)
+                                            void updateSet(set.id, {
+                                              duration_min: value,
+                                            })
+                                        }}
+                                      />
+                                    </label>
+                                  </>
+                                ) : (
+                                  <>
+                                    <label>
+                                      <span>Reps</span>
+                                      <input
+                                        type="number"
+                                        defaultValue={set.reps ?? ''}
+                                        min={0}
+                                        onBlur={(event) => {
+                                          const value = Number(
+                                            event.target.value,
+                                          )
+                                          if (
+                                            Number.isFinite(value) &&
+                                            value !== set.reps
+                                          )
+                                            void updateSet(set.id, {
+                                              reps: value,
+                                            })
+                                        }}
+                                      />
+                                    </label>
+                                    <label>
+                                      <span>Weight</span>
+                                      <input
+                                        type="number"
+                                        defaultValue={set.weight ?? ''}
+                                        min={0}
+                                        step="0.5"
+                                        placeholder="-"
+                                        onBlur={(event) => {
+                                          const value = event.target.value
+                                            ? Number(event.target.value)
+                                            : null
+                                          if (value !== set.weight)
+                                            void updateSet(set.id, {
+                                              weight: value,
+                                            })
+                                        }}
+                                      />
+                                    </label>
+                                  </>
+                                )}
                                 <fieldset
                                   className="fit-feeling"
                                   aria-label={`Set ${set.set_number} feeling`}

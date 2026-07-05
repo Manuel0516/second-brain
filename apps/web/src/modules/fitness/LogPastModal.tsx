@@ -355,13 +355,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                 return (
                   <section className="fit-history-exercise" key={exIdx}>
                     <header>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                      >
+                      <div className="fit-history-exercise-title">
                         <h4>{draft.name}</h4>
                         {draft.category ? (
                           <CategoryBadge category={draft.category} />
@@ -415,12 +409,12 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
 
                     <div className="fit-history-set-list">
                       {draft.sets.map((set, setIdx) => (
-                        <div className="fit-logpast-set" key={setIdx}>
+                        <div className="fit-history-set" key={setIdx}>
                           <strong>S{setIdx + 1}</strong>
                           {isCardio ? (
                             <>
                               <label>
-                                <span>min</span>
+                                <span>Time</span>
                                 <input
                                   type="number"
                                   inputMode="decimal"
@@ -438,7 +432,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                                 />
                               </label>
                               <label>
-                                <span>km</span>
+                                <span>Distance</span>
                                 <input
                                   type="number"
                                   inputMode="decimal"
@@ -492,16 +486,14 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                               </label>
                             </>
                           )}
-                          {draft.sets.length > 1 && (
-                            <button
-                              type="button"
-                              className="fit-remove-button"
-                              aria-label={`Remove set ${setIdx + 1}`}
-                              onClick={() => removeSet(exIdx, setIdx)}
-                            >
-                              ×
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="fit-remove-button"
+                            aria-label={`Remove set ${setIdx + 1}`}
+                            onClick={() => removeSet(exIdx, setIdx)}
+                          >
+                            ×
+                          </button>
                         </div>
                       ))}
                     </div>

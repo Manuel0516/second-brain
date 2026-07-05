@@ -332,6 +332,13 @@
   font: 600 13px var(--font-ui);
 }
 
+.fit-history-exercise-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .fit-history-summary time,
 .fit-history-exercise header span,
 .fit-live-exercise header p {
@@ -388,21 +395,47 @@
   padding-top: 6px;
 }
 
-.fit-history-set {
-  display: grid;
-  grid-template-columns:
-    28px
-    minmax(72px, 84px)
-    minmax(84px, 96px)
-    auto
-    minmax(0, 1fr)
-    28px;
-  gap: 8px 10px;
+.fit-history .fit-history-set-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.fit-logpast-modal .fit-history-set-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.fit-logpast-modal .fit-history-set {
+  flex: 1 1 340px;
+  min-width: 0;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
+.fit-logpast-modal .fit-history-set > label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.fit-history-set {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  flex: 1 1 340px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
 .fit-history-set > strong {
-  align-self: center;
+  flex: 0 0 28px;
   color: var(--text-tertiary);
   font: 600 10px var(--font-mono);
   text-align: center;
@@ -410,6 +443,7 @@
 
 .fit-history-set > label,
 .fit-history-set-note {
+  flex: 1 1 160px;
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -420,11 +454,19 @@
 }
 
 .fit-history-set > label {
-  align-self: start;
+  min-width: 140px;
 }
 
 .fit-history-set .fit-feeling {
-  justify-self: center;
+  flex: 0 0 100%;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.fit-history-set .fit-remove-button {
+  margin-left: auto;
+  align-self: center;
+  flex: 0 0 28px;
 }
 
 .fit-history-set input {
@@ -837,11 +879,8 @@
     grid-template-columns: 1fr;
   }
 
-  .fit-history-set {
-    grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 28px;
-    grid-auto-flow: row;
-    gap: 6px 8px;
-    align-items: start;
+  .fit-history .fit-history-set-list {
+    gap: 6px;
   }
 
   .fit-live-row {
@@ -881,36 +920,41 @@
     grid-row: 3;
   }
 
+  .fit-history-set {
+    gap: 6px 8px;
+    padding: 8px 10px;
+    align-items: stretch;
+    width: 100%;
+    flex-basis: 100%;
+  }
+
   .fit-history-set > strong {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .fit-history-set > label:nth-of-type(1) {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .fit-history-set > label:nth-of-type(2) {
-    grid-column: 3;
-    grid-row: 1;
-  }
-
-  .fit-history-set .fit-feeling {
-    grid-column: 2 / 4;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .fit-history-set-note {
-    grid-column: 2 / 4;
-    grid-row: 3;
+    order: 1;
   }
 
   .fit-history-set .fit-remove-button {
-    grid-column: 4;
-    grid-row: 1;
-    align-self: start;
+    order: 2;
+    margin-left: auto;
+  }
+
+  .fit-history-set > label:nth-of-type(1) {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .fit-history-set > label:nth-of-type(2) {
+    order: 4;
+    flex-basis: 100%;
+  }
+
+  .fit-history-set .fit-feeling {
+    order: 5;
+    justify-content: center;
+  }
+
+  .fit-history-set-note {
+    order: 6;
+    flex-basis: 100%;
   }
 
   .fit-history-summary,
@@ -1459,48 +1503,6 @@
   box-shadow: 0 0 0 3px var(--accent-tint);
 }
 
-/* Simplified set row — 4 columns, no feeling/note */
-.fit-logpast-set {
-  display: grid;
-  grid-template-columns: 28px 1fr 1fr 28px;
-  gap: 8px;
-  align-items: center;
-}
-
-.fit-logpast-set > strong {
-  align-self: center;
-  color: var(--text-tertiary);
-  font: 600 10px var(--font-mono);
-  text-align: center;
-}
-
-.fit-logpast-set > label {
-  display: grid;
-  gap: 4px;
-  color: var(--text-tertiary);
-  font: 600 9px var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.fit-logpast-set input {
-  min-width: 0;
-  min-height: 34px;
-  box-sizing: border-box;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-md);
-  background: var(--bg-raised);
-  color: var(--text-primary);
-  font: 500 12px var(--font-mono);
-  padding: 7px 8px;
-}
-
-.fit-logpast-set input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-tint);
-}
-
 /* ── Mobile ──────────────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
@@ -1524,7 +1526,7 @@
     flex-direction: column;
   }
 
-  .fit-logpast-set input {
+  .fit-history-set input {
     min-height: 44px;
     font-size: 16px;
   }
