@@ -208,6 +208,11 @@ class UserSettings(Base):
     favorite_highlight_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     favorite_block_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     favorite_covers: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    # Fitness
+    fitness_rest_seconds: Mapped[int] = mapped_column(Integer, default=90, nullable=False)
+    fitness_auto_start_rest: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    fitness_weight_unit: Mapped[str] = mapped_column(String(3), default="kg", nullable=False)
+    fitness_weekly_session_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -434,7 +439,6 @@ class BodyMetric(Base):
     )
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     weight: Mapped[float | None] = mapped_column(Float, nullable=True)
-    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     measurements: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
@@ -469,6 +473,7 @@ class Goal(Base):
     )  # e.g. "weight", "bench_press_1rm"
     target_value: Mapped[float] = mapped_column(Float, nullable=False)
     target_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

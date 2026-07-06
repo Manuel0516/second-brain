@@ -78,8 +78,8 @@ export function WeekStrip({ weekDays }: Props) {
           >
             <div
               style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: '9px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
                 color: dayColor,
                 fontWeight: 600,
                 marginBottom: '5px',

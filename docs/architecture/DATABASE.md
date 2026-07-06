@@ -281,7 +281,7 @@ Individual sets within a workout session. Linked to an exercise and a workout se
 ---
 
 ### `body_metrics`
-Daily body measurements: weight, body fat percentage, and extensible measurement values.
+Daily body measurements: weight and extensible measurement values.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -289,7 +289,6 @@ Daily body measurements: weight, body fat percentage, and extensible measurement
 | user_id | UUID FK | Owner. |
 | date | DateTime | Measurement date (UTC). |
 | weight | Float? | Body weight (kg.decimals). |
-| body_fat_pct | Float? | Body fat percentage. |
 | measurements | JSON | Extensible measurement dict, e.g. `{"waist": 80, "arms": 35}`. |
 | created_at / updated_at | DateTime | UTC timestamps. |
 
@@ -328,5 +327,6 @@ User-defined fitness goals. Target types point at exercise max weight, exercise 
 | 014 | Favorite text/highlight/block colors and favorite covers on user_settings |
 | 015 | Fitness core: exercises, workout_sessions, set_entries, body_metrics, calendar_events.created_by |
 | 016 | Goals table for fitness goal tracking |
+| 021 | Dropped body_metrics.body_fat_pct (weight-only body metrics) |
 
 Always check `alembic current` before writing a new migration.

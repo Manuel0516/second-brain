@@ -18,6 +18,8 @@ import {
   type BodyWeightStats,
   type WorkoutSession,
 } from './api'
+import { useSettings } from '../../context/SettingsContext'
+import { toDisplayWeight } from './units'
 
 const tooltipStyle = {
   background: '#1C1B17',
@@ -30,12 +32,6 @@ const tooltipStyle = {
 const axisTick = { fontSize: 10, fill: '#6B6761' }
 
 const FEELING_LABELS = ['', 'Dying', 'Rough', 'OK', 'Good', 'Great']
-
-const METRIC_KEYS = ['weight', 'body_fat_pct'] as const
-const METRIC_LABELS: Record<(typeof METRIC_KEYS)[number], string> = {
-  weight: 'Body weight',
-  body_fat_pct: 'Body fat %',
-}
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -92,6 +88,8 @@ export function Overview({
   onPlanSession,
   highlightSessionId,
 }: Props) {
+  const { settings } = useSettings()
+  const weightUnit = settings.fitness_weight_unit
   const [data, setData] = useState<OverviewStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [statsError, setStatsError] = useState(false)
@@ -105,7 +103,6 @@ export function Overview({
   const exerciseStatsCache = useRef<Map<string, ExerciseStatsResp>>(new Map())
 
   const [bwMetrics, setBwMetrics] = useState<BodyWeightStats['metrics']>([])
-  const [metricIdx, setMetricIdx] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -174,10 +171,6 @@ export function Overview({
     setExerciseIdx((i) => (i + dir + exerciseList.length) % exerciseList.length)
   }
 
-  function cycleMetric(dir: 1 | -1) {
-    setMetricIdx((i) => (i + dir + METRIC_KEYS.length) % METRIC_KEYS.length)
-  }
-
   if (loading) {
     return (
       <div className="fit-overview-grid" aria-hidden="true">
@@ -192,16 +185,21 @@ export function Overview({
     )
   }
 
-  const metricKey = METRIC_KEYS[metricIdx]
   const metricSeries = bwMetrics
-    .filter((m) => m[metricKey] != null)
-    .map((m) => ({ date: m.date, value: m[metricKey] as number }))
+    .filter((m) => m.weight != null)
+    .map((m) => ({
+      date: m.date,
+      value: toDisplayWeight(m.weight as number, weightUnit),
+    }))
   const hasMetric = metricSeries.length > 1
 
   const isCardio = currentExerciseStats?.category === 'cardio'
   const exerciseSeries = isCardio
     ? (currentExerciseStats?.distance_over_time ?? [])
-    : (currentExerciseStats?.progression ?? [])
+    : (currentExerciseStats?.progression ?? []).map((p) => ({
+        ...p,
+        max_weight: toDisplayWeight(p.max_weight, weightUnit),
+      }))
   const hasTop = !!currentExercise && exerciseSeries.length > 1
 
   const hasFeeling = (data?.feeling_series?.length ?? 0) > 1
@@ -289,34 +287,15 @@ export function Overview({
           <section
             className="fit-overview-card"
             style={{ '--enter-delay': nextDelay() } as React.CSSProperties}
-            aria-label={`${METRIC_LABELS[metricKey]} trend`}
+            aria-label="Body weight trend"
           >
             <div className="fit-overview-card-head">
               <h4 className="fitness-section-title" style={{ margin: 0 }}>
-                {METRIC_LABELS[metricKey]}
+                Body weight
               </h4>
-              <div className="fit-overview-arrows">
-                <button
-                  className="fit-week-nav"
-                  type="button"
-                  onClick={() => cycleMetric(-1)}
-                  aria-label="Previous metric"
-                >
-                  ‹
-                </button>
-                <span className="fit-overview-meta">
-                  {metricSeries[metricSeries.length - 1].value}
-                  {metricKey === 'weight' ? ' kg' : '%'}
-                </span>
-                <button
-                  className="fit-week-nav"
-                  type="button"
-                  onClick={() => cycleMetric(1)}
-                  aria-label="Next metric"
-                >
-                  ›
-                </button>
-              </div>
+              <span className="fit-overview-meta">
+                {metricSeries[metricSeries.length - 1].value} {weightUnit}
+              </span>
             </div>
             <ResponsiveContainer width="100%" height={150}>
               <LineChart data={metricSeries}>
@@ -341,10 +320,7 @@ export function Overview({
                 <Tooltip
                   contentStyle={tooltipStyle}
                   labelFormatter={(label) => shortDate(String(label))}
-                  formatter={(v) => [
-                    `${v}${metricKey === 'weight' ? ' kg' : '%'}`,
-                    METRIC_LABELS[metricKey],
-                  ]}
+                  formatter={(v) => [`${v} ${weightUnit}`, 'Body weight']}
                 />
                 <Line
                   type="monotone"
@@ -419,7 +395,7 @@ export function Overview({
                     isCardio
                       ? [`${v} km`, 'Distance']
                       : [
-                          name === 'max_weight' ? `${v} kg` : v,
+                          name === 'max_weight' ? `${v} ${weightUnit}` : v,
                           name === 'max_weight' ? 'Max weight' : 'Max reps',
                         ]
                   }

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { RestTimer } from './RestTimer'
 import { Segmented } from '../../components/Segmented'
+import { useSettings } from '../../context/SettingsContext'
 import {
   PREV_PERFORMANCE,
   isCardioName,
@@ -37,8 +38,9 @@ export function LiveSession({
   note = '',
   onNoteChange,
 }: Props) {
+  const { settings } = useSettings()
   const [restCount, setRestCount] = useState(0)
-  const [restTotal, setRestTotal] = useState(90)
+  const [restTotal, setRestTotal] = useState(settings.fitness_rest_seconds)
   const [openNotes, setOpenNotes] = useState<Set<string>>(new Set())
   const [addingExercise, setAddingExercise] = useState(false)
   const [exerciseName, setExerciseName] = useState('')
@@ -49,8 +51,8 @@ export function LiveSession({
 
   function startRest() {
     if (restInterval.current) clearInterval(restInterval.current)
-    setRestCount(90)
-    setRestTotal(90)
+    setRestCount(settings.fitness_rest_seconds)
+    setRestTotal(settings.fitness_rest_seconds)
     restInterval.current = setInterval(() => {
       setRestCount((count) => {
         if (count <= 1) {
@@ -89,7 +91,12 @@ export function LiveSession({
     const exercise = session.exercises[exerciseIndex]
     const set = exercise.sets[setIndex]
     updateSet(exerciseIndex, setIndex, { done: !set.done })
-    if (!set.done && exercise.category !== 'cardio') startRest()
+    if (
+      !set.done &&
+      exercise.category !== 'cardio' &&
+      settings.fitness_auto_start_rest
+    )
+      startRest()
   }
 
   function addSet(exerciseIndex: number) {
@@ -158,7 +165,7 @@ export function LiveSession({
         </button>
       </header>
 
-      {restCount > 0 && (
+      {restCount > 0 ? (
         <RestTimer
           restCount={restCount}
           restTotal={restTotal}
@@ -167,6 +174,17 @@ export function LiveSession({
             setRestCount(0)
           }}
         />
+      ) : (
+        !settings.fitness_auto_start_rest && (
+          <button
+            type="button"
+            className="fit-secondary-button"
+            onClick={startRest}
+            style={{ marginBottom: 16 }}
+          >
+            Start rest timer
+          </button>
+        )
       )}
 
       <div className="fit-live-exercises">
@@ -210,7 +228,9 @@ export function LiveSession({
                 <div className="fit-live-table">
                   <div className="fit-live-row head" aria-hidden="true">
                     <span>Set</span>
-                    <span>{isCardio ? 'Distance' : 'kg'}</span>
+                    <span>
+                      {isCardio ? 'Distance' : settings.fitness_weight_unit}
+                    </span>
                     <span>{isCardio ? 'Time' : 'reps'}</span>
                     <span>Feel</span>
                     <span>Done</span>

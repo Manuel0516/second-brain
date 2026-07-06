@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { FavoriteEmojiEditor } from '../../components/FavoritesEditor'
+import { ToggleRow } from '../../components/ToggleRow'
 import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
@@ -27,41 +28,6 @@ const COMMON_TZ = [
 ]
 
 const SegmentControl = Segmented
-
-function ToggleRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <label
-      className="toggle-row"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        minHeight: 38,
-        cursor: 'pointer',
-      }}
-    >
-      <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-        {label}
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-checked={checked}
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ cursor: 'pointer' }}
-      />
-    </label>
-  )
-}
 
 export function GeneralSettings() {
   const { user, logout } = useAuth()

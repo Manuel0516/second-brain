@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { ProgressBar } from '../../components/ProgressBar'
-import { createGoal, deleteGoal, type Goal } from './api'
+import { createGoal, deleteGoal, updateGoal, type Goal } from './api'
 
 /**
- * Goals management for the Stats tab (Phase F3): create/delete goals with
- * progress bars. The read-only summary in the sidebar stays in Fitness.tsx;
- * this owns the editing interaction.
+ * Goals management for the Stats tab (Phase F3): create/edit/delete goals
+ * with progress bars. The read-only, reorderable summary in the sidebar
+ * stays in Fitness.tsx; this owns the editing interaction.
  */
 export function GoalsSection({
   goals,
@@ -17,34 +17,56 @@ export function GoalsSection({
   onChanged: () => Promise<void> | void
 }) {
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [type, setType] = useState<
     'exercise_max' | 'exercise_reps' | 'body_metric'
   >('exercise_max')
   const [exerciseId, setExerciseId] = useState('')
   const [metricKey, setMetricKey] = useState('weight')
   const [targetValue, setTargetValue] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  async function handleCreate(e: React.FormEvent) {
+  function resetForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setTargetValue('')
+    setExerciseId('')
+    setType('exercise_max')
+    setMetricKey('weight')
+  }
+
+  function startEdit(goal: Goal) {
+    setEditingId(goal.id)
+    setType(goal.target_type)
+    setExerciseId(goal.exercise_id ?? '')
+    setMetricKey(goal.metric_key ?? 'weight')
+    setTargetValue(String(goal.target_value))
+    setShowForm(true)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!targetValue) return
-    setCreating(true)
+    setSaving(true)
     try {
-      await createGoal({
+      const payload = {
         target_type: type,
         exercise_id: type !== 'body_metric' ? exerciseId || null : null,
         metric_key: type === 'body_metric' ? metricKey : null,
         target_value: parseFloat(targetValue),
-      })
-      setShowForm(false)
-      setTargetValue('')
-      setExerciseId('')
+      }
+      if (editingId) {
+        await updateGoal(editingId, payload)
+      } else {
+        await createGoal(payload)
+      }
+      resetForm()
       await onChanged()
     } catch {
       // fail gracefully — form stays open for retry
     } finally {
-      setCreating(false)
+      setSaving(false)
     }
   }
 
@@ -70,14 +92,14 @@ export function GoalsSection({
           type="button"
           className="fit-goals-toggle"
           aria-expanded={showForm}
-          onClick={() => setShowForm((open) => !open)}
+          onClick={() => (showForm ? resetForm() : setShowForm(true))}
         >
           {showForm ? 'Cancel' : '+ Add goal'}
         </button>
       </div>
 
       {showForm && (
-        <form className="fit-goal-form" onSubmit={handleCreate}>
+        <form className="fit-goal-form" onSubmit={handleSubmit}>
           <label className="fit-goal-field">
             <span className="fit-goal-label">Type</span>
             <select
@@ -92,18 +114,7 @@ export function GoalsSection({
               <option value="body_metric">Body metric</option>
             </select>
           </label>
-          {type === 'body_metric' ? (
-            <label className="fit-goal-field">
-              <span className="fit-goal-label">Metric</span>
-              <select
-                value={metricKey}
-                onChange={(e) => setMetricKey(e.target.value)}
-              >
-                <option value="weight">Weight</option>
-                <option value="body_fat">Body fat %</option>
-              </select>
-            </label>
-          ) : (
+          {type === 'body_metric' ? null : (
             <label className="fit-goal-field">
               <span className="fit-goal-label">Exercise</span>
               <select
@@ -134,9 +145,9 @@ export function GoalsSection({
           <button
             type="submit"
             className="fit-goal-submit"
-            disabled={!targetValue || creating}
+            disabled={!targetValue || saving}
           >
-            {creating ? 'Adding…' : 'Add goal'}
+            {saving ? 'Saving…' : editingId ? 'Save goal' : 'Add goal'}
           </button>
         </form>
       )}
@@ -165,15 +176,25 @@ export function GoalsSection({
                   max={goal.target_value}
                   sublabel={`${goal.current_value ?? 0} / ${goal.target_value}`}
                 />
-                <button
-                  type="button"
-                  className="fit-goal-delete"
-                  onClick={() => handleDelete(goal.id)}
-                  disabled={deletingId === goal.id}
-                  aria-label={`Delete goal ${label}`}
-                >
-                  ✕
-                </button>
+                <div className="fit-goal-card-actions">
+                  <button
+                    type="button"
+                    className="fit-goal-edit"
+                    onClick={() => startEdit(goal)}
+                    aria-label={`Edit goal ${label}`}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="fit-goal-delete"
+                    onClick={() => handleDelete(goal.id)}
+                    disabled={deletingId === goal.id}
+                    aria-label={`Delete goal ${label}`}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             )
           })}

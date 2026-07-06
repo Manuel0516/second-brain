@@ -46,7 +46,6 @@ export interface BodyMetric {
   user_id: string
   date: string
   weight: number | null
-  body_fat_pct: number | null
   measurements: Record<string, unknown>
   created_at: string
   updated_at: string
@@ -59,6 +58,7 @@ export interface Goal {
   metric_key: string | null
   target_value: number
   target_date: string | null
+  order_index: number
   current_value: number | null
   created_at: string
   updated_at: string
@@ -255,7 +255,6 @@ export async function fetchBodyMetrics(
 export async function createBodyMetric(data: {
   date: string
   weight?: number | null
-  body_fat_pct?: number | null
   measurements?: Record<string, unknown>
 }): Promise<BodyMetric> {
   const res = await apiCall('/api/fitness/body-metrics', {
@@ -303,7 +302,6 @@ export interface BodyWeightStats {
   metrics: {
     date: string
     weight: number | null
-    body_fat_pct: number | null
   }[]
   trend: number | null
 }
@@ -324,6 +322,7 @@ export interface OverviewStats {
   } | null
   feeling_series: { date: string; feeling: number }[]
   sessions_last_30_days: number
+  sessions_this_week: number
 }
 
 export async function fetchStatsOverview(days = 90): Promise<OverviewStats> {
@@ -363,6 +362,26 @@ export async function createGoal(data: {
     body: JSON.stringify(data),
   })
   if (!res.ok) throw new Error('Failed to create goal')
+  return res.json()
+}
+
+export async function updateGoal(
+  goalId: string,
+  data: {
+    target_type?: string
+    exercise_id?: string | null
+    metric_key?: string | null
+    target_value?: number
+    target_date?: string | null
+    order_index?: number
+  },
+): Promise<Goal> {
+  const res = await apiCall(`/api/fitness/goals/${goalId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to update goal')
   return res.json()
 }
 

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LiveSession } from './LiveSession'
 import type { ActiveSession } from './exerciseLibrary'
+import { SettingsProvider } from '../../context/SettingsContext'
 
 const session: ActiveSession = {
   type: 'Push',
@@ -18,7 +19,9 @@ describe('LiveSession', () => {
   it('updates set feeling and notes and adds an exercise inline', () => {
     const onUpdate = vi.fn()
     const { rerender } = render(
-      <LiveSession session={session} onUpdate={onUpdate} onFinish={vi.fn()} />,
+      <SettingsProvider>
+        <LiveSession session={session} onUpdate={onUpdate} onFinish={vi.fn()} />
+      </SettingsProvider>,
     )
 
     expect(
@@ -38,11 +41,13 @@ describe('LiveSession', () => {
 
     const withFeeling = onUpdate.mock.calls.at(-1)?.[0] as ActiveSession
     rerender(
-      <LiveSession
-        session={withFeeling}
-        onUpdate={onUpdate}
-        onFinish={vi.fn()}
-      />,
+      <SettingsProvider>
+        <LiveSession
+          session={withFeeling}
+          onUpdate={onUpdate}
+          onFinish={vi.fn()}
+        />
+      </SettingsProvider>,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add note for set 1' }))
     fireEvent.change(

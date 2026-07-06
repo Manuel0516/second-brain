@@ -214,10 +214,16 @@
   animation-delay: var(--enter-delay, 0ms);
 }
 
-.fit-goal-delete {
+.fit-goal-card-actions {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 2px;
+}
+
+.fit-goal-edit,
+.fit-goal-delete {
   width: 22px;
   height: 22px;
   display: grid;
@@ -233,15 +239,43 @@
     color 0.14s ease;
 }
 
+.fit-goal-edit:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
 .fit-goal-delete:hover {
   background: var(--bg-raised);
   color: #d9573f;
 }
 
+.fit-goal-sidebar-card {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.fit-goal-sidebar-card:hover {
+  border-color: var(--fit-accent-border);
+}
+
+.fit-goal-sidebar-card.is-dragging {
+  transform: scale(1.03);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  border-color: var(--fit-accent-border);
+  z-index: 5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fit-goal-form,
-  .fit-goal-card {
+  .fit-goal-card,
+  .fit-goal-sidebar-card,
+  .fit-goal-sidebar-card.is-dragging {
     animation: none;
+    transition: none;
+    transform: none;
   }
 }
 
@@ -448,7 +482,7 @@
   gap: 4px;
   min-width: 0;
   color: var(--text-tertiary);
-  font: 600 9px var(--font-mono);
+  font: 600 10px var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -865,6 +899,23 @@
   flex: 1;
 }
 
+.fit-metric-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+@media (max-width: 720px) {
+  .fit-metric-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fit-metric-form-grid > button {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 720px) {
   .fit-stat-tiles {
     flex-direction: column;
@@ -923,7 +974,7 @@
   }
 
   .fit-live-tools {
-    grid-column: 3 / -1;
+    grid-column: 4 / -1;
     grid-row: 2;
   }
 
@@ -1554,6 +1605,18 @@
 }
 
 /* ── Category badge ──────────────────────────────────────────────── */
+
+.fit-category-badge-button {
+  display: inline-flex;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.fit-category-badge-button:disabled {
+  cursor: default;
+}
 
 .fit-category-badge {
   display: inline-flex;

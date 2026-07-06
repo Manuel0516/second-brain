@@ -41,6 +41,10 @@ class SettingsResponse(BaseModel):
     favorite_highlight_colors: list[str]
     favorite_block_colors: list[str]
     favorite_covers: list[str]
+    fitness_rest_seconds: int
+    fitness_auto_start_rest: bool
+    fitness_weight_unit: Literal["kg", "lb"]
+    fitness_weekly_session_target: int | None
 
 
 class SettingsPatch(BaseModel):
@@ -62,6 +66,10 @@ class SettingsPatch(BaseModel):
     favorite_highlight_colors: list[str] | None = Field(default=None, max_length=24)
     favorite_block_colors: list[str] | None = Field(default=None, max_length=24)
     favorite_covers: list[str] | None = Field(default=None, max_length=12)
+    fitness_rest_seconds: int | None = Field(default=None, ge=10, le=600)
+    fitness_auto_start_rest: bool | None = None
+    fitness_weight_unit: Literal["kg", "lb"] | None = None
+    fitness_weekly_session_target: int | None = Field(default=None, ge=0, le=14)
 
     @field_validator("favorite_emojis")
     @classmethod
@@ -150,6 +158,10 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         favorite_highlight_colors=s.favorite_highlight_colors,
         favorite_block_colors=s.favorite_block_colors,
         favorite_covers=s.favorite_covers,
+        fitness_rest_seconds=s.fitness_rest_seconds,
+        fitness_auto_start_rest=s.fitness_auto_start_rest,
+        fitness_weight_unit=s.fitness_weight_unit,
+        fitness_weekly_session_target=s.fitness_weekly_session_target,
     )
 
 

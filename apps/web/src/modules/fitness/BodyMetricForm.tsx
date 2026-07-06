@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { createBodyMetric } from './api'
+import { useSettings } from '../../context/SettingsContext'
+import { fromDisplayWeight } from './units'
 
 interface BodyMetricFormProps {
   onSaved: () => void
 }
 
 export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
+  const { settings } = useSettings()
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [weight, setWeight] = useState('')
-  const [bodyFat, setBodyFat] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,12 +23,13 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
       const d = new Date(date + 'T12:00:00Z')
       await createBodyMetric({
         date: d.toISOString(),
-        weight: parseFloat(weight),
-        body_fat_pct: bodyFat ? parseFloat(bodyFat) : null,
+        weight: fromDisplayWeight(
+          parseFloat(weight),
+          settings.fitness_weight_unit,
+        ),
         measurements: {},
       })
       setWeight('')
-      setBodyFat('')
       onSaved()
     } catch {
       setError('Failed to log body metric')
@@ -62,18 +65,11 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
         }}
       >
         <form onSubmit={handleSubmit}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr auto',
-              gap: '8px',
-              alignItems: 'end',
-            }}
-          >
+          <div className="fit-metric-form-grid">
             <div>
               <div
                 style={{
-                  fontFamily: 'JetBrains Mono, monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '10px',
                   textTransform: 'uppercase',
                   letterSpacing: '.05em',
@@ -94,7 +90,7 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
             <div>
               <div
                 style={{
-                  fontFamily: 'JetBrains Mono, monospace',
+                  fontFamily: 'var(--font-mono)',
                   fontSize: '10px',
                   textTransform: 'uppercase',
                   letterSpacing: '.05em',
@@ -110,32 +106,8 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
                 onChange={(e) => setWeight(e.target.value)}
                 min="0"
                 step="0.1"
-                placeholder="kg"
+                placeholder={settings.fitness_weight_unit}
                 required
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <div
-                style={{
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: '10px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '.05em',
-                  color: 'var(--text-tertiary)',
-                  marginBottom: '4px',
-                }}
-              >
-                BF %
-              </div>
-              <input
-                type="number"
-                value={bodyFat}
-                onChange={(e) => setBodyFat(e.target.value)}
-                min="0"
-                max="60"
-                step="0.1"
-                placeholder="—"
                 style={inputStyle}
               />
             </div>

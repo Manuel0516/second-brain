@@ -1,6 +1,7 @@
 import { describe, it, vi, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { SettingsProvider } from '../../context/SettingsContext'
 
 const mockFetch = (bodyWeight: unknown) =>
   vi.fn(async (url: RequestInfo | URL) => ({
@@ -15,7 +16,6 @@ const mockFetch = (bodyWeight: unknown) =>
             id: 'metric-1',
             date: '2026-07-05T08:00:00Z',
             weight: 80,
-            body_fat_pct: null,
           },
         ]
       if (u.includes('/stats')) return {}
@@ -43,7 +43,9 @@ describe('Fitness page smoke', () => {
     const { Fitness } = await import('./Fitness')
     const { unmount } = render(
       <MemoryRouter>
-        <Fitness />
+        <SettingsProvider>
+          <Fitness />
+        </SettingsProvider>
       </MemoryRouter>,
     )
     expect(await screen.findAllByText(/fitness/i)).toBeTruthy()
@@ -55,7 +57,9 @@ describe('Fitness page smoke', () => {
     const { Fitness } = await import('./Fitness')
     const { unmount } = render(
       <MemoryRouter>
-        <Fitness />
+        <SettingsProvider>
+          <Fitness />
+        </SettingsProvider>
       </MemoryRouter>,
     )
     await new Promise((r) => setTimeout(r, 300))

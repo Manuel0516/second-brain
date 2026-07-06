@@ -2,44 +2,10 @@ import { useEffect, useState } from 'react'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { FavoriteColorEditor } from '../../components/FavoritesEditor'
+import { ToggleRow } from '../../components/ToggleRow'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
 import type { CalendarData } from '../calendar/types'
-
-function ToggleRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <label
-      className="toggle-row"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        minHeight: 38,
-        cursor: 'pointer',
-      }}
-    >
-      <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-        {label}
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-checked={checked}
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ cursor: 'pointer' }}
-      />
-    </label>
-  )
-}
 
 const SegmentControl = Segmented
 

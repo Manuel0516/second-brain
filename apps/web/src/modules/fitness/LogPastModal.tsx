@@ -9,6 +9,8 @@ import {
   type Exercise,
 } from './api'
 import { SESSION_TYPES } from './sessionTypes'
+import { useSettings } from '../../context/SettingsContext'
+import { fromDisplayWeight } from './units'
 
 interface SetDraft {
   reps: string
@@ -34,6 +36,7 @@ function emptySet(): SetDraft {
 }
 
 export function LogPastModal({ open, onClose, onSaved }: Props) {
+  const { settings } = useSettings()
   const [sessionType, setSessionType] = useState('Push')
   const [defaultCategory, setDefaultCategory] = useState<
     'strength' | 'cardio' | 'mobility'
@@ -45,6 +48,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
   const [knownExercises, setKnownExercises] = useState<Exercise[]>([])
   const [exercises, setExercises] = useState<ExerciseDraft[]>([])
   const [searchText, setSearchText] = useState('')
+  const [editCategoryIdx, setEditCategoryIdx] = useState<number | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -204,7 +208,12 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
               exercise_id: exercise.id,
               set_number: s + 1,
               reps: parseInt(set.reps, 10) || 0,
-              weight: set.weight ? parseInt(set.weight, 10) : null,
+              weight: set.weight
+                ? fromDisplayWeight(
+                    parseInt(set.weight, 10),
+                    settings.fitness_weight_unit,
+                  )
+                : null,
             })
           }
         }
@@ -357,18 +366,17 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                     <header>
                       <div className="fit-history-exercise-title">
                         <h4>{draft.name}</h4>
-                        {draft.category ? (
-                          <CategoryBadge category={draft.category} />
-                        ) : (
+                        {!draft.category || editCategoryIdx === exIdx ? (
                           <Segmented
-                            value={defaultCategory}
+                            value={draft.category ?? defaultCategory}
                             options={['strength', 'cardio', 'mobility']}
-                            onChange={(v) =>
+                            onChange={(v) => {
                               setExerciseCategory(
                                 exIdx,
                                 v as 'strength' | 'cardio' | 'mobility',
                               )
-                            }
+                              setEditCategoryIdx(null)
+                            }}
                             labels={{
                               strength: 'Str',
                               cardio: 'Card',
@@ -376,25 +384,20 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                             }}
                             ariaLabel={`Category for ${draft.name}`}
                           />
-                        )}
-                        {/* Allow changing category for unmatched exercises */}
-                        {draft.category && !wasMatched && (
-                          <Segmented
-                            value={draft.category}
-                            options={['strength', 'cardio', 'mobility']}
-                            onChange={(v) =>
-                              setExerciseCategory(
-                                exIdx,
-                                v as 'strength' | 'cardio' | 'mobility',
-                              )
+                        ) : (
+                          <button
+                            type="button"
+                            className="fit-category-badge-button"
+                            disabled={wasMatched}
+                            onClick={() => setEditCategoryIdx(exIdx)}
+                            aria-label={
+                              wasMatched
+                                ? undefined
+                                : `Change category for ${draft.name}`
                             }
-                            labels={{
-                              strength: 'Str',
-                              cardio: 'Card',
-                              mobility: 'Mob',
-                            }}
-                            ariaLabel={`Change category for ${draft.name}`}
-                          />
+                          >
+                            <CategoryBadge category={draft.category} />
+                          </button>
                         )}
                       </div>
                       <button
@@ -469,7 +472,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                                 />
                               </label>
                               <label>
-                                <span>kg</span>
+                                <span>{settings.fitness_weight_unit}</span>
                                 <input
                                   type="number"
                                   value={set.weight}

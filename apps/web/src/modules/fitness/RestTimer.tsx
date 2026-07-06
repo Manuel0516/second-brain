@@ -13,8 +13,8 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
     <div
       style={{
         background: 'var(--bg-elevated)',
-        border: '1px solid rgba(34,211,238,0.2)',
-        borderRadius: '12px',
+        border: '1px solid var(--fit-accent-border)',
+        borderRadius: 'var(--r-lg)',
         padding: '20px 24px',
         display: 'flex',
         alignItems: 'center',
@@ -42,7 +42,7 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
             cy="32"
             r={radius}
             fill="none"
-            stroke="rgba(34,211,238,0.12)"
+            stroke="var(--fit-accent-tint)"
             strokeWidth="5"
           />
           <circle
@@ -50,7 +50,7 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
             cy="32"
             r={radius}
             fill="none"
-            stroke="#22D3EE"
+            stroke="var(--fit-accent)"
             strokeWidth="5"
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -65,10 +65,10 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: '17px',
             fontWeight: 700,
-            color: '#22D3EE',
+            color: 'var(--fit-accent)',
           }}
         >
           {restCount}
@@ -77,7 +77,7 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
       <div style={{ flex: 1 }}>
         <div
           style={{
-            fontSize: '13.5px',
+            fontSize: '13px',
             fontWeight: 600,
             color: 'var(--text-primary)',
             marginBottom: '4px',
@@ -92,7 +92,7 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
             marginBottom: '10px',
           }}
         >
-          90 seconds · breathe, reset
+          {restTotal} seconds · breathe, reset
         </div>
         <button
           onClick={onSkip}
@@ -101,7 +101,7 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
             padding: '0 12px',
             background: 'rgba(255,240,200,0.07)',
             border: '1px solid rgba(255,240,200,0.09)',
-            borderRadius: '6px',
+            borderRadius: 'var(--r-md)',
             color: 'var(--text-secondary)',
             fontSize: '12px',
             cursor: 'pointer',

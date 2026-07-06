@@ -136,14 +136,12 @@ class SetEntryResponse(BaseModel):
 class BodyMetricCreate(BaseModel):
     date: datetime
     weight: float | None = Field(default=None, ge=0)
-    body_fat_pct: float | None = Field(default=None, ge=0, le=60)
     measurements: dict[str, object] = Field(default_factory=dict)
 
 
 class BodyMetricPatch(BaseModel):
     date: datetime | None = None
     weight: float | None = Field(default=None, ge=0)
-    body_fat_pct: float | None = Field(default=None, ge=0, le=60)
     measurements: dict[str, object] | None = None
 
 
@@ -154,7 +152,6 @@ class BodyMetricResponse(BaseModel):
     user_id: str
     date: datetime
     weight: float | None
-    body_fat_pct: float | None
     measurements: dict[str, object]
     created_at: datetime
     updated_at: datetime
@@ -174,6 +171,7 @@ class GoalPatch(BaseModel):
     metric_key: str | None = Field(default=None)
     target_value: float | None = Field(default=None)
     target_date: datetime | None = Field(default=None)
+    order_index: int | None = Field(default=None)
 
 
 class GoalResponse(BaseModel):
@@ -184,6 +182,7 @@ class GoalResponse(BaseModel):
     metric_key: str | None
     target_value: float
     target_date: datetime | None
+    order_index: int
     current_value: float | None  # computed on read
     created_at: datetime
     updated_at: datetime
@@ -220,6 +219,7 @@ class OverviewStats(BaseModel):
     top_exercise: dict[str, object] | None  # {exercise: {...}, progression: [...]}
     feeling_series: list[dict[str, object]]  # [{date, feeling}] avg per session
     sessions_last_30_days: int
+    sessions_this_week: int
 
 
 # ── Helper Functions ────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ async def list_goals(
         await session.scalars(
             select(Goal)
             .where(Goal.user_id == user.id)
-            .order_by(Goal.target_type, Goal.created_at.desc())
+            .order_by(Goal.order_index, Goal.created_at.desc())
         )
     ).all()
 
@@ -350,6 +350,7 @@ async def list_goals(
                 metric_key=goal.metric_key,
                 target_value=goal.target_value,
                 target_date=goal.target_date,
+                order_index=goal.order_index,
                 current_value=current,
                 created_at=goal.created_at,
                 updated_at=goal.updated_at,
@@ -364,6 +365,9 @@ async def create_goal(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> GoalResponse:
+    goal_count = await session.scalar(
+        select(func.count()).select_from(Goal).where(Goal.user_id == user.id)
+    )
     goal = Goal(
         user_id=user.id,
         target_type=data.target_type,
@@ -371,6 +375,7 @@ async def create_goal(
         metric_key=data.metric_key,
         target_value=data.target_value,
         target_date=data.target_date,
+        order_index=goal_count or 0,
     )
     session.add(goal)
     await session.commit()
@@ -382,6 +387,7 @@ async def create_goal(
         metric_key=goal.metric_key,
         target_value=goal.target_value,
         target_date=goal.target_date,
+        order_index=goal.order_index,
         current_value=None,
         created_at=goal.created_at,
         updated_at=goal.updated_at,
@@ -396,7 +402,14 @@ async def update_goal(
     session: AsyncSession = Depends(get_async_session),
 ) -> GoalResponse:
     goal = await _owned_goal(goal_id, user, session)
-    for field in ("target_type", "exercise_id", "metric_key", "target_value", "target_date"):
+    for field in (
+        "target_type",
+        "exercise_id",
+        "metric_key",
+        "target_value",
+        "target_date",
+        "order_index",
+    ):
         val = getattr(data, field, None)
         if val is not None:
             setattr(goal, field, val)
@@ -409,6 +422,7 @@ async def update_goal(
         metric_key=goal.metric_key,
         target_value=goal.target_value,
         target_date=goal.target_date,
+        order_index=goal.order_index,
         current_value=None,
         created_at=goal.created_at,
         updated_at=goal.updated_at,
@@ -608,7 +622,6 @@ async def body_weight_stats(
         {
             "date": m.date.isoformat()[:10] if m.date else "",
             "weight": m.weight,
-            "body_fat_pct": m.body_fat_pct,
         }
         for m in metrics
     ]
@@ -735,11 +748,27 @@ async def overview_stats(
         )
     ) or 0
 
+    # ── Session count for the current ISO week (Monday start) ──
+    now = datetime.now(UTC)
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    sessions_this_week = (
+        await session.scalar(
+            select(func.count(WorkoutSession.id)).where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= week_start,
+            )
+        )
+    ) or 0
+
     return OverviewStats(
         weight_series=weight_series,
         top_exercise=top_exercise,
         feeling_series=feeling_series,
         sessions_last_30_days=session_count,
+        sessions_this_week=sessions_this_week,
     )
 
 
@@ -1053,7 +1082,6 @@ async def create_body_metric(
         user_id=user.id,
         date=data.date,
         weight=data.weight,
-        body_fat_pct=data.body_fat_pct,
         measurements=data.measurements,
     )
     session.add(metric)

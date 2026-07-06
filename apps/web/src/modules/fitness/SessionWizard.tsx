@@ -273,7 +273,7 @@ export function SessionWizard({
   }
 
   const typeLabelStyle = (selected: boolean): React.CSSProperties => ({
-    fontSize: '13.5px',
+    fontSize: '13px',
     fontWeight: 700,
     color: selected ? 'var(--fit-accent)' : 'var(--text-primary)',
   })
@@ -313,7 +313,7 @@ export function SessionWizard({
           </div>
           <span
             style={{
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               textTransform: 'uppercase',
               letterSpacing: '.07em',
@@ -359,7 +359,7 @@ export function SessionWizard({
               </h3>
               <p
                 style={{
-                  fontSize: '12.5px',
+                  fontSize: '13px',
                   color: 'var(--text-tertiary)',
                   margin: '0 0 20px',
                 }}
@@ -413,7 +413,7 @@ export function SessionWizard({
                   border: `1px solid ${canProceed ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
                   borderRadius: '9px',
                   color: canProceed ? 'var(--accent)' : 'var(--text-tertiary)',
-                  fontSize: '13.5px',
+                  fontSize: '13px',
                   fontWeight: 600,
                   cursor: canProceed ? 'pointer' : 'default',
                   transition: 'background .2s, border-color .2s, color .2s',
@@ -467,7 +467,7 @@ export function SessionWizard({
               </div>
               <p
                 style={{
-                  fontSize: '12.5px',
+                  fontSize: '13px',
                   color: 'var(--text-tertiary)',
                   margin: '0 0 16px',
                 }}
@@ -578,7 +578,7 @@ export function SessionWizard({
               >
                 <span
                   style={{
-                    fontFamily: 'JetBrains Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     textTransform: 'uppercase',
                     letterSpacing: '.06em',
@@ -606,7 +606,7 @@ export function SessionWizard({
                       border: '1px solid rgba(255,240,200,0.09)',
                       borderRadius: '9px',
                       color: 'var(--text-secondary)',
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       fontWeight: 600,
                       cursor: canStart && !saving ? 'pointer' : 'default',
                       opacity: canStart && !saving ? 1 : 0.5,
@@ -628,7 +628,7 @@ export function SessionWizard({
                       color: canStart
                         ? 'var(--accent)'
                         : 'var(--text-tertiary)',
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       fontWeight: 600,
                       cursor: canStart && !saving ? 'pointer' : 'default',
                       transition: 'background .2s, color .2s, border-color .2s',
@@ -650,7 +650,7 @@ export function SessionWizard({
                     border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
                     borderRadius: '9px',
                     color: canStart ? 'var(--accent)' : 'var(--text-tertiary)',
-                    fontSize: '13.5px',
+                    fontSize: '13px',
                     fontWeight: 600,
                     cursor: canStart ? 'pointer' : 'default',
                     transition: 'background .2s, color .2s, border-color .2s',

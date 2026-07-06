@@ -32,6 +32,10 @@ export interface UserSettings {
   favorite_highlight_colors: string[]
   favorite_block_colors: string[]
   favorite_covers: string[]
+  fitness_rest_seconds: number
+  fitness_auto_start_rest: boolean
+  fitness_weight_unit: 'kg' | 'lb'
+  fitness_weekly_session_target: number | null
 }
 
 interface SettingsContextType {
@@ -59,6 +63,10 @@ const DEFAULTS: UserSettings = {
   favorite_highlight_colors: [],
   favorite_block_colors: [],
   favorite_covers: [],
+  fitness_rest_seconds: 90,
+  fitness_auto_start_rest: true,
+  fitness_weight_unit: 'kg',
+  fitness_weekly_session_target: null,
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

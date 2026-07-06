@@ -81,7 +81,6 @@ export function BodyMetricLog() {
                   }}
                 >
                   {metric.weight ? `${metric.weight} kg` : '—'}
-                  {metric.body_fat_pct != null && ` · ${metric.body_fat_pct}%`}
                 </span>
                 <button
                   onClick={() => handleDelete(metric.id)}

@@ -16,6 +16,8 @@ import { LiveSession } from './LiveSession'
 import { WeekStrip, type WeekDay } from './WeekStrip'
 import { BodyMetricLog } from './BodyMetricLog'
 import { BodyMetricForm } from './BodyMetricForm'
+import { useSettings } from '../../context/SettingsContext'
+import { toDisplayWeight, fromDisplayWeight } from './units'
 import type { ActiveSession } from './exerciseLibrary'
 import {
   PREV_PERFORMANCE,
@@ -31,6 +33,7 @@ import {
   fetchEvents,
   fetchBodyMetrics,
   fetchGoals,
+  updateGoal,
   fetchBodyWeightStats,
   fetchExercises,
   fetchPlannedSessions,
@@ -145,6 +148,8 @@ function loadStoredLiveSession(): StoredLiveSession | null {
 }
 
 export function Fitness() {
+  const { settings } = useSettings()
+  const weightUnit = settings.fitness_weight_unit
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -221,6 +226,49 @@ export function Fitness() {
   const [exerciseMap, setExerciseMap] = useState<
     Record<string, { name: string; category: string }>
   >({})
+  const [dragGoalId, setDragGoalId] = useState<string | null>(null)
+
+  // ponytail: Pointer Events (not HTML5 drag-and-drop) so reordering works
+  // with touch on phones, not just mouse.
+  function handleGoalPointerDown(
+    e: React.PointerEvent<HTMLDivElement>,
+    goalId: string,
+  ) {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragGoalId(goalId)
+  }
+
+  function handleGoalPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragGoalId) return
+    const target = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest('[data-goal-id]')
+    const overId = target?.getAttribute('data-goal-id')
+    if (!overId || overId === dragGoalId) return
+    setGoals((prev) => {
+      const from = prev.findIndex((g) => g.id === dragGoalId)
+      const to = prev.findIndex((g) => g.id === overId)
+      if (from === -1 || to === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  function handleGoalPointerUp() {
+    if (!dragGoalId) return
+    setDragGoalId(null)
+    setGoals((current) => {
+      current.forEach((g, i) => {
+        if (g.order_index !== i) {
+          updateGoal(g.id, { order_index: i }).catch(() => {})
+        }
+      })
+      return current.map((g, i) => ({ ...g, order_index: i }))
+    })
+  }
 
   function localDateStr(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -498,7 +546,9 @@ export function Fitness() {
             exercise_id: exercise.id,
             set_number: idx + 1,
             reps: set.r ? parseInt(set.r, 10) || 0 : null,
-            weight: set.w ? parseFloat(set.w) : null,
+            weight: set.w
+              ? fromDisplayWeight(parseFloat(set.w), weightUnit)
+              : null,
             distance_km: set.distance_km ? parseFloat(set.distance_km) : null,
             duration_min: set.duration_min
               ? parseFloat(set.duration_min)
@@ -623,7 +673,7 @@ export function Fitness() {
             {/* This week */}
             <div
               style={{
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '.07em',
@@ -673,10 +723,29 @@ export function Fitness() {
               })}
             </div>
 
+            {settings.fitness_weekly_session_target != null && (
+              <div
+                style={{
+                  padding: '9px 10px',
+                  marginBottom: '18px',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid rgba(255,240,200,0.07)',
+                  borderRadius: '8px',
+                }}
+              >
+                <ProgressBar
+                  label="Weekly sessions"
+                  value={weeklySessions}
+                  max={settings.fitness_weekly_session_target}
+                  sublabel={`${weeklySessions} / ${settings.fitness_weekly_session_target} this week`}
+                />
+              </div>
+            )}
+
             {/* Goals summary (read-only — managed in the Stats tab) */}
             <div
               style={{
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 textTransform: 'uppercase',
                 letterSpacing: '.07em',
@@ -733,20 +802,32 @@ export function Fitness() {
                   return (
                     <div
                       key={goal.id}
+                      data-goal-id={goal.id}
+                      onPointerDown={(e) => handleGoalPointerDown(e, goal.id)}
+                      onPointerMove={handleGoalPointerMove}
+                      onPointerUp={handleGoalPointerUp}
+                      onPointerCancel={handleGoalPointerUp}
+                      aria-label={`Reorder ${label}`}
+                      className={`fit-goal-sidebar-card${dragGoalId === goal.id ? ' is-dragging' : ''}`}
                       style={{
                         padding: '9px 10px',
                         background: 'var(--bg-elevated)',
                         border: '1px solid rgba(255,240,200,0.07)',
                         borderRadius: '8px',
                         position: 'relative',
+                        cursor: 'grab',
+                        touchAction: 'none',
+                        opacity: dragGoalId === goal.id ? 0.6 : 1,
                       }}
                     >
-                      <ProgressBar
-                        label={label}
-                        value={goal.current_value ?? 0}
-                        max={goal.target_value}
-                        sublabel={`${goal.current_value ?? 0} / ${goal.target_value}`}
-                      />
+                      <div style={{ minWidth: 0 }}>
+                        <ProgressBar
+                          label={label}
+                          value={goal.current_value ?? 0}
+                          max={goal.target_value}
+                          sublabel={`${goal.current_value ?? 0} / ${goal.target_value}`}
+                        />
+                      </div>
                     </div>
                   )
                 })
@@ -765,7 +846,7 @@ export function Fitness() {
               >
                 <div
                   style={{
-                    fontFamily: 'JetBrains Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     textTransform: 'uppercase',
                     letterSpacing: '.07em',
@@ -784,19 +865,9 @@ export function Fitness() {
                     marginBottom: '4px',
                   }}
                 >
-                  {lastMetric.weight} kg
-                  {lastMetric.body_fat_pct != null && (
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        color: 'var(--text-tertiary)',
-                        fontWeight: 400,
-                      }}
-                    >
-                      {' '}
-                      · {lastMetric.body_fat_pct}%
-                    </span>
-                  )}
+                  {lastMetric.weight != null
+                    ? `${toDisplayWeight(lastMetric.weight, weightUnit)} ${weightUnit}`
+                    : '—'}
                 </div>
                 {/* Mini sparkline */}
                 {bodyWeightData && bodyWeightData.metrics.length > 1 && (
@@ -816,14 +887,14 @@ export function Fitness() {
                 )}
                 <div
                   style={{
-                    fontFamily: 'JetBrains Mono, monospace',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     color: 'var(--text-tertiary)',
                     marginTop: '3px',
                   }}
                 >
                   {bodyWeightData?.trend != null
-                    ? `Trend: ${bodyWeightData.trend} kg`
+                    ? `Trend: ${toDisplayWeight(bodyWeightData.trend, weightUnit)} ${weightUnit}`
                     : new Date(lastMetric.date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',

@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { deleteExercise } from './api'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { useSettings } from '../../context/SettingsContext'
+import { toDisplayWeight } from './units'
 
 interface PR {
   reps: number
@@ -75,7 +77,7 @@ const cardStyle: React.CSSProperties = {
 }
 
 const sectionTitleStyle: React.CSSProperties = {
-  fontFamily: 'JetBrains Mono, monospace',
+  fontFamily: 'var(--font-mono)',
   fontSize: '10px',
   textTransform: 'uppercase',
   color: 'var(--text-tertiary)',
@@ -93,7 +95,7 @@ const tileStyle: React.CSSProperties = {
 }
 
 const tileLabelStyle: React.CSSProperties = {
-  fontFamily: 'JetBrains Mono, monospace',
+  fontFamily: 'var(--font-mono)',
   fontSize: '10px',
   textTransform: 'uppercase',
   color: 'var(--text-tertiary)',
@@ -117,6 +119,8 @@ const tooltipStyle = {
 }
 
 export function ExerciseStats({ exerciseId, onClose }: Props) {
+  const { settings } = useSettings()
+  const weightUnit = settings.fitness_weight_unit
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
@@ -261,7 +265,10 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
       {stats.category === 'cardio' ? (
         <>
           {/* Headline tiles */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+          <div
+            className="fit-stat-tiles"
+            style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}
+          >
             <div className="fit-stat-tile" style={tileStyle}>
               <div style={tileLabelStyle}>Total distance</div>
               <div className="fit-stat-tile-value" style={tileValueStyle}>
@@ -421,18 +428,20 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
             </div>
           )}
 
-          {stats.distance_over_time.length <= 1 && (
-            <p
-              style={{
-                color: 'var(--text-tertiary)',
-                fontSize: '13px',
-                textAlign: 'center',
-                padding: '40px 0',
-              }}
-            >
-              No data for this exercise yet. Log some sets to see stats.
-            </p>
-          )}
+          {stats.distance_over_time.length <= 1 &&
+            stats.pace_over_time.length <= 1 &&
+            stats.weekly.length <= 1 && (
+              <p
+                style={{
+                  color: 'var(--text-tertiary)',
+                  fontSize: '13px',
+                  textAlign: 'center',
+                  padding: '40px 0',
+                }}
+              >
+                No data for this exercise yet. Log some sets to see stats.
+              </p>
+            )}
         </>
       ) : (
         <>
@@ -445,7 +454,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
               <div className="fit-stat-tile" style={tileStyle}>
                 <div style={tileLabelStyle}>Estimated 1RM</div>
                 <div className="fit-stat-tile-value" style={tileValueStyle}>
-                  {stats.estimated_1rm}
+                  {toDisplayWeight(stats.estimated_1rm, weightUnit)}
                   <span
                     style={{
                       fontSize: '13px',
@@ -454,7 +463,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                       marginLeft: '4px',
                     }}
                   >
-                    kg
+                    {weightUnit}
                   </span>
                 </div>
               </div>
@@ -465,7 +474,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   style={{ ...tileValueStyle, color: 'var(--text-primary)' }}
                 >
                   {stats.personal_records.length > 0
-                    ? `${stats.personal_records[stats.personal_records.length - 1].max_weight}`
+                    ? `${toDisplayWeight(stats.personal_records[stats.personal_records.length - 1].max_weight, weightUnit)}`
                     : '—'}
                   <span
                     style={{
@@ -478,7 +487,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     {stats.personal_records.length > 0
                       ? `×${stats.personal_records[stats.personal_records.length - 1].reps}`
                       : ''}{' '}
-                    kg
+                    {weightUnit}
                   </span>
                 </div>
               </div>
@@ -507,8 +516,8 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                 >
                   <span
                     style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '9.5px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '10px',
                       color: 'var(--text-tertiary)',
                       textTransform: 'uppercase',
                       letterSpacing: '.05em',
@@ -518,8 +527,8 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   </span>
                   <span
                     style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '9.5px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '10px',
                       color: 'var(--text-tertiary)',
                       textTransform: 'uppercase',
                       letterSpacing: '.05em',
@@ -530,8 +539,8 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   </span>
                   <span
                     style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '9.5px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '10px',
                       color: 'var(--text-tertiary)',
                       textTransform: 'uppercase',
                       letterSpacing: '.05em',
@@ -564,17 +573,17 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                         fontSize: '13px',
                         color: 'var(--text-primary)',
                         textAlign: 'center',
-                        fontFamily: 'JetBrains Mono, monospace',
+                        fontFamily: 'var(--font-mono)',
                       }}
                     >
-                      {pr.max_weight} kg
+                      {toDisplayWeight(pr.max_weight, weightUnit)} {weightUnit}
                     </span>
                     <span
                       style={{
                         fontSize: '11px',
                         color: 'var(--text-tertiary)',
                         textAlign: 'right',
-                        fontFamily: 'JetBrains Mono, monospace',
+                        fontFamily: 'var(--font-mono)',
                       }}
                     >
                       {new Date(pr.date).toLocaleDateString('en-US', {
@@ -591,10 +600,15 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
           {/* Weekly volume chart */}
           {stats.volume_by_week.length > 1 && (
             <div style={{ marginBottom: '24px' }}>
-              <h4 style={sectionTitleStyle}>Weekly Volume (kg)</h4>
+              <h4 style={sectionTitleStyle}>Weekly Volume ({weightUnit})</h4>
               <div style={cardStyle}>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={stats.volume_by_week}>
+                  <BarChart
+                    data={stats.volume_by_week.map((w) => ({
+                      ...w,
+                      total_volume: toDisplayWeight(w.total_volume, weightUnit),
+                    }))}
+                  >
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="rgba(255,240,200,0.06)"
@@ -624,10 +638,17 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
           {/* Progression chart */}
           {stats.progression.length > 1 && (
             <div style={{ marginBottom: '24px' }}>
-              <h4 style={sectionTitleStyle}>Max Weight Over Time</h4>
+              <h4 style={sectionTitleStyle}>
+                Max Weight Over Time ({weightUnit})
+              </h4>
               <div style={cardStyle}>
                 <ResponsiveContainer width="100%" height={180}>
-                  <LineChart data={stats.progression}>
+                  <LineChart
+                    data={stats.progression.map((p) => ({
+                      ...p,
+                      max_weight: toDisplayWeight(p.max_weight, weightUnit),
+                    }))}
+                  >
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="rgba(255,240,200,0.06)"

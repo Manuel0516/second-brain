@@ -7,6 +7,13 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0113](0113-cardio-stats-mobile-and-empty-state-fix.md)           | Cardio stats mobile stacking + empty-state fix                                                  | 2026-07-06 | accepted                   |
+| [0112](0112-remove-body-fat-metric.md)                            | Remove body fat % metric, weight-only body metrics                                              | 2026-07-06 | accepted                   |
+| [0111](0111-goal-drag-handle-hover-and-drag-animations.md)         | Goal sidebar cards: whole-card drag + drag animations                                           | 2026-07-06 | accepted                   |
+| [0110](0110-fitness-typography-consistency.md)                    | Fitness module typography consistency pass                                                      | 2026-07-06 | accepted                   |
+| [0109](0109-live-session-feeling-circles-mobile-click-fix.md)     | Live session feeling circles unclickable on mobile                                              | 2026-07-06 | accepted                   |
+| [0108](0108-fitness-goal-editing-reorder-and-fixes.md)            | Fitness goal editing/reorder, sidebar weekly target, and two small fixes                        | 2026-07-06 | accepted                   |
+| [0107](0107-fitness-settings-page.md)                             | Fitness settings page (rest timer, weight unit, weekly session target)                          | 2026-07-06 | accepted                   |
 | [0106](0106-live-session-persistence.md)                          | Live session state persisted to localStorage, survives nav/reload/logout                        | 2026-07-06 | accepted                   |
 | [0105](0105-livesession-previous-from-history.md)                 | LiveSession previous values from workout history                                                | 2026-07-06 | accepted                   |
 | [0104](0104-livesession-desktop-header-grid-match.md)             | LiveSession desktop header grid match                                                           | 2026-07-06 | accepted                   |
