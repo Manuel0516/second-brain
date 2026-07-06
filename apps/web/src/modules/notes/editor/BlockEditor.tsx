@@ -829,6 +829,12 @@ export function BlockEditor({
       active = false
     }
   }, [mention])
+  useEffect(
+    () => () => {
+      editor?.destroy()
+    },
+    [editor],
+  )
 
   const filteredSlash = useMemo(
     () =>

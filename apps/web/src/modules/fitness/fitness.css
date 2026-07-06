@@ -601,15 +601,18 @@
 .fit-live-row.head {
   padding-top: 0;
   padding-bottom: 0;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 124px 38px 52px;
 }
 
 .fit-live-row.head span {
+  display: block;
+  width: 100%;
+  text-align: center;
   color: var(--text-tertiary);
   font: 600 10px var(--font-mono);
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-align: center;
 }
 
 .fit-live-row:not(.head):hover {
@@ -884,6 +887,10 @@
   }
 
   .fit-live-row {
+    padding: 4px 6px;
+  }
+
+  .fit-live-row {
     grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 44px;
     row-gap: 6px;
   }
@@ -893,16 +900,16 @@
   }
 
   .fit-live-cell {
-    min-height: 44px;
+    min-height: 40px;
     font-size: 16px;
-    padding: 10px 8px;
+    padding: 8px 8px;
   }
 
   .fit-live-check {
     grid-column: 4;
     grid-row: 1;
     width: 100%;
-    height: 44px;
+    height: 40px;
   }
 
   .fit-live-row .fit-feeling {

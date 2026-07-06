@@ -414,24 +414,6 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                           {isCardio ? (
                             <>
                               <label>
-                                <span>Time</span>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="0.1"
-                                  value={set.duration_min}
-                                  onChange={(e) =>
-                                    updateSet(
-                                      exIdx,
-                                      setIdx,
-                                      'duration_min',
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="—"
-                                />
-                              </label>
-                              <label>
                                 <span>Distance</span>
                                 <input
                                   type="number"
@@ -443,6 +425,24 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                                       exIdx,
                                       setIdx,
                                       'distance_km',
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="—"
+                                />
+                              </label>
+                              <label>
+                                <span>Time</span>
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="0.1"
+                                  value={set.duration_min}
+                                  onChange={(e) =>
+                                    updateSet(
+                                      exIdx,
+                                      setIdx,
+                                      'duration_min',
                                       e.target.value,
                                     )
                                   }

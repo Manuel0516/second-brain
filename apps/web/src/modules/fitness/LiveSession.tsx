@@ -210,8 +210,8 @@ export function LiveSession({
                 <div className="fit-live-table">
                   <div className="fit-live-row head" aria-hidden="true">
                     <span>Set</span>
-                    <span>{isCardio ? 'km' : 'kg'}</span>
-                    <span>{isCardio ? 'min' : 'reps'}</span>
+                    <span>{isCardio ? 'Distance' : 'kg'}</span>
+                    <span>{isCardio ? 'Time' : 'reps'}</span>
                     <span>Feel</span>
                     <span>Done</span>
                     <span />

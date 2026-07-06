@@ -27,6 +27,7 @@ import {
   createSession,
   createSetEntry,
   fetchSessions,
+  fetchSetEntries,
   fetchEvents,
   fetchBodyMetrics,
   fetchGoals,
@@ -37,12 +38,111 @@ import {
   type BodyMetric,
   type Goal,
   type BodyWeightStats,
+  type SetEntry,
   type WorkoutSession,
 } from './api'
 import './fitness.css'
 
 const TABS = ['overview', 'stats', 'history'] as const
 type FitnessTab = (typeof TABS)[number]
+
+type PreviousLookup = {
+  exact: Record<string, string>
+  category: Record<'strength' | 'cardio' | 'mobility', string>
+}
+
+const EMPTY_PREVIOUS_LOOKUP: PreviousLookup = {
+  exact: {},
+  category: {},
+}
+
+function compactNumber(value: number): string {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(1).replace(/\.0$/, '')
+}
+
+function formatSetSummary(
+  set: SetEntry,
+  category: 'strength' | 'cardio' | 'mobility',
+): string | null {
+  if (category === 'cardio') {
+    if (set.distance_km == null || set.duration_min == null) return null
+    return `${compactNumber(set.distance_km)} km / ${compactNumber(set.duration_min)} min`
+  }
+  if (set.weight != null && set.reps != null) {
+    return `${compactNumber(set.weight)}×${set.reps}`
+  }
+  if (set.weight != null) return `${compactNumber(set.weight)}×—`
+  if (set.reps != null) return `—×${set.reps}`
+  return null
+}
+
+function buildPreviousLookup(
+  sessions: WorkoutSession[],
+  setEntriesBySession: Record<string, SetEntry[]>,
+  exerciseMap: Record<string, { name: string; category: string }>,
+): PreviousLookup {
+  const exact: Record<string, string> = {}
+  const category: PreviousLookup['category'] = {
+    strength: '',
+    cardio: '',
+    mobility: '',
+  }
+
+  for (const session of [...sessions].sort(
+    (a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime() ||
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )) {
+    const grouped = new Map<string, SetEntry[]>()
+    for (const set of setEntriesBySession[session.id] ?? []) {
+      const list = grouped.get(set.exercise_id)
+      if (list) list.push(set)
+      else grouped.set(set.exercise_id, [set])
+    }
+
+    for (const [exerciseId, sets] of grouped) {
+      const exercise = exerciseMap[exerciseId]
+      if (!exercise) continue
+      const summary = sets
+        .map((set) =>
+          formatSetSummary(
+            set,
+            exercise.category as 'strength' | 'cardio' | 'mobility',
+          ),
+        )
+        .filter((value): value is string => !!value)
+        .join(', ')
+      if (!summary) continue
+      if (!exact[exercise.name]) exact[exercise.name] = summary
+      if (!category[exercise.category as 'strength' | 'cardio' | 'mobility']) {
+        category[exercise.category as 'strength' | 'cardio' | 'mobility'] =
+          summary
+      }
+    }
+  }
+
+  return { exact, category }
+}
+
+const LIVE_SESSION_KEY = 'sb-fitness-live-session'
+
+type StoredLiveSession = {
+  session: ActiveSession
+  sessionId: string | null
+  note: string
+}
+
+function loadStoredLiveSession(): StoredLiveSession | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(LIVE_SESSION_KEY)
+    return raw ? (JSON.parse(raw) as StoredLiveSession) : null
+  } catch {
+    return null
+  }
+}
 
 export function Fitness() {
   const navigate = useNavigate()
@@ -72,11 +172,33 @@ export function Fitness() {
   )
   const [showWizard, setShowWizard] = useState(false)
   const [showLogPast, setShowLogPast] = useState(false)
-  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null)
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(
+    () => loadStoredLiveSession()?.session ?? null,
+  )
   // DB id of the session backing the live session, when it originated from a
   // planned/active one — set so Finish PATCHes it instead of POSTing a new row.
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [activeSessionNote, setActiveSessionNote] = useState('')
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    () => loadStoredLiveSession()?.sessionId ?? null,
+  )
+  const [activeSessionNote, setActiveSessionNote] = useState(
+    () => loadStoredLiveSession()?.note ?? '',
+  )
+
+  // Persist the live session so it survives navigation, reload, or logout —
+  // restored via the lazy useState initializers above.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!activeSession) {
+      window.localStorage.removeItem(LIVE_SESSION_KEY)
+      return
+    }
+    const stored: StoredLiveSession = {
+      session: activeSession,
+      sessionId: activeSessionId,
+      note: activeSessionNote,
+    }
+    window.localStorage.setItem(LIVE_SESSION_KEY, JSON.stringify(stored))
+  }, [activeSession, activeSessionId, activeSessionNote])
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekDays, setWeekDays] = useState<WeekDay[]>([])
   const [currentWeekDays, setCurrentWeekDays] = useState<WeekDay[]>([])
@@ -92,6 +214,9 @@ export function Fitness() {
   const [statsExerciseId, setStatsExerciseId] = useState<string | null>(null)
   const [bodyWeightData, setBodyWeightData] = useState<BodyWeightStats | null>(
     null,
+  )
+  const [previousLookup, setPreviousLookup] = useState<PreviousLookup>(
+    EMPTY_PREVIOUS_LOOKUP,
   )
   const [exerciseMap, setExerciseMap] = useState<
     Record<string, { name: string; category: string }>
@@ -195,6 +320,24 @@ export function Fitness() {
     })
     setExerciseMap(map)
 
+    const completedSessions = await fetchSessions(
+      new Date(0).toISOString(),
+      undefined,
+    )
+    const completedSets = await Promise.all(
+      completedSessions.map(async (session) => [
+        session.id,
+        await fetchSetEntries(session.id),
+      ]),
+    )
+    setPreviousLookup(
+      buildPreviousLookup(
+        completedSessions,
+        Object.fromEntries(completedSets),
+        map,
+      ),
+    )
+
     const [planned, active] = await Promise.all([
       fetchPlannedSessions('planned'),
       fetchPlannedSessions('active'),
@@ -203,7 +346,6 @@ export function Fitness() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadWeek(weekOffset)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
@@ -246,6 +388,22 @@ export function Fitness() {
       }
     }
     return parts.join(' ').trim()
+  }
+
+  function applyPreviousLookup(session: ActiveSession): ActiveSession {
+    return {
+      ...session,
+      exercises: session.exercises.map((exercise) => {
+        const exact = previousLookup.exact[exercise.name]
+        const category = exercise.category
+          ? previousLookup.category[exercise.category]
+          : undefined
+        return {
+          ...exercise,
+          prev: exact ?? category ?? PREV_PERFORMANCE[exercise.name] ?? '—',
+        }
+      }),
+    }
   }
 
   /** Builds an in-memory ActiveSession from a planned session's `plan` names. */
@@ -386,6 +544,9 @@ export function Fitness() {
         new Date(a.scheduled_at as string).getTime() -
         new Date(b.scheduled_at as string).getTime(),
     )[0]
+  const activeSessionView = activeSession
+    ? applyPreviousLookup(activeSession)
+    : null
   const headerSubtitle = activeSession
     ? activeSession.type
     : nextPlanned
@@ -824,9 +985,9 @@ export function Fitness() {
                 <WeekStrip weekDays={weekDays} />
 
                 {/* Highlight graphs — hidden while a session is live */}
-                {activeSession ? (
+                {activeSessionView ? (
                   <LiveSession
-                    session={activeSession}
+                    session={activeSessionView}
                     onUpdate={setActiveSession}
                     onFinish={handleFinishSession}
                     note={activeSessionNote}
