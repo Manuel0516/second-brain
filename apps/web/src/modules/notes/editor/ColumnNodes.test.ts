@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { NodeSelection, TextSelection } from '@tiptap/pm/state'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test } from 'vitest'
 import { applyColumnDrop, Column, ColumnList } from './ColumnNodes'
 
 const paragraph = (text: string) => ({
@@ -22,12 +22,23 @@ const twoColumns = {
   ],
 }
 
+// Editors created here aren't mounted via React, so the global RTL
+// afterEach(cleanup) never destroys them — their pending flush timers
+// then fire after jsdom tears down, throwing "document is not defined".
+const editors: Editor[] = []
+
 function createEditor(content: object) {
-  return new Editor({
+  const editor = new Editor({
     extensions: [StarterKit, ColumnList, Column],
     content,
   })
+  editors.push(editor)
+  return editor
 }
+
+afterEach(() => {
+  editors.splice(0).forEach((editor) => editor.destroy())
+})
 
 test('setColumnLayout wraps the block once and puts the caret in the new column', () => {
   const editor = createEditor({ type: 'doc', content: [paragraph('alpha')] })

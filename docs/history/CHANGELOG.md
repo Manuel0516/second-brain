@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0139](0139-columnnodes-test-editor-leak.md)                     | Fix: leaked tiptap Editor timers in ColumnNodes tests threw after jsdom teardown                     | 2026-07-06 | accepted                   |
 | [0138](0138-google-calendar-sync-and-ics-feeds.md)               | Google Calendar sync (two-way/read-only) + ICS feed subscriptions (migration 024)                   | 2026-07-06 | accepted                   |
 | [0137](0137-event-date-propagation-to-linked-entities.md)       | Event date changes propagate to linked planned workout/meal `date` field                            | 2026-07-06 | accepted                   |
 | [0136](0136-httpx-missing-from-prod-deps-fix.md)                 | Fix: prod deploy crash-looped, `httpx` was dev-only but used by `food.py`                           | 2026-07-06 | accepted                   |
