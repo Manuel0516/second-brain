@@ -683,8 +683,10 @@ async def patch_event(
         # Non-recurring reschedule: move the single linked planned entry along with it.
         for workout in await _linked_planned_sessions(session, [event.id]):
             workout.scheduled_at = event.start_at
+            workout.date = event.start_at
         for meal in await _linked_planned_meals(session, [event.id]):
             meal.scheduled_at = event.start_at
+            meal.date = event.start_at
 
     await session.commit()
     await session.refresh(event)
@@ -707,6 +709,13 @@ async def move_events(
         duration = change.end_at - change.start_at
         event.start_at += delta
         event.end_at = event.start_at + duration
+        # Propagate date change to linked planned entries.
+        for workout in await _linked_planned_sessions(session, [event.id]):
+            workout.scheduled_at = event.start_at
+            workout.date = event.start_at
+        for meal in await _linked_planned_meals(session, [event.id]):
+            meal.scheduled_at = event.start_at
+            meal.date = event.start_at
     await session.commit()
     return [event_response(event) for event in events]
 
