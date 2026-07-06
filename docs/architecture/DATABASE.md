@@ -73,7 +73,30 @@ A user can have multiple calendars (Personal, Work, etc.).
 | name | String(255) | Display name. |
 | color | String(7) | Hex color, e.g. `#22d3ee`. |
 | is_visible | Boolean | Whether events from this calendar show on the grid. |
-| source | String(20) | "local" or "google" (for future Google sync). |
+| source | String(20) | "local", "google", or "ics" (migration 024). |
+| google_calendar_id | String(255)? | Remote Google calendar id for synced calendars. |
+| sync_direction | String(10)? | "pull" (read-only mirror) or "push" (two-way). Null for local. |
+| sync_token | Text? | Google incremental sync cursor (`nextSyncToken`); wiped on 410 to force a full resync. |
+| last_synced_at | DateTime? | Last successful sync. |
+| external_id | String(512)? | Stable id for the remote source (ICS feed identity). |
+| ics_url | Text? | Feed URL for `source == "ics"` subscriptions. |
+| etag | String(255)? | HTTP ETag of the last ICS fetch (skip unchanged feeds). |
+
+Mirrored calendars (`source != "local"` with `sync_direction == "pull"`) reject local
+event edits with 403 — the sync layer owns their events.
+
+---
+
+### `google_accounts`
+One row per user's connected Google account (migration 024).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | UUID FK | Owner. Unique — one Google account per user. |
+| access_token | Text | Fernet-encrypted with `GOOGLE_TOKEN_ENCRYPTION_KEY`. Never stored plain. |
+| refresh_token | Text | Fernet-encrypted. |
+| token_expires_at | DateTime | Access-token expiry; refreshed automatically. |
+| email | String(255)? | Google account email for display in Settings. |
 
 ---
 
@@ -382,5 +405,6 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 021 | Dropped body_metrics.body_fat_pct (weight-only body metrics) |
 | 022 | Food core: meal_logs, food_daily_extras, food_* settings |
 | 023 | fitness_stats_range_days and food_stats_range_days on user_settings |
+| 024 | Calendar sync: google_accounts table; sync columns on calendars (google_calendar_id, sync_direction, sync_token, last_synced_at, external_id, ics_url, etag) and calendar_events (external_id, external_etag) |
 
 Always check `alembic current` before writing a new migration.

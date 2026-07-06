@@ -106,7 +106,19 @@ class Calendar(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     color: Mapped[str] = mapped_column(String(7), nullable=False)  # hex color
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # "local" | "google" | "ics" — value set enforced in the API layer.
     source: Mapped[str] = mapped_column(String(20), default="local", nullable=False)
+    # Google sync (source="google"): calendar id, Fernet-encrypted refresh token,
+    # incremental-sync cursor. ICS subscription (source="ics"): feed URL.
+    google_calendar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sync_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "pull" (Google -> app only, default) | "push" (two-way). Google calendars only.
+    sync_direction: Mapped[str] = mapped_column(
+        String(4), default="pull", server_default="pull", nullable=False
+    )
+    ics_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -167,6 +179,15 @@ class CalendarEvent(Base):
     # ponytail: tag system events (workout logs, meal logs) to distinguish
     # auto-created calendar entries from user-created ones.
     created_by: Mapped[str] = mapped_column(String(50), default="user", nullable=False)
+    # Sync provenance. external_id holds the foreign system's stable event id
+    # (Google event id or ICS UID). Unique per calendar via partial index (024).
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # "user" | "google" | "ics" — value set enforced in the API layer.
+    source: Mapped[str] = mapped_column(
+        String(20), default="user", server_default="user", nullable=False
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

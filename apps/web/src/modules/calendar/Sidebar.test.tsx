@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { Sidebar } from './Sidebar'
@@ -42,7 +43,11 @@ test('creates a calendar and refreshes the list', async () => {
       new Response(JSON.stringify({ id: 'calendar-1' }), { status: 201 }),
     )
   const onChanged = vi.fn()
-  render(<Sidebar calendars={[]} onChanged={onChanged} />)
+  render(
+    <MemoryRouter>
+      <Sidebar calendars={[]} onChanged={onChanged} />
+    </MemoryRouter>,
+  )
 
   fireEvent.click(screen.getByRole('button', { name: 'Add calendar' }))
   fireEvent.change(screen.getByPlaceholderText('Calendar name'), {
@@ -67,7 +72,11 @@ test('shows the API validation reason', async () => {
       { status: 422 },
     ),
   )
-  render(<Sidebar calendars={[]} onChanged={vi.fn()} />)
+  render(
+    <MemoryRouter>
+      <Sidebar calendars={[]} onChanged={vi.fn()} />
+    </MemoryRouter>,
+  )
 
   fireEvent.click(screen.getByRole('button', { name: 'Add calendar' }))
   fireEvent.change(screen.getByPlaceholderText('Calendar name'), {
@@ -106,7 +115,9 @@ test('reorders calendars only after a long press and saves the preference', () =
     },
   ]
   const { container } = render(
-    <Sidebar calendars={calendars} onChanged={vi.fn()} />,
+    <MemoryRouter>
+      <Sidebar calendars={calendars} onChanged={vi.fn()} />
+    </MemoryRouter>,
   )
   const work = screen.getByRole('button', { name: 'Work options' })
   const workRow = work.closest('.calendar-row')!

@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     # TOTP encryption (Fernet key for encrypted TOTP storage)
     totp_encryption_key: str = ""
 
+    # Google Calendar integration (OAuth client + Fernet key for refresh tokens)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
+    google_token_encryption_key: str = ""
+    # Where the OAuth callback redirects the browser back to (frontend origin).
+    frontend_url: str = "http://localhost:5173"
+    # Background sync cadence for Google/ICS calendars.
+    calendar_sync_interval_minutes: int = 15
+
     # MinIO / S3-compatible storage. The credentials fall back to the
     # MINIO_ROOT_* names Compose already requires in .env, so one pair of
     # values drives both the server and the client.

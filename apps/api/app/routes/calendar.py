@@ -51,6 +51,10 @@ class CalendarResponse(BaseModel):
     color: str
     is_visible: bool
     source: str
+    sync_direction: str = "pull"
+    ics_url: str | None = None
+    google_calendar_id: str | None = None
+    last_synced_at: datetime | None = None
 
 
 class NoteConnection(BaseModel):
@@ -265,6 +269,14 @@ async def owned_calendar(calendar_id: str, user: User, session: AsyncSession) ->
     return calendar
 
 
+async def writable_calendar(calendar_id: str, user: User, session: AsyncSession) -> Calendar:
+    """Like owned_calendar, but rejects read-only (ICS-subscribed) calendars."""
+    calendar = await owned_calendar(calendar_id, user, session)
+    if calendar.source == "ics":
+        raise HTTPException(status_code=409, detail="ICS calendars are read-only")
+    return calendar
+
+
 async def owned_event(event_id: str, user: User, session: AsyncSession) -> CalendarEvent:
     event = await session.scalar(
         select(CalendarEvent)
@@ -273,6 +285,13 @@ async def owned_event(event_id: str, user: User, session: AsyncSession) -> Calen
     )
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
+async def writable_event(event_id: str, user: User, session: AsyncSession) -> CalendarEvent:
+    """Like owned_event, but rejects events living in read-only ICS calendars."""
+    event = await owned_event(event_id, user, session)
+    await writable_calendar(event.calendar_id, user, session)
     return event
 
 
@@ -587,7 +606,7 @@ async def create_event(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> EventResponse:
-    await owned_calendar(data.calendar_id, user, session)
+    await writable_calendar(data.calendar_id, user, session)
     values = data.model_dump()
     values["link"] = str(data.link) if data.link else None
     event = CalendarEvent(**values)
@@ -616,12 +635,12 @@ async def patch_event(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> EventResponse:
-    event = await owned_event(event_id, user, session)
+    event = await writable_event(event_id, user, session)
     values = data.model_dump(exclude_unset=True)
     values.pop("scope", None)
     values.pop("occurrence_start", None)
     if data.calendar_id:
-        await owned_calendar(data.calendar_id, user, session)
+        await writable_calendar(data.calendar_id, user, session)
 
     # Editing a single occurrence of a series: split it off as an override row
     # and hide the original occurrence from the parent, so the series continues.
@@ -701,7 +720,7 @@ async def move_events(
 ) -> list[EventResponse]:
     if len({item.id for item in data.events}) != len(data.events):
         raise HTTPException(status_code=422, detail="Each event may only be moved once")
-    events = [await owned_event(item.id, user, session) for item in data.events]
+    events = [await writable_event(item.id, user, session) for item in data.events]
     changes = {item.id: item for item in data.events}
     for event in events:
         change = changes[event.id]
@@ -752,7 +771,8 @@ async def copy_events(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[EventResponse]:
     event_ids = list(dict.fromkeys(data.event_ids))
-    events = [await owned_event(event_id, user, session) for event_id in event_ids]
+    # Copies land in the source calendar, so ICS-backed events cannot be copied.
+    events = [await writable_event(event_id, user, session) for event_id in event_ids]
     starts = [
         event.start_at if event.start_at.tzinfo else event.start_at.replace(tzinfo=UTC)
         for event in events
@@ -848,7 +868,7 @@ async def delete_event(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> Response:
-    event = await owned_event(event_id, user, session)
+    event = await writable_event(event_id, user, session)
 
     # Non-recurring, or the whole series: drop the row (override children cascade).
     if scope == "all" or not event.rrule:

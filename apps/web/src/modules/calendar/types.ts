@@ -4,6 +4,10 @@ export interface CalendarData {
   color: string
   is_visible: boolean
   source: string
+  sync_direction?: string
+  ics_url?: string | null
+  google_calendar_id?: string | null
+  last_synced_at?: string | null
 }
 
 export interface EventConnections {

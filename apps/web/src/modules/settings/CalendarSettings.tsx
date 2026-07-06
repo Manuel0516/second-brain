@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { FavoriteColorEditor } from '../../components/FavoritesEditor'
 import { ToggleRow } from '../../components/ToggleRow'
 import { useSettings } from '../../context/SettingsContext'
 import { apiCall } from '../../lib/api'
+import { CalendarIntegrations } from './CalendarIntegrations'
 import type { CalendarData } from '../calendar/types'
 
 const SegmentControl = Segmented
@@ -13,13 +14,15 @@ export function CalendarSettings() {
   const { settings, patch } = useSettings()
   const [calendars, setCalendars] = useState<CalendarData[]>([])
 
-  useEffect(() => {
+  const loadCalendars = useCallback(() => {
     apiCall('/api/calendars')
       .then(async (response) => {
         if (response.ok) setCalendars(await response.json())
       })
       .catch(() => {})
   }, [])
+
+  useEffect(loadCalendars, [loadCalendars])
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -270,6 +273,9 @@ export function CalendarSettings() {
           </div>
         </div>
       </SettingsCard>
+
+      {/* Integrations: Google Calendar sync + ICS subscriptions */}
+      <CalendarIntegrations calendars={calendars} onChanged={loadCalendars} />
     </div>
   )
 }

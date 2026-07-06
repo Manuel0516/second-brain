@@ -67,3 +67,27 @@ def verify_totp(secret: str, code: str) -> bool:
     """Verify a TOTP code."""
     totp = pyotp.TOTP(secret)
     return totp.verify(code)
+
+
+def encrypt_google_token(token: str) -> str:
+    """Encrypt a Google refresh token with the configured Fernet key."""
+    from cryptography.fernet import Fernet
+
+    settings = get_settings()
+    if not settings.google_token_encryption_key:
+        raise RuntimeError("GOOGLE_TOKEN_ENCRYPTION_KEY is not configured")
+    return Fernet(settings.google_token_encryption_key.encode()).encrypt(token.encode()).decode()
+
+
+def decrypt_google_token(encrypted: str) -> str:
+    """Decrypt a Google refresh token. Returns "" if the key or token is invalid."""
+    from cryptography.fernet import Fernet, InvalidToken
+
+    settings = get_settings()
+    if not settings.google_token_encryption_key:
+        return ""
+    try:
+        fernet = Fernet(settings.google_token_encryption_key.encode())
+        return fernet.decrypt(encrypted.encode()).decode()
+    except (InvalidToken, ValueError):
+        return ""

@@ -17,6 +17,15 @@ async function refresh(): Promise<boolean> {
   }
 }
 
+/** Extract a human-readable message from a FastAPI error response. */
+export async function apiErrorMessage(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null)
+  if (typeof data?.detail === 'string') return data.detail
+  if (Array.isArray(data?.detail) && typeof data.detail[0]?.msg === 'string')
+    return data.detail[0].msg
+  return fallback
+}
+
 export async function apiCall(
   endpoint: string,
   options: RequestInit = {},

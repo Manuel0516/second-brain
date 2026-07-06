@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiCall } from '../../lib/api'
+import { useNavigate } from 'react-router-dom'
+import { apiCall, apiErrorMessage } from '../../lib/api'
 import { useSettings } from '../../context/SettingsContext'
 import { Field } from '../../components/Field'
 import { IconButton } from '../../components/IconButton'
@@ -100,15 +101,8 @@ interface Props {
   onClose?: () => void
 }
 
-async function errorMessage(response: Response, fallback: string) {
-  const data = await response.json().catch(() => null)
-  if (typeof data?.detail === 'string') return data.detail
-  if (Array.isArray(data?.detail) && typeof data.detail[0]?.msg === 'string')
-    return data.detail[0].msg
-  return fallback
-}
-
 export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
+  const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState('#8B5CF6')
@@ -256,7 +250,9 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
     })
     if (response.ok) onChanged()
     else
-      setError(await errorMessage(response, 'Could not update the calendar.'))
+      setError(
+        await apiErrorMessage(response, 'Could not update the calendar.'),
+      )
   }
 
   const deleteCalendar = async (calendar: CalendarData) => {
@@ -270,7 +266,9 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
       onChanged()
     } else {
       setConfirmDelete(null)
-      setError(await errorMessage(response, 'Could not delete the calendar.'))
+      setError(
+        await apiErrorMessage(response, 'Could not delete the calendar.'),
+      )
     }
   }
 
@@ -287,7 +285,9 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
       setAdding(false)
       onChanged()
     } else
-      setError(await errorMessage(response, 'Could not create the calendar.'))
+      setError(
+        await apiErrorMessage(response, 'Could not create the calendar.'),
+      )
   }
 
   return (
@@ -527,14 +527,13 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
         <button
           type="button"
           className="integration-button"
-          disabled
-          title="Google OAuth will be added in the sync phase"
+          onClick={() => navigate('/settings/calendar')}
         >
           <span className="integration-icon" aria-hidden="true">
             G
           </span>
-          <span className="integration-label">Import from Google Calendar</span>
-          <span className="integration-status">Soon</span>
+          <span className="integration-label">Others?</span>
+          <span className="integration-status">Set up</span>
         </button>
       </div>
     </SidebarShell>

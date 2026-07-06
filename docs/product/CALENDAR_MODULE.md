@@ -121,7 +121,14 @@ new boolean column to `CalendarEvent`.
 
 ## 4. Google Calendar Sync
 
-- **OAuth2** connect flow; refresh token stored encrypted server-side.
+> **Status: implemented** (migration 024, `services/google_sync.py`, `services/ics_sync.py`,
+> `routes/integrations.py`; see history entry 0138). Push notifications (`watch` channels)
+> are not wired up yet — sync currently relies on the polling loop plus manual "Sync now".
+> Read-only **ICS feed subscriptions** were added alongside (any public/tokened ICS URL,
+> mirrored into a `source == "ics"` calendar).
+
+- **OAuth2** connect flow; refresh token stored encrypted server-side
+  (Fernet, `GOOGLE_TOKEN_ENCRYPTION_KEY`).
 - **Initial sync**: pull events in a window (e.g. −1 month → +6 months) via the Calendar
   API's `events.list`, store the returned `nextSyncToken`.
 - **Incremental sync**: subsequent syncs call `events.list` with `syncToken` — Google

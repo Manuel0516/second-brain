@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -6,14 +8,28 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
-from app.routes import admin, auth, calendar, databases, files, fitness, food, notes, settings
+from app.routes import (
+    admin,
+    auth,
+    calendar,
+    databases,
+    files,
+    fitness,
+    food,
+    integrations,
+    notes,
+    settings,
+)
 from app.security import hash_password
+from app.services import google_sync, ics_sync
+
+logger = logging.getLogger(__name__)
 
 
 class HealthResponse(BaseModel):
@@ -53,7 +69,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_initial_user()
     await cleanup_old_login_attempts()
 
-    yield
+    poller = asyncio.create_task(calendar_sync_loop())
+    try:
+        yield
+    finally:
+        poller.cancel()
 
 
 app = FastAPI(title="Second Brain API", version="0.1.0", lifespan=lifespan)
@@ -68,6 +88,7 @@ app.include_router(files.router)
 app.include_router(fitness.router)
 app.include_router(food.router)
 app.include_router(admin.router)
+app.include_router(integrations.router)
 
 
 # ── Security headers middleware ─────────────────────────────────────────
@@ -145,6 +166,38 @@ async def ensure_initial_user() -> None:
         session.add_all([default_calendar, personal_calendar, work_calendar])
 
         await session.commit()
+
+
+async def sync_due_calendars() -> None:
+    """One polling pass: sync every Google/ICS calendar whose interval elapsed."""
+    interval = get_settings().calendar_sync_interval_minutes
+    cutoff = datetime.now(UTC) - timedelta(minutes=interval)
+    async with async_session_factory() as session:
+        due = await session.scalars(
+            select(Calendar).where(
+                Calendar.source.in_(["google", "ics"]),
+                or_(Calendar.last_synced_at.is_(None), Calendar.last_synced_at < cutoff),
+            )
+        )
+        for cal in due:
+            try:
+                if cal.source == "google":
+                    await google_sync.sync_calendar(session, cal)
+                else:
+                    await ics_sync.sync_calendar(session, cal)
+            except (google_sync.GoogleSyncError, ics_sync.IcsSyncError) as error:
+                logger.warning("Calendar sync failed for %s: %s", cal.id, error)
+                await session.rollback()
+
+
+async def calendar_sync_loop() -> None:
+    """Background poller for Google/ICS calendar sync. Cancelled on shutdown."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await sync_due_calendars()
+        except Exception:  # noqa: BLE001 — the loop must survive any sync error
+            logger.exception("Calendar sync pass failed")
 
 
 async def cleanup_old_login_attempts() -> None:
