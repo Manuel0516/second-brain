@@ -54,6 +54,12 @@ services:
       LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
       LOGIN_RATE_LIMIT_WINDOW_MINUTES: ${LOGIN_RATE_LIMIT_WINDOW_MINUTES:-5}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      GOOGLE_TOKEN_ENCRYPTION_KEY: ${GOOGLE_TOKEN_ENCRYPTION_KEY:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CALENDAR_SYNC_INTERVAL_MINUTES: ${CALENDAR_SYNC_INTERVAL_MINUTES:-15}
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-secondbrain}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
@@ -64,6 +70,7 @@ services:
         condition: service_healthy
     networks:
       - internal
+      - egress
     healthcheck:
       test:
         [
@@ -105,6 +112,9 @@ services:
 networks:
   internal:
     internal: true
+  # ponytail: api needs egress for Google/ICS calendar sync (outbound HTTPS);
+  # db/minio stay internal-only since they never call out.
+  egress: {}
   traefik:
     external: true
     name: traefik
