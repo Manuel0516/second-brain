@@ -53,7 +53,7 @@ type PreviousLookup = {
 
 const EMPTY_PREVIOUS_LOOKUP: PreviousLookup = {
   exact: {},
-  category: {},
+  category: { strength: '', cardio: '', mobility: '' },
 }
 
 function compactNumber(value: number): string {
@@ -187,7 +187,7 @@ export function Fitness() {
   // Persist the live session so it survives navigation, reload, or logout —
   // restored via the lazy useState initializers above.
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !window.localStorage) return
     if (!activeSession) {
       window.localStorage.removeItem(LIVE_SESSION_KEY)
       return
