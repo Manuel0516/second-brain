@@ -1,0 +1,44 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "model": "openrouter/z-ai/glm-5.2",
+  "small_model": "deepseek/deepseek-v4-flash",
+  "default_agent": "brain",
+
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  },
+
+  "instructions": [
+    "AGENTS.md"
+  ],
+
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      ".git/**",
+      ".venv/**",
+      "__pycache__/**",
+      ".next/**",
+      ".turbo/**",
+      "coverage/**",
+      "target/**",
+      "vendor/**",
+      "*.log",
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      ".env",
+      ".env.*"
+    ]
+  },
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 12000
+  }
+}

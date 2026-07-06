@@ -931,7 +931,10 @@ export function TimeGrid({
     pointer.currentTarget.releasePointerCapture(pointer.pointerId)
     allDayDragRef.current = null
     setAllDayDrag(null)
-    if (!current.moved) return
+    if (!current.moved) {
+      onEdit(event)
+      return
+    }
     const column = document
       .elementFromPoint(pointer.clientX, pointer.clientY)
       ?.closest('.day-column') as HTMLElement | null

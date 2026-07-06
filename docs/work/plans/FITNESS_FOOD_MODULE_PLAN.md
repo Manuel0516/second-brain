@@ -12,8 +12,15 @@
 > that already has an equivalent (progress bar, card, field, dropdown, popover
 > all already exist).
 
-Status: planned — not started. This document is prep only.
-Date: 2026-07-04
+Status: in progress — F1 (fitness core, migration `015_fitness_core.py`),
+F2 (goals + statistics, migration `016_goals.py`) and F3 (fitness UI rework,
+migration `017_set_feeling.py`: tabs, Overview landing graphs, Stats & Goals
+tab, History tab + past-session editor, live-session per-set notes +
+feeling dots) are shipped. Revised 2026-07: Food is promoted to **its own
+designed page** (Phase G, below) instead of a bolt-on view, and **calendar
+integration (Phase 3) is the next active work**. See §2 for the revised
+ordering.
+Date: 2026-07-04 (revised)
 
 ---
 
@@ -48,6 +55,12 @@ image blocks already do — that's in-stack reuse, not a new pattern.
 
 ## 2. Phase breakdown
 
+> Revised ordering: F1 and F2 are **done**. Next up, in order:
+> **Phase F3 (fitness UI
+> rework)** — then the Food phases (G1/G2), which now build a **dedicated,
+> designed Food page** (own rail entry, own layout pass against
+> `docs/design/STYLE_GUIDE.md`), not a minimal form bolted onto Fitness.
+
 ### Phase F1 — Fitness core (exercises, sessions, sets, body metrics)
 - Migration `015_fitness_core.py`: `exercises`, `workout_sessions`, `set_entries`,
   `body_metrics` tables per `FITNESS_MODULE.md` §1. `workout_sessions.notes` is
@@ -78,6 +91,20 @@ image blocks already do — that's in-stack reuse, not a new pattern.
   adding one; if none exists, ask before adding a dependency (per root
   `AGENTS.md` §6 — dependencies need rationale + approval).
 
+### Phase F3 — Fitness UI rework (done)
+- Migration `017_set_feeling.py`: `set_entries.feeling` (int 1–5, nullable,
+  per-set subjective rating) + `set_entries.note` if missing; fix
+  `weight` Integer→Float (use `batch_alter_table` for SQLite).
+- Tabs via `useSearchParams` (`/fitness?tab=overview|stats|history`), no new
+  App routes. **Overview** (landing): highlight graphs — body weight, top
+  exercise progression, feeling trend — that disappear while a live session is
+  active. **Stats**: exercise + body statistics, goals, body-weight quick-log
+  (moved out of the landing view). **History**: full training log; past-session
+  editor reworked (`SessionForm.tsx`) with add-set/add-exercise.
+- Live session: per-set note + `FeelingDots` (1–5) shared component.
+- New backend surface kept tiny: `GET /api/fitness/stats/overview` for the
+  landing graphs; everything else reuses existing stats endpoints.
+
 ### Phase G1 — Food core (logs, water, targets, daily summary)
 - Migration `016_food_core.py`: `food_logs`, `water_logs`, `nutrition_targets`
   per `FOOD_MODULE.md` §1. `food_logs.items` is `JSON`, shape
@@ -89,9 +116,12 @@ image blocks already do — that's in-stack reuse, not a new pattern.
 - `apps/api/app/routes/food.py`: `GET/POST /api/food/logs`,
   `GET /api/food/summary?date=`, `GET/POST /api/food/water`,
   `GET/POST /api/food/targets`.
-- Frontend: `apps/web/src/modules/food/` — daily view reuses the `ProgressBar`
-  component from F2 for calories/protein/carbs/fat/water, one shared component
-  rendering five times, not five bespoke bars.
+- Frontend: `apps/web/src/modules/food/` — **a dedicated, designed page** with
+  its own rail entry and its own layout pass against
+  `docs/design/STYLE_GUIDE.md` (not a bolt-on view inside Fitness). Daily view
+  reuses the `ProgressBar` component from F2 for
+  calories/protein/carbs/fat/water, one shared component rendering five times,
+  not five bespoke bars.
 
 ### Phase G2 — Recipes (Notes database, no new backend)
 - A `Database` page named "Recipes" with properties `Tags` (multi-select),
