@@ -34,6 +34,15 @@ effect (`BlockEditor.tsx` ~753), which ran on every mount and threw before the v
   here since there's no SSR to protect against). Also added an `editor.isDestroyed` check to the
   column-drag-preview effect's guard, so a race during fast note-switching can't hit the same
   class of error again.
+- `apps/web/src/setupTests.ts` — registered `afterEach(cleanup)` from `@testing-library/react`
+  globally. Follow-up fix: with `immediatelyRender: true`, `BlockEditor.test.tsx`'s three rendered
+  `BlockEditor` instances now mount a real ProseMirror view (and its background `DOMObserver`
+  flush timer) synchronously instead of never actually mounting before the test moved on. With no
+  cleanup registered, those instances were never unmounted between tests, so the timer could still
+  be pending when jsdom tore down `document` at the end of the run, throwing
+  `ReferenceError: document is not defined` in `prosemirror-view`. Global `cleanup()` unmounts every
+  rendered component after each test, which calls `editor.destroy()` and stops its timers. Verified
+  with 5 consecutive `vitest run` passes, no recurrence.
 
 ## How the pieces connect
 
