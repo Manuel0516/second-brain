@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0136](0136-httpx-missing-from-prod-deps-fix.md)                 | Fix: prod deploy crash-looped, `httpx` was dev-only but used by `food.py`                           | 2026-07-06 | accepted                   |
 | [0135](0135-tiptap-editor-view-crash.md)                         | Fix: opening any note crashed the app (Tiptap v3 `immediatelyRender` default)                       | 2026-07-06 | accepted                   |
 | [0134](0134-linked-note-icon-and-folder-disambiguation.md)       | Linked notes show real emoji + parent folder; ancestor-walk cycle guard                            | 2026-07-06 | accepted                   |
 | [0133](0133-note-link-cleanup-and-event-copy-connections.md)     | Trashed notes drop event links; event copy/paste duplicates linked workout/meal                    | 2026-07-06 | accepted                   |

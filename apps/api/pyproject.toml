@@ -8,6 +8,7 @@ dependencies = [
     "argon2-cffi>=21.2.0",
     "fastapi<0.136",
     "greenlet>=3.0.0",
+    "httpx>=0.28.1",
     "minio>=7.2.16",
     "python-multipart>=0.0.18",
     "pydantic[email]>=2.0.0",
@@ -22,7 +23,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",
-    "httpx>=0.28.1",
     "mypy>=2.1.0",
     "pytest>=9.1.1",
     "pytest-anyio>=0.0.0",

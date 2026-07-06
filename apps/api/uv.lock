@@ -916,6 +916,7 @@ dependencies = [
     { name = "argon2-cffi" },
     { name = "fastapi" },
     { name = "greenlet" },
+    { name = "httpx" },
     { name = "minio" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic", extra = ["email"] },
@@ -930,7 +931,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "aiosqlite" },
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-anyio" },
@@ -943,6 +943,7 @@ requires-dist = [
     { name = "argon2-cffi", specifier = ">=21.2.0" },
     { name = "fastapi", specifier = "<0.136" },
     { name = "greenlet", specifier = ">=3.0.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "minio", specifier = ">=7.2.16" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.0.0" },
@@ -957,7 +958,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiosqlite", specifier = ">=0.22.1" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-anyio", specifier = ">=0.0.0" },
