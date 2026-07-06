@@ -78,7 +78,8 @@ const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLInputElement ||
   target instanceof HTMLTextAreaElement ||
-  target instanceof HTMLSelectElement
+  target instanceof HTMLSelectElement ||
+  (target instanceof HTMLElement && target.isContentEditable)
 
 function dateAtMinute(day: Date, minute: number) {
   const date = new Date(day)
@@ -644,10 +645,39 @@ export function TimeGrid({
     loadEvents()
   }, [loadEvents])
 
+  const deleteSelectedEvents = useCallback(async () => {
+    const targets = events.filter((candidate) =>
+      selectedKeys.has(occurrenceKey(candidate)),
+    )
+    if (!targets.length) return
+    setInteractionError('')
+    const results = await Promise.all(
+      targets.map((target) => {
+        const query = target.rrule
+          ? `?scope=this&occurrence_start=${encodeURIComponent(target.start_at)}`
+          : ''
+        return apiCall(`/api/events/${target.id}${query}`, { method: 'DELETE' })
+      }),
+    )
+    if (results.some((response) => !response.ok)) {
+      setInteractionError('Could not delete some of the selected events.')
+    }
+    setSelectedKeys(new Set())
+    loadEvents()
+  }, [events, loadEvents, selectedKeys])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return
       if (event.key === 'Escape') setSelectedKeys(new Set())
+      if (
+        (event.key === 'Delete' || event.key === 'Backspace') &&
+        selectedKeys.size
+      ) {
+        event.preventDefault()
+        void deleteSelectedEvents()
+        return
+      }
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key.toLowerCase() === 'c' && selectedKeys.size) {
         event.preventDefault()
@@ -663,7 +693,7 @@ export function TimeGrid({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [events, pasteEvents, selectedKeys])
+  }, [deleteSelectedEvents, events, pasteEvents, selectedKeys])
 
   const updateNewSelection = (next: NewSelection | null) => {
     selectionRef.current = next

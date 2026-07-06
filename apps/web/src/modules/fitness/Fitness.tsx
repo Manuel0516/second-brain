@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { LineChart, Line, ResponsiveContainer } from 'recharts'
 import { AppRail } from '../../components/AppRail'
 import { SidebarShell } from '../../components/SidebarShell'
 import { ProgressBar } from '../../components/ProgressBar'
@@ -16,6 +15,7 @@ import { LiveSession } from './LiveSession'
 import { WeekStrip, type WeekDay } from './WeekStrip'
 import { BodyMetricLog } from './BodyMetricLog'
 import { BodyMetricForm } from './BodyMetricForm'
+import { BodyWeightCard } from '../../components/BodyWeightCard'
 import { useSettings } from '../../context/SettingsContext'
 import { toDisplayWeight, fromDisplayWeight } from './units'
 import type { ActiveSession } from './exerciseLibrary'
@@ -603,17 +603,28 @@ export function Fitness() {
       ? nextPlanned.type
       : ''
 
+  // Deep link: ?edit_session=<id> — jump to history and auto-edit that session.
+  const [editSessionId, setEditSessionId] = useState<string | null>(null)
+  const handledEditSessionRef = useRef<string | null>(null)
+  useEffect(() => {
+    const sessionParam = searchParams.get('edit_session')
+    if (!sessionParam || sessionParam === handledEditSessionRef.current) return
+    handledEditSessionRef.current = sessionParam
+    if (tab !== 'history') setTab('history')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditSessionId(sessionParam)
+  }) // intentional: no deps — reads fresh searchParams on every render, ref prevents re-processing
+
   // Deep link: ?session=<id> — jump to overview and highlight/open that session.
+  const handledSessionRef = useRef<string | null>(null)
   useEffect(() => {
     const sessionParam = searchParams.get('session')
-    if (!sessionParam) return
+    if (!sessionParam || sessionParam === handledSessionRef.current) return
+    handledSessionRef.current = sessionParam
     if (tab !== 'overview') setTab('overview')
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHighlightSessionId(sessionParam)
-    const el = document.getElementById(`planned-session-${sessionParam}`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, plannedSessions])
+  }) // intentional: no deps
 
   return (
     <div
@@ -835,72 +846,28 @@ export function Fitness() {
             </div>
 
             {lastMetric && (
-              <div
-                style={{
-                  marginTop: '14px',
-                  padding: '8px 10px',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid rgba(255,240,200,0.07)',
-                  borderRadius: '8px',
+              <BodyWeightCard
+                lastWeight={
+                  lastMetric.weight != null
+                    ? toDisplayWeight(lastMetric.weight, weightUnit)
+                    : null
+                }
+                weightUnit={weightUnit}
+                metrics={bodyWeightData?.metrics ?? []}
+                trend={
+                  bodyWeightData?.trend != null
+                    ? toDisplayWeight(bodyWeightData.trend, weightUnit)
+                    : null
+                }
+                onOpenLog={() => {
+                  setTab('stats')
+                  setTimeout(() => {
+                    document
+                      .querySelector('.fitness-section-title')
+                      ?.scrollIntoView({ behavior: 'smooth' })
+                  }, 100)
                 }}
-              >
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '.07em',
-                    color: 'var(--text-tertiary)',
-                    fontWeight: 600,
-                    marginBottom: '6px',
-                  }}
-                >
-                  Body
-                </div>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                    marginBottom: '4px',
-                  }}
-                >
-                  {lastMetric.weight != null
-                    ? `${toDisplayWeight(lastMetric.weight, weightUnit)} ${weightUnit}`
-                    : '—'}
-                </div>
-                {/* Mini sparkline */}
-                {bodyWeightData && bodyWeightData.metrics.length > 1 && (
-                  <div style={{ height: '36px', marginTop: '4px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={bodyWeightData.metrics.slice(-14)}>
-                        <Line
-                          type="monotone"
-                          dataKey="weight"
-                          stroke="#22D3EE"
-                          strokeWidth={1.5}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-                <div
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    color: 'var(--text-tertiary)',
-                    marginTop: '3px',
-                  }}
-                >
-                  {bodyWeightData?.trend != null
-                    ? `Trend: ${toDisplayWeight(bodyWeightData.trend, weightUnit)} ${weightUnit}`
-                    : new Date(lastMetric.date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                </div>
-              </div>
+              />
             )}
           </div>
         </SidebarShell>
@@ -1164,7 +1131,11 @@ export function Fitness() {
 
             {tab === 'history' && (
               <>
-                <SessionForm />
+                <SessionForm
+                  editSessionId={editSessionId}
+                  onEditConsumed={() => setEditSessionId(null)}
+                  initialShowAll={!!editSessionId}
+                />
                 <BodyMetricLog />
               </>
             )}

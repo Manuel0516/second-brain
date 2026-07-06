@@ -308,8 +308,11 @@ export interface BodyWeightStats {
 
 export async function fetchExerciseStats(
   exerciseId: string,
+  days = 90,
 ): Promise<ExerciseStats> {
-  const res = await apiCall(`/api/fitness/stats/exercise/${exerciseId}`)
+  const res = await apiCall(
+    `/api/fitness/stats/exercise/${exerciseId}?days=${days}`,
+  )
   if (!res.ok) throw new Error('Failed to fetch exercise stats')
   return res.json()
 }
@@ -331,8 +334,10 @@ export async function fetchStatsOverview(days = 90): Promise<OverviewStats> {
   return res.json()
 }
 
-export async function fetchBodyWeightStats(): Promise<BodyWeightStats> {
-  const res = await apiCall('/api/fitness/stats/body-weight')
+export async function fetchBodyWeightStats(
+  days = 90,
+): Promise<BodyWeightStats> {
+  const res = await apiCall(`/api/fitness/stats/body-weight?days=${days}`)
   if (!res.ok) throw new Error('Failed to fetch body weight stats')
   const data = await res.json()
   return {

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # Public URL prefix (set to the proxy/external URL in production)
     minio_public_url: str = ""
 
+    # OpenRouter AI (food photo analysis)
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-2.5-flash"
+
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
 

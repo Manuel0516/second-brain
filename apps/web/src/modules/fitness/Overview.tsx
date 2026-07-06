@@ -90,6 +90,7 @@ export function Overview({
 }: Props) {
   const { settings } = useSettings()
   const weightUnit = settings.fitness_weight_unit
+  const statsDays = settings.fitness_stats_range_days
   const [data, setData] = useState<OverviewStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [statsError, setStatsError] = useState(false)
@@ -106,7 +107,7 @@ export function Overview({
 
   useEffect(() => {
     let cancelled = false
-    fetchStatsOverview()
+    fetchStatsOverview(statsDays)
       .then((d) => {
         if (!cancelled) setData(d)
       })
@@ -123,7 +124,7 @@ export function Overview({
           setExerciseList(list.map((e) => ({ id: e.id, name: e.name })))
       })
       .catch(() => {})
-    fetchBodyWeightStats()
+    fetchBodyWeightStats(statsDays)
       .then((bw) => {
         if (!cancelled) setBwMetrics(bw.metrics ?? [])
       })
@@ -131,7 +132,7 @@ export function Overview({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [statsDays])
 
   // Default the exercise graph to the overview's "most trained" pick once both load.
   useEffect(() => {
@@ -148,23 +149,24 @@ export function Overview({
 
   useEffect(() => {
     if (!currentExercise) return
-    const cached = exerciseStatsCache.current.get(currentExercise.id)
+    const cacheKey = `${currentExercise.id}:${statsDays}`
+    const cached = exerciseStatsCache.current.get(cacheKey)
     if (cached) {
       setCurrentExerciseStats(cached)
       return
     }
     let cancelled = false
-    fetchExerciseStats(currentExercise.id)
+    fetchExerciseStats(currentExercise.id, statsDays)
       .then((stats) => {
         if (cancelled) return
-        exerciseStatsCache.current.set(currentExercise.id, stats)
+        exerciseStatsCache.current.set(cacheKey, stats)
         setCurrentExerciseStats(stats)
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [currentExercise])
+  }, [currentExercise, statsDays])
 
   function cycleExercise(dir: 1 | -1) {
     if (exerciseList.length === 0) return

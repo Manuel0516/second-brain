@@ -10,7 +10,7 @@ Status values: `planned`, `in progress`, `verified`.
 | 1 — Calendar | in progress | Local calendars, event CRUD, recurrence, responsive views |
 | 2 — Notes and graph linking | verified | Rich pages, nesting, links, backlinks, search |
 | 3 — Finance and investments | planned | Transactions, imports, documents, jurisdiction-aware reporting |
-| 4 — Fitness and food | planned — **building next**, build plan at `docs/work/plans/FITNESS_FOOD_MODULE_PLAN.md` | Fast logging, calendar links, goals and statistics |
+| 4 — Fitness and food | verified — **fitness closed out (F1–F3), food complete (Phases 1–4, history 0116–0122)** | Fast logging, calendar links, goals and statistics |
 | 5 — AI assistant | planned | Read tools, confirmed writes, provider abstraction, evaluation set |
 
 ## Current milestone checklist

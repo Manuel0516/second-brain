@@ -474,6 +474,11 @@ export function BlockEditor({
   }, [colorsOpen, alignOpen])
 
   const editor = useEditor({
+    // This app is client-rendered only (no SSR), so there's no hydration
+    // mismatch to avoid — render synchronously so `editor.view` is available
+    // as soon as `editor` is truthy (Tiptap v3 defaults this to false, which
+    // otherwise crashes any effect that reads `editor.view` on mount).
+    immediatelyRender: true,
     editable: !readOnly,
     extensions: [
       StarterKit.configure({
@@ -751,7 +756,7 @@ export function BlockEditor({
   // Track block drags to preview the column edge zones (the dropcursor's
   // horizontal line is hidden while this vertical indicator shows).
   useEffect(() => {
-    if (!editor) return
+    if (!editor || editor.isDestroyed) return
     const dom = editor.view.dom
     const clear = () => {
       if (!columnDropKeyRef.current) return

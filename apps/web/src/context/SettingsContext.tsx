@@ -36,6 +36,16 @@ export interface UserSettings {
   fitness_auto_start_rest: boolean
   fitness_weight_unit: 'kg' | 'lb'
   fitness_weekly_session_target: number | null
+  fitness_stats_range_days: number
+  food_daily_meal_goal: number
+  food_calorie_target: number | null
+  food_protein_target_g: number | null
+  food_carbs_target_g: number | null
+  food_fat_target_g: number | null
+  food_water_target_units: number | null
+  food_veg_target_units: number | null
+  food_fruit_target_units: number | null
+  food_stats_range_days: number
 }
 
 interface SettingsContextType {
@@ -67,6 +77,16 @@ const DEFAULTS: UserSettings = {
   fitness_auto_start_rest: true,
   fitness_weight_unit: 'kg',
   fitness_weekly_session_target: null,
+  fitness_stats_range_days: 90,
+  food_daily_meal_goal: 5,
+  food_calorie_target: null,
+  food_protein_target_g: null,
+  food_carbs_target_g: null,
+  food_fat_target_g: null,
+  food_water_target_units: null,
+  food_veg_target_units: null,
+  food_fruit_target_units: null,
+  food_stats_range_days: 90,
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

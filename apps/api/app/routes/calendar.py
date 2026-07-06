@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, Link, User, WorkoutSession
+from app.models import Calendar, CalendarEvent, Link, MealLog, User, WorkoutSession
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -75,13 +75,7 @@ class FitnessConnection(BaseModel):
 
 class FoodConnection(BaseModel):
     meal_type: Literal["breakfast", "lunch", "dinner", "snack"] = "lunch"
-    name: str = Field(min_length=1, max_length=255)
-    quantity: float = Field(default=1, gt=0)
-    unit: str = Field(default="serving", min_length=1, max_length=50)
-    calories: float | None = Field(default=None, ge=0)
-    protein: float | None = Field(default=None, ge=0)
-    carbs: float | None = Field(default=None, ge=0)
-    fat: float | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=10_000)
 
 
 class EventConnections(BaseModel):
@@ -315,6 +309,31 @@ async def _linked_planned_sessions(
     return list(rows)
 
 
+async def _linked_planned_meals(session: AsyncSession, event_ids: list[str]) -> list[MealLog]:
+    """Planned meal logs linked to the given events via logged_from."""
+    if not event_ids:
+        return []
+    linked_ids = list(
+        await session.scalars(
+            select(Link.target_id).where(
+                Link.source_type == "event",
+                Link.source_id.in_(event_ids),
+                Link.target_type == "meal_log",
+                Link.relation == "logged_from",
+            )
+        )
+    )
+    if not linked_ids:
+        return []
+    rows = await session.scalars(
+        select(MealLog).where(
+            MealLog.id.in_(linked_ids),
+            MealLog.status == "planned",
+        )
+    )
+    return list(rows)
+
+
 async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> None:
     if event_ids:
         await session.execute(
@@ -325,6 +344,63 @@ async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> No
                 )
             )
         )
+
+
+# ponytail: caps unbounded recurring series at ~1yr of linked entries; a
+# top-up background job would be the upgrade path if a longer horizon matters.
+MAX_LINKED_OCCURRENCES = 366
+
+
+async def _create_linked_entries(
+    session: AsyncSession,
+    user: User,
+    event: CalendarEvent,
+    fitness: FitnessConnection | None,
+    food: FoodConnection | None,
+    occurrence_starts: list[datetime],
+) -> None:
+    """One planned WorkoutSession/MealLog + Link per occurrence start."""
+    for occ in occurrence_starts[:MAX_LINKED_OCCURRENCES]:
+        if fitness is not None:
+            workout = WorkoutSession(
+                user_id=user.id,
+                type=fitness.workout_type,
+                status="planned",
+                scheduled_at=occ,
+                date=occ,
+                notes=_plain_text_to_prosemirror(fitness.notes or ""),
+            )
+            session.add(workout)
+            await session.flush()
+            session.add(
+                Link(
+                    source_type="event",
+                    source_id=event.id,
+                    target_type="workout_session",
+                    target_id=workout.id,
+                    relation="logged_from",
+                )
+            )
+        if food is not None:
+            meal = MealLog(
+                user_id=user.id,
+                date=occ,
+                meal_type=food.meal_type,
+                status="planned",
+                scheduled_at=occ,
+                notes=food.notes,
+            )
+            session.add(meal)
+            await session.flush()
+            session.add(
+                Link(
+                    source_type="event",
+                    source_id=event.id,
+                    target_type="meal_log",
+                    target_id=meal.id,
+                    relation="logged_from",
+                )
+            )
 
 
 @router.get("/calendars", response_model=list[CalendarResponse])
@@ -517,29 +593,16 @@ async def create_event(
     event = CalendarEvent(**values)
     session.add(event)
 
-    # ── Fitness hook: event -> planned workout session (one-directional) ──
     fitness = data.connections.fitness
-    if fitness is not None:
+    food = data.connections.food
+    if fitness is not None or food is not None:
         await session.flush()
-        workout = WorkoutSession(
-            user_id=user.id,
-            type=fitness.workout_type,
-            status="planned",
-            scheduled_at=event.start_at,
-            date=event.start_at,
-            notes=_plain_text_to_prosemirror(fitness.notes or ""),
+        occurrence_starts = (
+            list(_occurrence_starts(event, _as_utc(event.start_at)))
+            if event.rrule
+            else [event.start_at]
         )
-        session.add(workout)
-        await session.flush()
-        session.add(
-            Link(
-                source_type="event",
-                source_id=event.id,
-                target_type="workout_session",
-                target_id=workout.id,
-                relation="logged_from",
-            )
-        )
+        await _create_linked_entries(session, user, event, fitness, food, occurrence_starts)
 
     await session.commit()
     await session.refresh(event)
@@ -586,11 +649,42 @@ async def patch_event(
     if event.end_at <= event.start_at:
         raise HTTPException(status_code=422, detail="end_at must be after start_at")
 
-    # Rescheduling the event moves linked planned sessions along with it.
-    # Active/completed sessions are never touched.
-    if "start_at" in values:
+    recurrence_fields = {
+        "rrule",
+        "recurrence_interval",
+        "recurrence_byday",
+        "recurrence_count",
+        "recurrence_until",
+    }
+    connections = EventConnections.model_validate(event.connections or {})
+    fitness = connections.fitness
+    food = connections.food
+
+    if event.rrule and (
+        "connections" in values or "start_at" in values or (recurrence_fields & values.keys())
+    ):
+        # Recurrence or connections changed: regenerate one planned entry per
+        # occurrence from scratch. Never touches logged/active/completed entries.
+        for workout in await _linked_planned_sessions(session, [event.id]):
+            await session.delete(workout)
+        for meal in await _linked_planned_meals(session, [event.id]):
+            await session.delete(meal)
+        await session.execute(
+            delete(Link).where(
+                Link.source_type == "event",
+                Link.source_id == event.id,
+                Link.relation == "logged_from",
+            )
+        )
+        if fitness is not None or food is not None:
+            occurrence_starts = list(_occurrence_starts(event, _as_utc(event.start_at)))
+            await _create_linked_entries(session, user, event, fitness, food, occurrence_starts)
+    elif "start_at" in values:
+        # Non-recurring reschedule: move the single linked planned entry along with it.
         for workout in await _linked_planned_sessions(session, [event.id]):
             workout.scheduled_at = event.start_at
+        for meal in await _linked_planned_meals(session, [event.id]):
+            meal.scheduled_at = event.start_at
 
     await session.commit()
     await session.refresh(event)
@@ -617,6 +711,31 @@ async def move_events(
     return [event_response(event) for event in events]
 
 
+async def _linked_workout_and_meal(
+    session: AsyncSession, event_id: str
+) -> tuple[WorkoutSession | None, MealLog | None]:
+    """Whatever workout/meal is currently linked to this event, planned or logged."""
+    workout_id = await session.scalar(
+        select(Link.target_id).where(
+            Link.source_type == "event",
+            Link.source_id == event_id,
+            Link.target_type == "workout_session",
+            Link.relation == "logged_from",
+        )
+    )
+    meal_id = await session.scalar(
+        select(Link.target_id).where(
+            Link.source_type == "event",
+            Link.source_id == event_id,
+            Link.target_type == "meal_log",
+            Link.relation == "logged_from",
+        )
+    )
+    workout = await session.get(WorkoutSession, workout_id) if workout_id else None
+    meal = await session.get(MealLog, meal_id) if meal_id else None
+    return workout, meal
+
+
 @router.post("/events/copy", response_model=list[EventResponse], status_code=201)
 async def copy_events(
     data: BulkEventCopy,
@@ -633,6 +752,7 @@ async def copy_events(
     copies: list[CalendarEvent] = []
     for event, event_start in zip(events, starts, strict=True):
         start_at = data.target_start + (event_start - first_start)
+        workout, meal = await _linked_workout_and_meal(session, event.id)
         copy = CalendarEvent(
             calendar_id=event.calendar_id,
             title=event.title,
@@ -654,7 +774,57 @@ async def copy_events(
             connections=dict(event.connections or {}),
         )
         session.add(copy)
+        await session.flush()
         copies.append(copy)
+        if workout is not None:
+            new_workout = WorkoutSession(
+                user_id=user.id,
+                type=workout.type,
+                status="planned",
+                scheduled_at=start_at,
+                date=start_at,
+                plan=list(workout.plan) if workout.plan else None,
+                notes=workout.notes,
+            )
+            session.add(new_workout)
+            await session.flush()
+            session.add(
+                Link(
+                    source_type="event",
+                    source_id=copy.id,
+                    target_type="workout_session",
+                    target_id=new_workout.id,
+                    relation="logged_from",
+                )
+            )
+        if meal is not None:
+            new_meal = MealLog(
+                user_id=user.id,
+                date=start_at,
+                meal_type=meal.meal_type,
+                slot_index=meal.slot_index,
+                status="planned",
+                scheduled_at=start_at,
+                calories=meal.calories,
+                protein_g=meal.protein_g,
+                carbs_g=meal.carbs_g,
+                fat_g=meal.fat_g,
+                water_units=meal.water_units,
+                veg_units=meal.veg_units,
+                fruit_units=meal.fruit_units,
+                notes=meal.notes,
+            )
+            session.add(new_meal)
+            await session.flush()
+            session.add(
+                Link(
+                    source_type="event",
+                    source_id=copy.id,
+                    target_type="meal_log",
+                    target_id=new_meal.id,
+                    relation="logged_from",
+                )
+            )
     await session.commit()
     for copy in copies:
         await session.refresh(copy)
@@ -683,6 +853,8 @@ async def delete_event(
         # the session rows themselves.
         for workout in await _linked_planned_sessions(session, event_ids):
             workout.scheduled_at = None
+        for meal in await _linked_planned_meals(session, event_ids):
+            meal.scheduled_at = None
         await _delete_event_links(session, event_ids)
         await session.delete(event)
         await session.commit()
@@ -707,6 +879,8 @@ async def delete_event(
         )
         for workout in await _linked_planned_sessions(session, override_ids):
             workout.scheduled_at = None
+        for meal in await _linked_planned_meals(session, override_ids):
+            meal.scheduled_at = None
         await _delete_event_links(session, override_ids)
         await session.execute(
             delete(CalendarEvent).where(

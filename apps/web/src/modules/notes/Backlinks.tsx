@@ -33,6 +33,7 @@ export function Backlinks({ nodeType, nodeId, onOpen }: BacklinksProps) {
               {item.source_type === 'event' ? '◷' : '▧'}
             </span>
             {item.title || 'Untitled'}
+            {item.parent_title && <small>in {item.parent_title}</small>}
           </button>
         ))}
       </div>

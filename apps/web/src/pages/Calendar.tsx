@@ -758,9 +758,21 @@ export function Calendar() {
           }}
           onSaved={saved}
           onOpenNote={setOpenNotePageId}
-          onOpenFitness={(sessionId) =>
-            navigate(`/fitness?session=${sessionId}`)
-          }
+          onOpenFitness={(sessionId) => {
+            const isPast = editorEvent?.end_at
+              ? new Date(editorEvent.end_at) < new Date()
+              : false
+            if (isPast)
+              navigate(`/fitness?tab=history&edit_session=${sessionId}`)
+            else navigate(`/fitness?session=${sessionId}`)
+          }}
+          onOpenFood={(mealLogId) => {
+            const isPast = editorEvent?.end_at
+              ? new Date(editorEvent.end_at) < new Date()
+              : false
+            if (isPast) navigate(`/food?tab=history&meal=${mealLogId}`)
+            else navigate(`/food`)
+          }}
           onDraftChange={setDraftPreview}
         />
       )}

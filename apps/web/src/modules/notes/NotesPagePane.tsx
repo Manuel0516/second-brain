@@ -69,10 +69,12 @@ export function NotesPagePane({
   const page = pages.find((item) => item.id === activeId)
   const ancestors = useMemo(() => {
     const result: Page[] = []
+    const seen = new Set<string>()
     let current = page
-    while (current?.parent_page_id) {
+    while (current?.parent_page_id && !seen.has(current.parent_page_id)) {
       const parent = pages.find((item) => item.id === current?.parent_page_id)
       if (!parent) break
+      seen.add(parent.id)
       result.unshift(parent)
       current = parent
     }

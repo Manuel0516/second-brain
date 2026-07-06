@@ -1,10 +1,17 @@
 # What's happening now
 
-Last updated: 2026-07-04
+Last updated: 2026-07-06
 
 ---
 
 ## Active work
+
+**Food module — DONE (2026-07-06, history 0116–0122)**
+- Migration 022: `meal_logs` table, `food_daily_extras` table, `food_*` settings keys.
+- Backend API: CRUD for meal logs, AI photo analysis via OpenRouter (vision model), summary aggregates, daily extras upsert, calendar hook (event → planned meal).
+- Frontend: dedicated `/food` page with shell mirroring Fitness, sidebar with 7 cards (week bars, calorie ring, macros, water, veg, fruit, body weight), Overview/Stats/History tabs, MealLogModal with AI photo capture flow, FoodSettings page.
+- Calendar event editor: food connection card simplified to Meal + Notes, linked-meal card on edit.
+- All 4 phases of `docs/work/plans/FOOD_PAGE_PLAN.md` complete.
 
 **Notes + component architecture plans — CLOSED (2026-07-04, history 0047–0048)**
 - `NOTES_MODULE_PLAN.md` and `COMPONENT_ARCHITECTURE_PLAN.md` both marked done.
@@ -71,14 +78,10 @@ Last updated: 2026-07-04
 
 ## Up next (rough priority order)
 
-1. **Fitness + Food module (Milestone 4)** — build plan at
-   `docs/work/plans/FITNESS_FOOD_MODULE_PLAN.md`. Jumps ahead of Finance at the
-   user's request (2026-07-04); wearable import stays deferred until Finance's
-   `ImportTemplate` exists (see plan §0).
-2. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
-3. Settings → Security page — wire up TOTP 2FA UI.
-4. Google Calendar sync — Phase 1 completion.
-5. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
+1. Finance module — Phase 3 (see `docs/product/FINANCE_MODULE.md`).
+2. Settings → Security page — wire up TOTP 2FA UI.
+3. Google Calendar sync — Phase 1 completion.
+4. Notes deferred items (spreadsheet formulas, cover upload wiring, filter UI,
    table row-height dragging) — pick up on demand.
 
 ---

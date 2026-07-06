@@ -23,13 +23,7 @@ export interface EventConnections {
   fitness?: { workout_type: string; notes?: string | null } | null
   food?: {
     meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
-    name: string
-    quantity: number
-    unit: string
-    calories?: number | null
-    protein?: number | null
-    carbs?: number | null
-    fat?: number | null
+    notes?: string | null
   } | null
 }
 

@@ -7,6 +7,28 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0135](0135-tiptap-editor-view-crash.md)                         | Fix: opening any note crashed the app (Tiptap v3 `immediatelyRender` default)                       | 2026-07-06 | accepted                   |
+| [0134](0134-linked-note-icon-and-folder-disambiguation.md)       | Linked notes show real emoji + parent folder; ancestor-walk cycle guard                            | 2026-07-06 | accepted                   |
+| [0133](0133-note-link-cleanup-and-event-copy-connections.md)     | Trashed notes drop event links; event copy/paste duplicates linked workout/meal                    | 2026-07-06 | accepted                   |
+| [0132](0132-note-pane-keyboard-shortcut-leak-fix.md)             | Fix: note side-pane editing hijacked calendar keyboard shortcuts                                   | 2026-07-06 | accepted                   |
+| [0131](0131-meallog-live-camera-capture.md)                      | Meal log "Take photo" uses a real live camera on desktop                                          | 2026-07-06 | accepted                   |
+| [0130](0130-fitness-session-deep-link-show-all-scroll.md)        | Fix: deep-linked workout session didn't auto-expand history                                       | 2026-07-06 | accepted                   |
+| [0129](0129-fitness-food-stats-range-setting.md)                 | Configurable stats graph lookback range (Fitness + Food)                                          | 2026-07-06 | accepted                   |
+| [0128](0128-meallog-drag-paste-camera-upload.md)                 | Meal log: drag-and-drop, clipboard paste, explicit camera/upload choice                          | 2026-07-06 | accepted                   |
+| [0127](0127-calendar-bulk-delete-recurring-links-food-polish.md) | Calendar bulk delete, per-occurrence recurring links, Food polish                               | 2026-07-06 | accepted                   |
+| [0126](0126-food-sidebar-current-week-stats-fix.md)               | Food sidebar always shows current week + stats fix + planned meals ordering                     | 2026-07-06 | accepted                   |
+| [0125](0125-food-linked-managed-message.md)                      | Food connection card: "Managed from linked" message                                              | 2026-07-06 | accepted                   |
+| [0124](0124-event-editor-meal-log-links.md)                      | Event editor meal log links + food connection UX                                                | 2026-07-06 | accepted                   |
+| [0123](0123-food-history-refresh-week-fixes.md)                  | Food module: history refresh + week graph fixes                                                 | 2026-07-06 | accepted                   |
+| [0122](0122-food-settings-page.md)                              | Food settings page                                                                              | 2026-07-06 | accepted                   |
+| [0121](0121-event-editor-food-card-simplify.md)                  | Event editor food card simplified to Meal + Notes                                               | 2026-07-06 | accepted                   |
+| [0120](0120-food-meallog-modal-tabs.md)                              | Food page: MealLogModal + Overview, Stats, History tabs                                      | 2026-07-06 | accepted                   |
+| [0119](0119-food-page-frontend-shell.md)                          | Food page frontend shell + sidebar + API client + wiring                                       | 2026-07-06 | accepted                   |
+| [0118](0118-calendar-food-hook.md)                                | Calendar food hook + FoodConnection simplification                                              | 2026-07-06 | accepted                   |
+| [0117](0117-food-backend-api.md)                                 | Food module backend API: routes, settings, and OpenRouter config                                | 2026-07-06 | accepted                   |
+| [0116](0116-food-core-database.md)                              | Food core database: meal_logs, food_daily_extras, food_* settings                              | 2026-07-06 | accepted                   |
+| [0115](0115-food-module-scaffold-and-fitness-closeout-docs.md) | Food module scaffold + fitness close-out docs                     | 2026-07-06 | accepted                   |
+| [0114](0114-goal-card-no-select-on-drag.md)                    | Goal card — no select on drag                                     | 2026-07-06 | accepted                   |
 | [0113](0113-cardio-stats-mobile-and-empty-state-fix.md)           | Cardio stats mobile stacking + empty-state fix                                                  | 2026-07-06 | accepted                   |
 | [0112](0112-remove-body-fat-metric.md)                            | Remove body fat % metric, weight-only body metrics                                              | 2026-07-06 | accepted                   |
 | [0111](0111-goal-drag-handle-hover-and-drag-animations.md)         | Goal sidebar cards: whole-card drag + drag animations                                           | 2026-07-06 | accepted                   |

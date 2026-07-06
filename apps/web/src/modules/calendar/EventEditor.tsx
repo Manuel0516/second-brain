@@ -70,29 +70,34 @@ interface Props {
   onSaved: () => void
   onOpenNote?: (pageId: string) => void
   onOpenFitness?: (sessionId: string) => void
+  onOpenFood?: (mealLogId: string) => void
   onDraftChange?: (event: Partial<CalendarEvent>) => void
 }
 
 interface EventLink {
   id: string
-  target_type: 'page' | 'event' | 'workout_session'
+  target_type: 'page' | 'event' | 'workout_session' | 'meal_log'
   target_id: string
   relation: string
   direction: 'incoming' | 'outgoing'
   title: string
   icon?: string | null
   page_type?: string | null
+  parent_title?: string | null
 }
 
 function LinkIcon({
   pageType,
   targetType,
+  icon,
 }: {
   pageType: string | null | undefined
   targetType?: string | null
+  icon?: string | null
 }) {
-  // Monochrome SVG icons only — API-returned page emojis are intentionally
-  // ignored so linked items match the editor's line-icon style.
+  // A note's own emoji takes priority; monochrome SVGs are the fallback for
+  // notes without one and for workout/meal entries (which have no emoji).
+  if (icon) return <span aria-hidden="true">{icon}</span>
   if (targetType === 'workout_session')
     return (
       <span aria-hidden="true">
@@ -107,6 +112,23 @@ function LinkIcon({
           strokeLinejoin="round"
         >
           <path d="M6 8v8M3 10v4M3 12h3M6 12h12M18 8v8M18 12h3M21 10v4" />
+        </svg>
+      </span>
+    )
+  if (targetType === 'meal_log')
+    return (
+      <span aria-hidden="true">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3" />
         </svg>
       </span>
     )
@@ -161,6 +183,7 @@ export function EventEditor({
   onSaved,
   onOpenNote,
   onOpenFitness,
+  onOpenFood,
   onDraftChange,
 }: Props) {
   const { settings } = useSettings()
@@ -203,13 +226,7 @@ export function EventEditor({
     workout_notes: event.connections?.fitness?.notes ?? '',
     connect_food: Boolean(event.connections?.food),
     meal_type: event.connections?.food?.meal_type ?? 'lunch',
-    food_name: event.connections?.food?.name ?? '',
-    food_quantity: event.connections?.food?.quantity?.toString() ?? '1',
-    food_unit: event.connections?.food?.unit ?? 'serving',
-    food_calories: event.connections?.food?.calories?.toString() ?? '',
-    food_protein: event.connections?.food?.protein?.toString() ?? '',
-    food_carbs: event.connections?.food?.carbs?.toString() ?? '',
-    food_fat: event.connections?.food?.fat?.toString() ?? '',
+    food_notes: event.connections?.food?.notes ?? '',
   })
   // Fitness workout-type card selection: mirrors form.workout_type, but keeps
   // "Custom" highlighted while its text input is still empty.
@@ -245,6 +262,7 @@ export function EventEditor({
       type: string
       icon?: string | null
       page_type?: string | null
+      parent_title?: string | null
     }[]
   >([])
   // Create mode: existing notes picked to be linked once the event is saved.
@@ -254,6 +272,7 @@ export function EventEditor({
       title: string
       icon?: string | null
       page_type?: string | null
+      parent_title?: string | null
     }[]
   >([])
   // Edit mode: reveal the folder+title mini-form inside the Linked card.
@@ -502,6 +521,11 @@ export function EventEditor({
     (eventLinks.some((link) => link.target_type === 'workout_session') ||
       Boolean(event.connections?.fitness))
 
+  const foodLinked =
+    Boolean(event.id) &&
+    (eventLinks.some((link) => link.target_type === 'meal_log') ||
+      Boolean(event.connections?.food))
+
   const selectedCalendarId = form.calendar_id || orderedCalendars[0]?.id || ''
   const selectedCalendarColor =
     orderedCalendars.find((calendar) => calendar.id === selectedCalendarId)
@@ -563,16 +587,8 @@ export function EventEditor({
       if (form.connect_fitness && !fitnessLinked && !form.workout_type.trim()) {
         return fail('Select a workout type.')
       }
-      if (form.connect_food && !form.food_name.trim()) {
-        return fail('Add a food or meal name.')
-      }
-      if (form.connect_food && Number(form.food_quantity) <= 0) {
-        return fail('Add a food quantity greater than zero.')
-      }
       const saveStartedAt = performance.now()
       setSaveState('saving')
-      const numberOrNull = (value: string) =>
-        value === '' ? null : Number(value)
       const connections: EventConnections = {
         notes: form.connect_notes
           ? {
@@ -604,13 +620,7 @@ export function EventEditor({
                 | 'lunch'
                 | 'dinner'
                 | 'snack',
-              name: form.food_name.trim(),
-              quantity: Number(form.food_quantity),
-              unit: form.food_unit.trim() || 'serving',
-              calories: numberOrNull(form.food_calories),
-              protein: numberOrNull(form.food_protein),
-              carbs: numberOrNull(form.food_carbs),
-              fat: numberOrNull(form.food_fat),
+              notes: form.food_notes.trim() || null,
             }
           : null,
       }
@@ -958,13 +968,15 @@ export function EventEditor({
                       <LinkIcon
                         pageType={link.page_type}
                         targetType={link.target_type}
+                        icon={link.icon}
                       />
                       <button
                         type="button"
                         className="event-linked-open"
                         disabled={
                           link.target_type !== 'page' &&
-                          link.target_type !== 'workout_session'
+                          link.target_type !== 'workout_session' &&
+                          link.target_type !== 'meal_log'
                         }
                         onClick={() => {
                           if (link.target_type === 'page')
@@ -975,9 +987,18 @@ export function EventEditor({
                             closeWithAnimation(() =>
                               onOpenFitness?.(link.target_id),
                             )
+                          else if (link.target_type === 'meal_log')
+                            closeWithAnimation(() =>
+                              onOpenFood?.(link.target_id),
+                            )
                         }}
                       >
                         <span className="event-linked-title">{link.title}</span>
+                        {link.parent_title && (
+                          <small className="event-link-parent">
+                            in {link.parent_title}
+                          </small>
+                        )}
                         <small>{link.relation}</small>
                       </button>
                       <button
@@ -1017,8 +1038,16 @@ export function EventEditor({
                                 aria-selected={false}
                                 onClick={() => void linkExistingNote(result.id)}
                               >
-                                <LinkIcon pageType={result.page_type} />
+                                <LinkIcon
+                                  pageType={result.page_type}
+                                  icon={result.icon}
+                                />
                                 <span>{result.title}</span>
+                                {result.parent_title && (
+                                  <small className="event-link-parent">
+                                    in {result.parent_title}
+                                  </small>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -1322,14 +1351,23 @@ export function EventEditor({
                                       title: result.title,
                                       icon: result.icon,
                                       page_type: result.page_type,
+                                      parent_title: result.parent_title,
                                     },
                                   ])
                                   setNoteQuery('')
                                   setNoteResults([])
                                 }}
                               >
-                                <LinkIcon pageType={result.page_type} />
+                                <LinkIcon
+                                  pageType={result.page_type}
+                                  icon={result.icon}
+                                />
                                 <span>{result.title}</span>
+                                {result.parent_title && (
+                                  <small className="event-link-parent">
+                                    in {result.parent_title}
+                                  </small>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -1337,10 +1375,18 @@ export function EventEditor({
                       </div>
                       {pendingNoteLinks.map((pending) => (
                         <div key={pending.id} className="event-linked-item">
-                          <LinkIcon pageType={pending.page_type} />
+                          <LinkIcon
+                            pageType={pending.page_type}
+                            icon={pending.icon}
+                          />
                           <span className="event-linked-title">
                             {pending.title}
                           </span>
+                          {pending.parent_title && (
+                            <small className="event-link-parent">
+                              in {pending.parent_title}
+                            </small>
+                          )}
                           <button
                             type="button"
                             className="event-linked-unlink"
@@ -1522,69 +1568,46 @@ export function EventEditor({
                       type="checkbox"
                       role="switch"
                       checked={form.connect_food}
+                      disabled={foodLinked}
                       onChange={(e) => set('connect_food', e.target.checked)}
                     />
                   </label>
-                  {form.connect_food && (
-                    <div className="connection-options two-column">
-                      <div className="cal-field">
-                        <span>Meal</span>
-                        <Dropdown
-                          ariaLabel="Meal type"
-                          value={form.meal_type}
-                          onChange={(value) =>
-                            set('meal_type', value as string)
-                          }
-                          options={[
-                            { value: 'breakfast', label: 'Breakfast' },
-                            { value: 'lunch', label: 'Lunch' },
-                            { value: 'dinner', label: 'Dinner' },
-                            { value: 'snack', label: 'Snack' },
-                          ]}
-                        />
+                  {form.connect_food &&
+                    (foodLinked ? (
+                      <p className="connection-help">
+                        Managed from the linked meal — open it from Linked above
+                        to log or edit.
+                      </p>
+                    ) : (
+                      <div className="connection-options">
+                        <div className="cal-field">
+                          <span>Meal</span>
+                          <Dropdown
+                            ariaLabel="Meal type"
+                            value={form.meal_type}
+                            onChange={(value) =>
+                              set('meal_type', value as string)
+                            }
+                            options={[
+                              { value: 'breakfast', label: 'Breakfast' },
+                              { value: 'lunch', label: 'Lunch' },
+                              { value: 'dinner', label: 'Dinner' },
+                              { value: 'snack', label: 'Snack' },
+                            ]}
+                          />
+                        </div>
+                        <label>
+                          Notes
+                          <textarea
+                            value={form.food_notes}
+                            onChange={(e) => set('food_notes', e.target.value)}
+                            rows={1}
+                            placeholder="Optional notes"
+                            style={{ minHeight: '34px', resize: 'none' }}
+                          />
+                        </label>
                       </div>
-                      <label>
-                        Food or meal
-                        <input
-                          value={form.food_name}
-                          onChange={(e) => set('food_name', e.target.value)}
-                        />
-                      </label>
-                      <label>
-                        Quantity
-                        <input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={form.food_quantity}
-                          onChange={(e) => set('food_quantity', e.target.value)}
-                        />
-                      </label>
-                      <label>
-                        Unit
-                        <input
-                          value={form.food_unit}
-                          onChange={(e) => set('food_unit', e.target.value)}
-                        />
-                      </label>
-                      {(['calories', 'protein', 'carbs', 'fat'] as const).map(
-                        (macro) => (
-                          <label key={macro}>
-                            {macro[0].toUpperCase() + macro.slice(1)}
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              value={form[`food_${macro}`]}
-                              onChange={(e) =>
-                                set(`food_${macro}`, e.target.value)
-                              }
-                            />
-                          </label>
-                        ),
-                      )}
-                    </div>
-                  )}
+                    ))}
                 </div>
               </div>
             </fieldset>

@@ -1,4 +1,4 @@
-export type ActiveRail = 'calendar' | 'notes' | 'fitness' | 'settings'
+export type ActiveRail = 'calendar' | 'notes' | 'fitness' | 'food' | 'settings'
 
 const IconCalendar = () => (
   <svg
@@ -43,6 +43,26 @@ const IconFinance = () => (
   >
     <circle cx="10" cy="10" r="7.2" />
     <path d="M10 6.5v7M12.3 8.3c0-1.1-1.1-1.8-2.3-1.8s-2.3.6-2.3 1.6c0 2.1 4.6 1 4.6 3.1 0 1.1-1.1 1.8-2.3 1.8s-2.4-.7-2.4-1.8" />
+  </svg>
+)
+const IconFood = () => (
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M5.5 2.5v15" />
+    <path d="M3.8 2.5v5.2" />
+    <path d="M7.2 2.5v5.2" />
+    <path d="M3.8 7.7h3.4" />
+
+    <path d="M13.5 2.5v15" />
+    <path d="M13.5 2.5c1.8 1.4 2.6 3.1 2.4 5.2-.1 1.5-.9 2.7-2.4 3.5" />
   </svg>
 )
 const IconFitness = () => (
@@ -188,15 +208,23 @@ export function AppRail({ active, onNavigate }: Props) {
       >
         <IconNotes />
       </RailBtn>
-      <RailBtn title="Finance">
-        <IconFinance />
-      </RailBtn>
       <RailBtn
         active={active === 'fitness'}
         title="Fitness"
         onClick={() => nav('/fitness')}
       >
         <IconFitness />
+      </RailBtn>
+      <RailBtn
+        active={active === 'food'}
+        title="Food"
+        onClick={() => nav('/food')}
+      >
+        <IconFood />
+      </RailBtn>
+
+      <RailBtn title="Finance">
+        <IconFinance />
       </RailBtn>
 
       <div style={{ flex: 1 }} />

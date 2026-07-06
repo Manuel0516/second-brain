@@ -45,6 +45,16 @@ class SettingsResponse(BaseModel):
     fitness_auto_start_rest: bool
     fitness_weight_unit: Literal["kg", "lb"]
     fitness_weekly_session_target: int | None
+    fitness_stats_range_days: int
+    food_daily_meal_goal: int
+    food_calorie_target: int | None
+    food_protein_target_g: float | None
+    food_carbs_target_g: float | None
+    food_fat_target_g: float | None
+    food_water_target_units: int | None
+    food_veg_target_units: int | None
+    food_fruit_target_units: int | None
+    food_stats_range_days: int
 
 
 class SettingsPatch(BaseModel):
@@ -70,6 +80,16 @@ class SettingsPatch(BaseModel):
     fitness_auto_start_rest: bool | None = None
     fitness_weight_unit: Literal["kg", "lb"] | None = None
     fitness_weekly_session_target: int | None = Field(default=None, ge=0, le=14)
+    fitness_stats_range_days: int | None = Field(default=None, ge=7, le=365)
+    food_daily_meal_goal: int | None = Field(default=None, ge=1, le=20)
+    food_calorie_target: int | None = Field(default=None, ge=0)
+    food_protein_target_g: float | None = Field(default=None, ge=0)
+    food_carbs_target_g: float | None = Field(default=None, ge=0)
+    food_fat_target_g: float | None = Field(default=None, ge=0)
+    food_water_target_units: int | None = Field(default=None, ge=0)
+    food_veg_target_units: int | None = Field(default=None, ge=0)
+    food_fruit_target_units: int | None = Field(default=None, ge=0)
+    food_stats_range_days: int | None = Field(default=None, ge=7, le=365)
 
     @field_validator("favorite_emojis")
     @classmethod
@@ -162,6 +182,16 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         fitness_auto_start_rest=s.fitness_auto_start_rest,
         fitness_weight_unit=s.fitness_weight_unit,
         fitness_weekly_session_target=s.fitness_weekly_session_target,
+        fitness_stats_range_days=s.fitness_stats_range_days,
+        food_daily_meal_goal=s.food_daily_meal_goal,
+        food_calorie_target=s.food_calorie_target,
+        food_protein_target_g=s.food_protein_target_g,
+        food_carbs_target_g=s.food_carbs_target_g,
+        food_fat_target_g=s.food_fat_target_g,
+        food_water_target_units=s.food_water_target_units,
+        food_veg_target_units=s.food_veg_target_units,
+        food_fruit_target_units=s.food_fruit_target_units,
+        food_stats_range_days=s.food_stats_range_days,
     )
 
 

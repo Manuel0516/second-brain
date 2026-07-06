@@ -109,6 +109,18 @@ const tileValueStyle: React.CSSProperties = {
   color: 'var(--fit-accent)',
 }
 
+const RANGE_LABELS: Record<number, string> = {
+  7: '1 week',
+  30: '1 month',
+  90: '3 months',
+  180: '6 months',
+  365: '1 year',
+}
+
+function statsRangeLabel(days: number): string {
+  return RANGE_LABELS[days] ?? `${days} days`
+}
+
 const axisTick = { fontSize: 10, fill: '#6B6761' }
 const tooltipStyle = {
   background: '#1C1B17',
@@ -127,13 +139,15 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  const statsDays = settings.fitness_stats_range_days
+
   useEffect(() => {
-    fetch(`/api/fitness/stats/exercise/${exerciseId}`)
+    fetch(`/api/fitness/stats/exercise/${exerciseId}?days=${statsDays}`)
       .then((r) => r.json())
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [exerciseId])
+  }, [exerciseId, statsDays])
 
   async function confirmDelete() {
     setConfirmOpen(false)
@@ -214,7 +228,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
               margin: 0,
             }}
           >
-            {stats.exercise.category} · Last 90 days
+            {stats.exercise.category} · Last {statsRangeLabel(statsDays)}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

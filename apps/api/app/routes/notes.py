@@ -15,6 +15,7 @@ from app.models import (
     DatabaseProperty,
     DatabaseView,
     Link,
+    MealLog,
     Page,
     User,
     WorkoutSession,
@@ -87,6 +88,7 @@ class BacklinkResponse(BaseModel):
     title: str
     icon: str | None
     page_type: str | None = None
+    parent_title: str | None = None
 
 
 class LinkedNodeResponse(BaseModel):
@@ -98,6 +100,7 @@ class LinkedNodeResponse(BaseModel):
     title: str
     icon: str | None
     page_type: str | None = None
+    parent_title: str | None = None
 
 
 class LinkCreate(BaseModel):
@@ -147,6 +150,7 @@ class SearchResultResponse(BaseModel):
     title: str
     icon: str | None
     page_type: str | None = None
+    parent_title: str | None = None
 
 
 async def _owned_page(
@@ -168,15 +172,24 @@ async def _node_details(
     session: AsyncSession,
     *,
     include_deleted: bool = False,
-) -> tuple[str, str | None, str | None] | None:
+) -> tuple[str, str | None, str | None, str | None] | None:
     if node_type == "page":
-        query = select(Page.title, Page.icon, Page.type).where(
+        query = select(Page.title, Page.icon, Page.type, Page.parent_page_id).where(
             Page.id == node_id, Page.user_id == user.id
         )
         if not include_deleted:
             query = query.where(Page.deleted_at.is_(None))
         page_row = (await session.execute(query)).one_or_none()
-        return (page_row.title, page_row.icon, page_row.type) if page_row else None
+        if page_row is None:
+            return None
+        parent_title = None
+        if page_row.parent_page_id:
+            parent_title = await session.scalar(
+                select(Page.title).where(
+                    Page.id == page_row.parent_page_id, Page.user_id == user.id
+                )
+            )
+        return (page_row.title, page_row.icon, page_row.type, parent_title)
     if node_type == "event":
         event_row = (
             await session.execute(
@@ -185,7 +198,7 @@ async def _node_details(
                 .where(CalendarEvent.id == node_id, Calendar.user_id == user.id)
             )
         ).one_or_none()
-        return (event_row.title, event_row.icon, None) if event_row else None
+        return (event_row.title, event_row.icon, None, None) if event_row else None
     if node_type == "workout_session":
         workout = (
             await session.execute(
@@ -198,7 +211,20 @@ async def _node_details(
             return None
         when = workout.date or workout.scheduled_at
         title = f"{workout.type} · {when.date()}" if when else workout.type
-        return (title, None, None)
+        return (title, None, None, None)
+    if node_type == "meal_log":
+        meal = await session.scalar(
+            select(MealLog).where(MealLog.id == node_id, MealLog.user_id == user.id)
+        )
+        if meal is None:
+            return None
+        when = meal.logged_at or meal.date
+        title = (
+            f"{meal.meal_type.capitalize()} · {when.date()}"
+            if when
+            else meal.meal_type.capitalize()
+        )
+        return (title, None, None, None)
     return None
 
 
@@ -336,6 +362,19 @@ async def list_pages(
     )
 
 
+async def _delete_page_links(ids: set[str], session: AsyncSession) -> None:
+    if not ids:
+        return
+    await session.execute(
+        delete(Link).where(
+            or_(
+                (Link.source_type == "page") & Link.source_id.in_(ids),
+                (Link.target_type == "page") & Link.target_id.in_(ids),
+            )
+        )
+    )
+
+
 async def _purge_pages(ids: set[str], session: AsyncSession) -> None:
     """Hard-delete pages with their links and database schema. No commit."""
     if not ids:
@@ -346,14 +385,7 @@ async def _purge_pages(ids: set[str], session: AsyncSession) -> None:
         .where(Page.parent_page_id.in_(ids), Page.id.not_in(ids))
         .values(parent_page_id=None)
     )
-    await session.execute(
-        delete(Link).where(
-            or_(
-                (Link.source_type == "page") & Link.source_id.in_(ids),
-                (Link.target_type == "page") & Link.target_id.in_(ids),
-            )
-        )
-    )
+    await _delete_page_links(ids, session)
     await session.execute(delete(DatabaseProperty).where(DatabaseProperty.page_id.in_(ids)))
     await session.execute(delete(DatabaseView).where(DatabaseView.page_id.in_(ids)))
     await session.execute(delete(Page).where(Page.id.in_(ids)))
@@ -462,6 +494,7 @@ async def delete_page(
         .where(Page.id.in_(ids), Page.user_id == user.id)
         .values(deleted_at=datetime.now(UTC))
     )
+    await _delete_page_links(ids, session)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -522,6 +555,7 @@ async def get_backlinks(
                     title=details[0],
                     icon=details[1],
                     page_type=details[2],
+                    parent_title=details[3],
                 )
             )
     return result
@@ -534,12 +568,20 @@ async def search_nodes(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[SearchResultResponse]:
     needle = q.casefold().strip()
-    pages = await session.scalars(
-        select(Page).where(Page.user_id == user.id, Page.deleted_at.is_(None))
+    pages = list(
+        await session.scalars(
+            select(Page).where(Page.user_id == user.id, Page.deleted_at.is_(None))
+        )
     )
+    titles_by_id = {page.id: page.title for page in pages}
     results = [
         SearchResultResponse(
-            type="page", id=page.id, title=page.title, icon=page.icon, page_type=page.type
+            type="page",
+            id=page.id,
+            title=page.title,
+            icon=page.icon,
+            page_type=page.type,
+            parent_title=titles_by_id.get(page.parent_page_id) if page.parent_page_id else None,
         )
         for page in pages
         if needle in f"{page.title} {_plain_text(page.content)}".casefold()
@@ -635,7 +677,7 @@ async def get_event_links(
         node_type = link.target_type if outgoing else link.source_type
         node_id = link.target_id if outgoing else link.source_id
         details = await _node_details(node_type, node_id, user, session)
-        if details and node_type in {"page", "event", "workout_session"}:
+        if details and node_type in {"page", "event", "workout_session", "meal_log"}:
             result.append(
                 LinkedNodeResponse(
                     id=link.id,
@@ -646,6 +688,7 @@ async def get_event_links(
                     title=details[0],
                     icon=details[1],
                     page_type=details[2],
+                    parent_title=details[3],
                 )
             )
     return result

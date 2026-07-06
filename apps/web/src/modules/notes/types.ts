@@ -66,12 +66,14 @@ export interface Backlink {
   source_id: string
   title: string
   relation: string
+  parent_title?: string | null
 }
 
 export interface SearchResult {
   id: string
   type: NodeType
   title: string
+  parent_title?: string | null
 }
 
 export const EMPTY_DOCUMENT: JSONContent = {

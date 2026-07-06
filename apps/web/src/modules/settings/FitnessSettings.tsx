@@ -83,6 +83,26 @@ export function FitnessSettings() {
           />
         </label>
       </SettingsCard>
+
+      <SettingsCard
+        title="Stats"
+        description="How far back the fitness graphs (overview and exercise progression) look."
+      >
+        <Segmented
+          value={String(settings.fitness_stats_range_days)}
+          options={['7', '30', '90', '180', '365']}
+          labels={{
+            '7': '1 week',
+            '30': '1 month',
+            '90': '3 months',
+            '180': '6 months',
+            '365': '1 year',
+          }}
+          onChange={(value) =>
+            patch({ fitness_stats_range_days: Number(value) })
+          }
+        />
+      </SettingsCard>
     </div>
   )
 }

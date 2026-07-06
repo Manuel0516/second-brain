@@ -41,12 +41,20 @@ function noteDoc(text: string): Record<string, unknown> {
   }
 }
 
-export function SessionForm() {
+export function SessionForm({
+  editSessionId,
+  onEditConsumed,
+  initialShowAll,
+}: {
+  editSessionId?: string | null
+  onEditConsumed?: () => void
+  initialShowAll?: boolean
+}) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [showAll, setShowAll] = useState(false)
+  const [showAll, setShowAll] = useState(initialShowAll ?? false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editType, setEditType] = useState('')
   const [editDate, setEditDate] = useState('')
@@ -77,6 +85,30 @@ export function SessionForm() {
       .catch(() => setError('Failed to load sessions'))
       .finally(() => setLoading(false))
   }, [])
+
+  // Auto-open edit for a session from deep link — force "show all" so the
+  // row renders even if the session is hidden behind the top-3 collapse.
+  useEffect(() => {
+    if (!editSessionId || sessions.length === 0) return
+    const session = sessions.find((s) => s.id === editSessionId)
+    if (!session) return
+    startEditing(session)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowAll(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSessionId, sessions])
+
+  // Scroll to the session row once "show all" has rendered it into the DOM.
+  useEffect(() => {
+    if (!editSessionId) return
+    const session = sessions.find((s) => s.id === editSessionId)
+    if (!session) return
+    const el = document.getElementById(`session-row-${session.id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    onEditConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSessionId, sessions, showAll])
 
   async function startEditing(session: WorkoutSession) {
     setEditingId(session.id)
@@ -234,6 +266,7 @@ export function SessionForm() {
           {visibleSessions.map((session, index) => (
             <article
               key={session.id}
+              id={`session-row-${session.id}`}
               className={`fit-history-session${editingId === session.id ? ' editing' : ''}`}
               style={{ animationDelay: `${index * 40}ms` }}
             >

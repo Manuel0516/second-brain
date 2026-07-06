@@ -16,11 +16,18 @@ Status: in progress — F1 (fitness core, migration `015_fitness_core.py`),
 F2 (goals + statistics, migration `016_goals.py`) and F3 (fitness UI rework,
 migration `017_set_feeling.py`: tabs, Overview landing graphs, Stats & Goals
 tab, History tab + past-session editor, live-session per-set notes +
-feeling dots) are shipped. Revised 2026-07: Food is promoted to **its own
+feeling dots) are shipped. 
+
+**Food superseded**: the food portion of this plan (Phases G1/G2) has been
+replaced by `docs/work/plans/FOOD_PAGE_PLAN.md` (AI photo capture, meal_logs,
+calendar hooks). The old G1 implementation in `food.py` has been reverted to
+a scaffold. See the new plan for the current food scope and ordering.
+
+Revised 2026-07: Food is promoted to **its own
 designed page** (Phase G, below) instead of a bolt-on view, and **calendar
 integration (Phase 3) is the next active work**. See §2 for the revised
 ordering.
-Date: 2026-07-04 (revised)
+Date: 2026-07-06 (revised)
 
 ---
 

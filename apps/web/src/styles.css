@@ -2698,6 +2698,14 @@ input[type='color'] {
   font: 10px var(--font-mono);
   text-transform: capitalize;
 }
+.event-link-parent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
 .event-linked-unlink {
   width: 28px;
   height: 28px;

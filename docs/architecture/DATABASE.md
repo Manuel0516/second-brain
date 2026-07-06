@@ -136,6 +136,16 @@ One row per user, created on first write (lazy creation).
 | favorite_highlight_colors | JSON | Array of hex colors saved for the notes toolbar's highlight picker. |
 | favorite_block_colors | JSON | Array of hex colors saved for the notes toolbar's block color picker. |
 | favorite_covers | JSON | Array of favorite cover image URLs shown first in the page cover picker. |
+| food_daily_meal_goal | Integer | Default 5. Number of planned meal slots per day. |
+| food_calorie_target | Integer? | Daily calorie target. |
+| food_protein_target_g | Float? | Daily protein target in grams. |
+| food_carbs_target_g | Float? | Daily carbs target in grams. |
+| food_fat_target_g | Float? | Daily fat target in grams. |
+| food_water_target_units | Integer? | Daily water target in units. |
+| food_veg_target_units | Integer? | Daily vegetable target in units. |
+| food_fruit_target_units | Integer? | Daily fruit target in units. |
+| fitness_stats_range_days | Integer | Default 90. How many trailing days the fitness overview/exercise graphs cover. |
+| food_stats_range_days | Integer | Default 90. How many trailing days the food stats graphs cover. |
 
 ---
 
@@ -310,6 +320,48 @@ User-defined fitness goals. Target types point at exercise max weight, exercise 
 
 ---
 
+### `meal_logs`
+One row per meal — planned or logged. Photos are stored via the `files` table.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| date | DateTime | When the meal was logged or planned for (UTC). |
+| meal_type | String(20) | "breakfast", "lunch", "dinner", or "snack". Enforced in API layer. |
+| slot_index | Integer | Position within the day for slot-based planning. Default 0. |
+| status | String(20) | "planned" or "logged". Default "planned". |
+| scheduled_at | DateTime? | Mirrors linked calendar event start for planned meals. |
+| logged_at | DateTime? | When the meal was actually logged. |
+| photo_file_id | UUID FK? | Direct FK to `files.id`. Nullable. |
+| calories | Float? | Total calories for the meal. |
+| protein_g | Float? | Protein in grams. |
+| carbs_g | Float? | Carbs in grams. |
+| fat_g | Float? | Fat in grams. |
+| water_units | Integer | AI-detected water units for this meal. Default 0. |
+| veg_units | Integer | AI-detected vegetable units for this meal. Default 0. |
+| fruit_units | Integer | AI-detected fruit units for this meal. Default 0. |
+| notes | Text? | Free-text notes. |
+| ai_items | JSON? | Raw AI item breakdown `[{name, quantity, calories, ...}]` for the edit view. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `food_daily_extras`
+Per-day quick-log totals for water, vegetables, and fruit outside meals. One row per user per day (unique constraint on `user_id, date`).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key. |
+| user_id | UUID FK | Owner. |
+| date | Date | The day (date only, no time). |
+| water_units | Integer | Quick-logged water units for the day. Default 0. |
+| veg_units | Integer | Quick-logged vegetable units for the day. Default 0. |
+| fruit_units | Integer | Quick-logged fruit units for the day. Default 0. |
+| created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
 ## Migration history
 
 | Number | What it added |
@@ -328,5 +380,7 @@ User-defined fitness goals. Target types point at exercise max weight, exercise 
 | 015 | Fitness core: exercises, workout_sessions, set_entries, body_metrics, calendar_events.created_by |
 | 016 | Goals table for fitness goal tracking |
 | 021 | Dropped body_metrics.body_fat_pct (weight-only body metrics) |
+| 022 | Food core: meal_logs, food_daily_extras, food_* settings |
+| 023 | fitness_stats_range_days and food_stats_range_days on user_settings |
 
 Always check `alembic current` before writing a new migration.

@@ -1,7 +1,7 @@
 ---
 description: UI/UX planning agent that stays inside the project style guide.
 mode: subagent
-model: openrouter/anthropic/claude-sonnet-4.6
+model: openrouter/qwen/qwen3-coder-next
 temperature: 0.15
 options:
   reasoningEffort: high

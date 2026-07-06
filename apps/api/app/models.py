@@ -1,10 +1,11 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
     UUID,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -213,6 +214,23 @@ class UserSettings(Base):
     fitness_auto_start_rest: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     fitness_weight_unit: Mapped[str] = mapped_column(String(3), default="kg", nullable=False)
     fitness_weekly_session_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fitness_stats_range_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=90, server_default="90"
+    )
+    # Food
+    food_daily_meal_goal: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5, server_default="5"
+    )
+    food_calorie_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_protein_target_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    food_carbs_target_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    food_fat_target_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    food_water_target_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_veg_target_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_fruit_target_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    food_stats_range_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=90, server_default="90"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
@@ -483,3 +501,76 @@ class Goal(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     # ponytail: no relationships — routes query directly
+
+
+class MealLog(Base):
+    """One row per meal — planned or logged. Photos stored via the files table."""
+
+    __tablename__ = "meal_logs"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+    )
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    meal_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "breakfast"|"lunch"|"dinner"|"snack" — enforced in API layer
+    slot_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="planned", server_default="planned"
+    )  # "planned"|"logged"
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    logged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    photo_file_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("files.id"), nullable=True
+    )
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fat_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    water_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    veg_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    fruit_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_items: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON, nullable=True
+    )  # raw AI item breakdown [{name, quantity, calories, ...}]
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
+class FoodDailyExtras(Base):
+    """Per-day quick-log totals for water, vegetables, and fruit outside meals."""
+
+    __tablename__ = "food_daily_extras"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_food_daily_extras_user_date"),)
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    water_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    veg_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    fruit_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
