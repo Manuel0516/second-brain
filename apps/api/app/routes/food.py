@@ -6,7 +6,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -506,3 +506,44 @@ async def upsert_daily_extras(
     await session.commit()
     await session.refresh(extras)
     return extras
+
+
+# ── Unlinked meals (for event editor linking) ────────────────────────────
+
+
+@router.get("/unlinked", response_model=list[MealLogResponse])
+async def list_unlinked_meals(
+    q: str | None = Query(None),
+    limit: int = Query(default=10, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[MealLog]:
+    """Return logged meals that are NOT linked to any event.
+
+    Optional text query filters by meal_type or notes (case-insensitive).
+    Results are ordered by logged_at descending (most recent first).
+    """
+    # Subquery: meal_log ids that ARE linked to an event
+    linked = (
+        select(Link.target_id).where(
+            Link.target_type == "meal_log",
+            Link.source_type == "event",
+        )
+    ).subquery()
+
+    query = select(MealLog).where(
+        MealLog.user_id == user.id,
+        MealLog.status == "logged",
+        not_(MealLog.id.in_(select(linked))),
+    )
+
+    if q:
+        like = f"%{q}%"
+        query = query.where(
+            MealLog.meal_type.ilike(like) | (MealLog.notes.ilike(like)),
+        )
+
+    result = await session.scalars(
+        query.order_by(MealLog.logged_at.desc(), MealLog.date.desc()).limit(limit)
+    )
+    return list(result)

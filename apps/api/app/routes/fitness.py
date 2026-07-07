@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, not_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1115,3 +1115,41 @@ async def delete_body_metric(
     await session.delete(metric)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Unlinked sessions (for event editor linking) ─────────────────────────
+
+
+@router.get("/fitness/unlinked", response_model=list[SessionResponse])
+async def list_unlinked_sessions(
+    q: str | None = Query(None),
+    limit: int = Query(default=10, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[WorkoutSession]:
+    """Return completed workout sessions that are NOT linked to any event.
+
+    Optional text query filters by type or plan (case-insensitive).
+    Results are ordered by date descending (most recent first).
+    """
+    linked = (
+        select(Link.target_id).where(
+            Link.target_type == "workout_session",
+            Link.source_type == "event",
+        )
+    ).subquery()
+
+    query = select(WorkoutSession).where(
+        WorkoutSession.user_id == user.id,
+        WorkoutSession.status == "completed",
+        not_(WorkoutSession.id.in_(select(linked))),
+    )
+
+    if q:
+        like = f"%{q}%"
+        query = query.where(WorkoutSession.type.ilike(like))
+
+    result = await session.scalars(
+        query.order_by(WorkoutSession.date.desc(), WorkoutSession.created_at.desc()).limit(limit)
+    )
+    return list(result)

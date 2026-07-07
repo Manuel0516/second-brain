@@ -140,6 +140,8 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   min-width: 320px;
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 #root {
@@ -2267,7 +2269,7 @@ input[type='color'] {
     margin-bottom 620ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .connection-create-fields.open {
-  max-height: 180px;
+  max-height: 250px;
   opacity: 1;
   margin-bottom: 0;
 }
@@ -2725,6 +2727,12 @@ input[type='color'] {
   background: var(--bg-base);
   color: #d9573f;
 }
+.event-link-search-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
 .event-link-search {
   position: relative;
 }
@@ -2766,6 +2774,8 @@ input[type='color'] {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  -webkit-user-select: text;
+  user-select: text;
 }
 .event-link-results button:hover {
   background: var(--bg-raised);

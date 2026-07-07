@@ -10,6 +10,8 @@ import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
 import { orderCalendars } from './order'
 import { SESSION_TYPES, SessionTypeIcon } from '../fitness/sessionTypes'
+import type { MealLog } from '../food/api'
+import type { WorkoutSession } from '../fitness/api'
 import type { CalendarData, CalendarEvent, EventConnections } from './types'
 const MIN_SAVE_SPINNER_MS = 145
 
@@ -279,6 +281,31 @@ export function EventEditor({
   const [newNoteOpen, setNewNoteOpen] = useState(false)
   // Create mode: whether to create a new note (vs only link existing ones).
   const [createNoteEnabled, setCreateNoteEnabled] = useState(false)
+  // ── Food search (link existing logged meals) ──────────────────────────
+  const [foodSearchQuery, setFoodSearchQuery] = useState('')
+  const [foodSearchResults, setFoodSearchResults] = useState<MealLog[]>([])
+  // Create mode: meals picked to be linked once the event is saved.
+  const [pendingFoodLinks, setPendingFoodLinks] = useState<MealLog[]>([])
+  // Which view to show in the Food connection card.
+  const [foodCardView, setFoodCardView] = useState<'create' | 'search'>(
+    'create',
+  )
+  // ── Fitness search (link existing completed workouts) ──────────────────
+  const [fitnessSearchQuery, setFitnessSearchQuery] = useState('')
+  const [fitnessSearchResults, setFitnessSearchResults] = useState<
+    WorkoutSession[]
+  >([])
+  // Create mode: sessions picked to be linked once the event is saved.
+  const [pendingFitnessLinks, setPendingFitnessLinks] = useState<
+    WorkoutSession[]
+  >([])
+  // Which view to show in the Fitness connection card.
+  const [fitnessCardView, setFitnessCardView] = useState<'create' | 'search'>(
+    'create',
+  )
+  // Linked-panel create-form expand toggles (food/fitness).
+  const [linkedFoodCreateOpen, setLinkedFoodCreateOpen] = useState(false)
+  const [linkedFitnessCreateOpen, setLinkedFitnessCreateOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const [dragY, setDragY] = useState(0) // pull-down gesture offset
   const [isDragging, setIsDragging] = useState(false)
@@ -393,6 +420,48 @@ export function EventEditor({
     if (response.ok) await refreshLinks()
   }
 
+  // ── Link existing food / fitness ──────────────────────────────────────
+
+  const linkExistingFood = async (mealLogId: string) => {
+    if (!event.id) return
+    const response = await apiCall('/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'event',
+        source_id: event.id,
+        target_type: 'meal_log',
+        target_id: mealLogId,
+        relation: 'logged_from',
+      }),
+    })
+    if (response.ok || response.status === 409) {
+      setFoodSearchQuery('')
+      setFoodSearchResults([])
+      await refreshLinks()
+    }
+  }
+
+  const linkExistingFitness = async (sessionId: string) => {
+    if (!event.id) return
+    const response = await apiCall('/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source_type: 'event',
+        source_id: event.id,
+        target_type: 'workout_session',
+        target_id: sessionId,
+        relation: 'logged_from',
+      }),
+    })
+    if (response.ok || response.status === 409) {
+      setFitnessSearchQuery('')
+      setFitnessSearchResults([])
+      await refreshLinks()
+    }
+  }
+
   useEffect(() => {
     let active = true
     const query = noteQuery.trim()
@@ -425,6 +494,80 @@ export function EventEditor({
       clearTimeout(timer)
     }
   }, [noteQuery, eventLinks, pendingNoteLinks])
+
+  // ── Food search effect ────────────────────────────────────────────────
+  useEffect(() => {
+    let active = true
+    const query = foodSearchQuery.trim()
+    const timer = setTimeout(async () => {
+      if (!query) {
+        if (active) setFoodSearchResults([])
+        return
+      }
+      try {
+        const response = await apiCall(
+          `/api/food/unlinked?q=${encodeURIComponent(query)}&limit=8`,
+        )
+        if (!response.ok || !active) return
+        const results = await response.json()
+        const linkedIds = new Set([
+          ...eventLinks
+            .filter((link) => link.target_type === 'meal_log')
+            .map((link) => link.target_id),
+          ...pendingFoodLinks.map((link) => link.id),
+        ])
+        if (active)
+          setFoodSearchResults(
+            (Array.isArray(results) ? results : []).filter(
+              (item: MealLog) => !linkedIds.has(item.id),
+            ),
+          )
+      } catch {
+        if (active) setFoodSearchResults([])
+      }
+    }, 200)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [foodSearchQuery, eventLinks, pendingFoodLinks])
+
+  // ── Fitness search effect ─────────────────────────────────────────────
+  useEffect(() => {
+    let active = true
+    const query = fitnessSearchQuery.trim()
+    const timer = setTimeout(async () => {
+      if (!query) {
+        if (active) setFitnessSearchResults([])
+        return
+      }
+      try {
+        const response = await apiCall(
+          `/api/fitness/unlinked?q=${encodeURIComponent(query)}&limit=8`,
+        )
+        if (!response.ok || !active) return
+        const results = await response.json()
+        const linkedIds = new Set([
+          ...eventLinks
+            .filter((link) => link.target_type === 'workout_session')
+            .map((link) => link.target_id),
+          ...pendingFitnessLinks.map((link) => link.id),
+        ])
+        if (active)
+          setFitnessSearchResults(
+            (Array.isArray(results) ? results : []).filter(
+              (item: WorkoutSession) => !linkedIds.has(item.id),
+            ),
+          )
+      } catch {
+        if (active) setFitnessSearchResults([])
+      }
+    }, 200)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [fitnessSearchQuery, eventLinks, pendingFitnessLinks])
 
   const closeWithAnimation = useCallback((complete: () => void) => {
     if (closingRef.current) return
@@ -516,15 +659,17 @@ export function EventEditor({
 
   // Once a workout session exists for this event, the fitness card just
   // links to it — the type/notes were already consumed by the backend hook.
+  // ponytail: only eventLinks — removing event.connections?.food/.fitness so
+  // that unlinking a meal/workout immediately reveals the search UI in the
+  // Linked panel instead of being stuck because the saved connections JSON
+  // still references food/fitness.
   const fitnessLinked =
     Boolean(event.id) &&
-    (eventLinks.some((link) => link.target_type === 'workout_session') ||
-      Boolean(event.connections?.fitness))
+    eventLinks.some((link) => link.target_type === 'workout_session')
 
   const foodLinked =
     Boolean(event.id) &&
-    (eventLinks.some((link) => link.target_type === 'meal_log') ||
-      Boolean(event.connections?.food))
+    eventLinks.some((link) => link.target_type === 'meal_log')
 
   const selectedCalendarId = form.calendar_id || orderedCalendars[0]?.id || ''
   const selectedCalendarColor =
@@ -584,9 +729,6 @@ export function EventEditor({
       if (form.connect_finance && !form.finance_category.trim()) {
         return fail('Add a finance category.')
       }
-      if (form.connect_fitness && !fitnessLinked && !form.workout_type.trim()) {
-        return fail('Select a workout type.')
-      }
       const saveStartedAt = performance.now()
       setSaveState('saving')
       const connections: EventConnections = {
@@ -607,22 +749,26 @@ export function EventEditor({
               tax_relevant: form.finance_tax_relevant,
             }
           : null,
-        fitness: form.connect_fitness
-          ? {
-              workout_type: form.workout_type.trim(),
-              notes: form.workout_notes.trim() || null,
-            }
-          : null,
-        food: form.connect_food
-          ? {
-              meal_type: form.meal_type as
-                | 'breakfast'
-                | 'lunch'
-                | 'dinner'
-                | 'snack',
-              notes: form.food_notes.trim() || null,
-            }
-          : null,
+        // ponytail: guard with !Linked — if a link was established via search,
+        // don't create a duplicate planned entry on save.
+        fitness:
+          form.connect_fitness && !fitnessLinked
+            ? {
+                workout_type: form.workout_type.trim(),
+                notes: form.workout_notes.trim() || null,
+              }
+            : null,
+        food:
+          form.connect_food && !foodLinked
+            ? {
+                meal_type: form.meal_type as
+                  | 'breakfast'
+                  | 'lunch'
+                  | 'dinner'
+                  | 'snack',
+                notes: form.food_notes.trim() || null,
+              }
+            : null,
       }
       const recurrenceBody = recurrence.freq
         ? {
@@ -722,6 +868,33 @@ export function EventEditor({
               }),
             }).catch(() => null)
           }
+          // Link any meals/Workouts picked before the event existed.
+          for (const pending of pendingFoodLinks) {
+            await apiCall('/api/links', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source_type: 'event',
+                source_id: savedEvent.id,
+                target_type: 'meal_log',
+                target_id: pending.id,
+                relation: 'logged_from',
+              }),
+            }).catch(() => null)
+          }
+          for (const pending of pendingFitnessLinks) {
+            await apiCall('/api/links', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                source_type: 'event',
+                source_id: savedEvent.id,
+                target_type: 'workout_session',
+                target_id: pending.id,
+                relation: 'logged_from',
+              }),
+            }).catch(() => null)
+          }
         }
         const remaining =
           MIN_SAVE_SPINNER_MS - (performance.now() - saveStartedAt)
@@ -743,9 +916,12 @@ export function EventEditor({
       createNoteEnabled,
       event.id,
       fitnessLinked,
+      foodLinked,
       form,
       icon,
       occurrenceStart,
+      pendingFitnessLinks,
+      pendingFoodLinks,
       pendingNoteLinks,
       recurrence,
       selectedCalendarId,
@@ -758,6 +934,9 @@ export function EventEditor({
     const result = await persist(scope)
     if (result) {
       window.clearTimeout(saveStateTimer.current)
+      // Refresh linked items so their titles show the updated date after a
+      // reschedule that moved meals/workouts along with the event.
+      void refreshLinks()
       saveStateTimer.current = window.setTimeout(
         () =>
           closeWithAnimation(() => {
@@ -1088,6 +1267,332 @@ export function EventEditor({
                       )}
                     </>
                   )}
+                  {/* ── Food search in Linked panel (existing event, no link) ── */}
+                  {event.id &&
+                    form.connect_food &&
+                    !foodLinked &&
+                    !eventLinks.some((l) => l.target_type === 'meal_log') && (
+                      <div
+                        style={{
+                          padding: '6px',
+                          borderTop: '1px solid var(--border)',
+                        }}
+                      >
+                        <p
+                          style={{
+                            font: '600 10px var(--font-mono)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: 'var(--text-tertiary)',
+                            margin: '0 0 8px',
+                          }}
+                        >
+                          Link an existing meal
+                        </p>
+                        <div className="event-link-search-wrap">
+                          <div className="event-link-search">
+                            <input
+                              type="text"
+                              placeholder="Search logged meals…"
+                              value={foodSearchQuery}
+                              onChange={(e) =>
+                                setFoodSearchQuery(e.target.value)
+                              }
+                            />
+                            {foodSearchResults.length > 0 && (
+                              <div
+                                className="event-link-results"
+                                role="listbox"
+                              >
+                                {foodSearchResults.map((meal) => (
+                                  <button
+                                    key={meal.id}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={false}
+                                    onClick={() =>
+                                      void linkExistingFood(meal.id)
+                                    }
+                                  >
+                                    <span
+                                      style={{
+                                        flexShrink: 0,
+                                        width: '16px',
+                                        height: '16px',
+                                        display: 'grid',
+                                        placeItems: 'center',
+                                      }}
+                                    >
+                                      <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      >
+                                        <path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3" />
+                                      </svg>
+                                    </span>
+                                    <span
+                                      style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        textAlign: 'left',
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontWeight: 600,
+                                          color: 'var(--text-primary)',
+                                        }}
+                                      >
+                                        {meal.meal_type
+                                          .charAt(0)
+                                          .toUpperCase() +
+                                          meal.meal_type.slice(1)}
+                                      </span>
+                                      <small
+                                        style={{
+                                          display: 'block',
+                                          font: '10px var(--font-mono)',
+                                          color: 'var(--text-tertiary)',
+                                        }}
+                                      >
+                                        {new Date(
+                                          meal.logged_at ?? meal.date,
+                                        ).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          hour: 'numeric',
+                                          minute: '2-digit',
+                                        })}
+                                        {meal.calories != null &&
+                                          ` · ${Math.round(meal.calories)} kcal`}
+                                        {meal.notes &&
+                                          ` · ${meal.notes.slice(0, 40)}${meal.notes.length > 40 ? '…' : ''}`}
+                                      </small>
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="ghost connection-open-note"
+                            onClick={() =>
+                              setLinkedFoodCreateOpen(!linkedFoodCreateOpen)
+                            }
+                          >
+                            {linkedFoodCreateOpen
+                              ? 'Hide form'
+                              : 'Create new planned meal'}
+                          </button>
+                        </div>
+                        <div
+                          className={`connection-create-fields${linkedFoodCreateOpen ? ' open' : ''}`}
+                        >
+                          <div>
+                            <div className="cal-field">
+                              <span>Meal</span>
+                              <Dropdown
+                                ariaLabel="Meal type"
+                                value={form.meal_type}
+                                onChange={(value) =>
+                                  set('meal_type', value as string)
+                                }
+                                options={[
+                                  {
+                                    value: 'breakfast',
+                                    label: 'Breakfast',
+                                  },
+                                  { value: 'lunch', label: 'Lunch' },
+                                  { value: 'dinner', label: 'Dinner' },
+                                  { value: 'snack', label: 'Snack' },
+                                ]}
+                              />
+                            </div>
+                            <label>
+                              Notes
+                              <textarea
+                                value={form.food_notes}
+                                onChange={(e) =>
+                                  set('food_notes', e.target.value)
+                                }
+                                rows={1}
+                                placeholder="Optional notes"
+                                style={{
+                                  minHeight: '34px',
+                                  resize: 'none',
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  {/* ── Fitness search in Linked panel ── */}
+                  {event.id &&
+                    form.connect_fitness &&
+                    !fitnessLinked &&
+                    !eventLinks.some(
+                      (l) => l.target_type === 'workout_session',
+                    ) && (
+                      <div
+                        style={{
+                          padding: '12px',
+                          borderTop: '1px solid var(--border)',
+                        }}
+                      >
+                        <p
+                          style={{
+                            font: '600 10px var(--font-mono)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: 'var(--text-tertiary)',
+                            margin: '0 0 8px',
+                          }}
+                        >
+                          Link an existing workout
+                        </p>
+                        <div className="event-link-search-wrap">
+                          <div className="event-link-search">
+                            <input
+                              type="text"
+                              placeholder="Search completed workouts…"
+                              value={fitnessSearchQuery}
+                              onChange={(e) =>
+                                setFitnessSearchQuery(e.target.value)
+                              }
+                            />
+                            {fitnessSearchResults.length > 0 && (
+                              <div
+                                className="event-link-results"
+                                role="listbox"
+                              >
+                                {fitnessSearchResults.map((session) => (
+                                  <button
+                                    key={session.id}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={false}
+                                    onClick={() =>
+                                      void linkExistingFitness(session.id)
+                                    }
+                                  >
+                                    <SessionTypeIcon
+                                      type={session.type}
+                                      size={16}
+                                    />
+                                    <span
+                                      style={{
+                                        flex: 1,
+                                        minWidth: 0,
+                                        textAlign: 'left',
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          fontWeight: 600,
+                                          color: 'var(--text-primary)',
+                                        }}
+                                      >
+                                        {session.type}
+                                      </span>
+                                      <small
+                                        style={{
+                                          display: 'block',
+                                          font: '10px var(--font-mono)',
+                                          color: 'var(--text-tertiary)',
+                                        }}
+                                      >
+                                        {new Date(
+                                          session.date,
+                                        ).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric',
+                                        })}
+                                        {session.notes &&
+                                          Object.keys(session.notes).length >
+                                            0 &&
+                                          ` · has notes`}
+                                      </small>
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="ghost connection-open-note"
+                            onClick={() =>
+                              setLinkedFitnessCreateOpen(
+                                !linkedFitnessCreateOpen,
+                              )
+                            }
+                          >
+                            {linkedFitnessCreateOpen
+                              ? 'Hide form'
+                              : 'Create new workout'}
+                          </button>
+                        </div>
+                        <div
+                          className={`connection-create-fields${linkedFitnessCreateOpen ? ' open' : ''}`}
+                        >
+                          <div>
+                            <div
+                              className="type-card-grid"
+                              role="radiogroup"
+                              aria-label="Workout type"
+                            >
+                              {SESSION_TYPES.map((t) => {
+                                const active = workoutTypeCard === t
+                                return (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={active}
+                                    className={`type-card ${active ? 'active' : ''}`}
+                                    onClick={() => selectWorkoutType(t)}
+                                  >
+                                    <SessionTypeIcon type={t} />
+                                    {t}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            {workoutTypeCard === 'Custom' && (
+                              <input
+                                placeholder="Custom workout type"
+                                aria-label="Custom workout type"
+                                value={customWorkoutType}
+                                onChange={(e) => {
+                                  setCustomWorkoutType(e.target.value)
+                                  set('workout_type', e.target.value)
+                                }}
+                              />
+                            )}
+                            <label>
+                              Workout notes
+                              <textarea
+                                className="workout-notes"
+                                rows={1}
+                                value={form.workout_notes}
+                                onChange={(e) =>
+                                  set('workout_notes', e.target.value)
+                                }
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                 </div>
               </fieldset>
             )}
@@ -1509,7 +2014,7 @@ export function EventEditor({
                         Managed from the linked workout — open it from Linked
                         above to edit exercises and notes.
                       </p>
-                    ) : (
+                    ) : !event.id && fitnessCardView === 'create' ? (
                       <div className="connection-options">
                         <div
                           className="type-card-grid"
@@ -1555,8 +2060,114 @@ export function EventEditor({
                             }
                           />
                         </label>
+                        <button
+                          type="button"
+                          className="ghost connection-open-note"
+                          onClick={() => setFitnessCardView('search')}
+                        >
+                          Skip, link existing workout
+                        </button>
                       </div>
-                    ))}
+                    ) : !event.id ? (
+                      <div className="connection-options">
+                        <div className="event-link-search">
+                          <input
+                            type="text"
+                            placeholder="Link a completed workout…"
+                            value={fitnessSearchQuery}
+                            onChange={(e) =>
+                              setFitnessSearchQuery(e.target.value)
+                            }
+                          />
+                          {fitnessSearchResults.length > 0 && (
+                            <div className="event-link-results" role="listbox">
+                              {fitnessSearchResults.map((session) => (
+                                <button
+                                  key={session.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={false}
+                                  onClick={() => {
+                                    if (event.id) {
+                                      void linkExistingFitness(session.id)
+                                    } else {
+                                      setPendingFitnessLinks((prev) => [
+                                        ...prev,
+                                        session,
+                                      ])
+                                      setFitnessSearchQuery('')
+                                      setFitnessSearchResults([])
+                                    }
+                                  }}
+                                >
+                                  <SessionTypeIcon
+                                    type={session.type}
+                                    size={16}
+                                  />
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      minWidth: 0,
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        color: 'var(--text-primary)',
+                                      }}
+                                    >
+                                      {session.type}
+                                    </span>
+                                    <small
+                                      style={{
+                                        display: 'block',
+                                        font: '10px var(--font-mono)',
+                                        color: 'var(--text-tertiary)',
+                                      }}
+                                    >
+                                      {new Date(
+                                        session.date,
+                                      ).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                      })}
+                                      {session.notes &&
+                                        Object.keys(session.notes).length > 0 &&
+                                        ` · has notes`}
+                                    </small>
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="ghost connection-open-note"
+                          onClick={() => {
+                            setFitnessCardView('create')
+                            setFitnessSearchQuery('')
+                            setFitnessSearchResults([])
+                          }}
+                        >
+                          Back to create
+                        </button>
+                        {pendingFitnessLinks.length > 0 && (
+                          <p
+                            style={{
+                              font: '10px var(--font-mono)',
+                              color: 'var(--text-tertiary)',
+                              margin: '4px 0 0',
+                            }}
+                          >
+                            {pendingFitnessLinks.length} workout(s) will be
+                            linked on save
+                          </p>
+                        )}
+                      </div>
+                    ) : null)}
                 </div>
 
                 <div
@@ -1578,7 +2189,7 @@ export function EventEditor({
                         Managed from the linked meal — open it from Linked above
                         to log or edit.
                       </p>
-                    ) : (
+                    ) : !event.id && foodCardView === 'create' ? (
                       <div className="connection-options">
                         <div className="cal-field">
                           <span>Meal</span>
@@ -1606,8 +2217,133 @@ export function EventEditor({
                             style={{ minHeight: '34px', resize: 'none' }}
                           />
                         </label>
+                        <button
+                          type="button"
+                          className="ghost connection-open-note"
+                          onClick={() => setFoodCardView('search')}
+                        >
+                          Skip, link existing meal
+                        </button>
                       </div>
-                    ))}
+                    ) : !event.id ? (
+                      <div className="connection-options">
+                        <div className="event-link-search">
+                          <input
+                            type="text"
+                            placeholder="Link a logged meal…"
+                            value={foodSearchQuery}
+                            onChange={(e) => setFoodSearchQuery(e.target.value)}
+                          />
+                          {foodSearchResults.length > 0 && (
+                            <div className="event-link-results" role="listbox">
+                              {foodSearchResults.map((meal) => (
+                                <button
+                                  key={meal.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={false}
+                                  onClick={() => {
+                                    if (event.id) {
+                                      void linkExistingFood(meal.id)
+                                    } else {
+                                      setPendingFoodLinks((prev) => [
+                                        ...prev,
+                                        meal,
+                                      ])
+                                      setFoodSearchQuery('')
+                                      setFoodSearchResults([])
+                                    }
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      flexShrink: 0,
+                                      width: '16px',
+                                      height: '16px',
+                                      display: 'grid',
+                                      placeItems: 'center',
+                                    }}
+                                  >
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3" />
+                                    </svg>
+                                  </span>
+                                  <span
+                                    style={{
+                                      flex: 1,
+                                      minWidth: 0,
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        color: 'var(--text-primary)',
+                                      }}
+                                    >
+                                      {meal.meal_type.charAt(0).toUpperCase() +
+                                        meal.meal_type.slice(1)}
+                                    </span>
+                                    <small
+                                      style={{
+                                        display: 'block',
+                                        font: '10px var(--font-mono)',
+                                        color: 'var(--text-tertiary)',
+                                      }}
+                                    >
+                                      {new Date(
+                                        meal.logged_at ?? meal.date,
+                                      ).toLocaleDateString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                      })}
+                                      {meal.calories != null &&
+                                        ` · ${Math.round(meal.calories)} kcal`}
+                                      {meal.notes &&
+                                        ` · ${meal.notes.slice(0, 40)}${meal.notes.length > 40 ? '…' : ''}`}
+                                    </small>
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="ghost connection-open-note"
+                          onClick={() => {
+                            setFoodCardView('create')
+                            setFoodSearchQuery('')
+                            setFoodSearchResults([])
+                          }}
+                        >
+                          Back to create
+                        </button>
+                        {pendingFoodLinks.length > 0 && (
+                          <p
+                            style={{
+                              font: '10px var(--font-mono)',
+                              color: 'var(--text-tertiary)',
+                              margin: '4px 0 0',
+                            }}
+                          >
+                            {pendingFoodLinks.length} meal(s) will be linked on
+                            save
+                          </p>
+                        )}
+                      </div>
+                    ) : null)}
                 </div>
               </div>
             </fieldset>

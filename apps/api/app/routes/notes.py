@@ -23,7 +23,7 @@ from app.models import (
 from app.routes.calendar import owned_event
 
 router = APIRouter(prefix="/api", tags=["notes"])
-NodeType = Literal["page", "event"]
+NodeType = Literal["page", "event", "meal_log", "workout_session"]
 
 
 class PageCreate(BaseModel):
@@ -710,6 +710,24 @@ async def create_link(
         await session.rollback()
         raise HTTPException(status_code=409, detail="Link already exists") from error
     await session.refresh(link)
+
+    # ponytail: when linking an event to an existing meal/workout, sync the
+    # target's date to match the event so they stay aligned as if created together.
+    if data.source_type == "event" and data.target_type in ("meal_log", "workout_session"):
+        event = await session.get(CalendarEvent, data.source_id)
+        if event is not None:
+            if data.target_type == "meal_log":
+                meal = await session.get(MealLog, data.target_id)
+                if meal is not None:
+                    meal.date = event.start_at
+                    meal.scheduled_at = event.start_at
+            elif data.target_type == "workout_session":
+                wkt = await session.get(WorkoutSession, data.target_id)
+                if wkt is not None:
+                    wkt.date = event.start_at
+                    wkt.scheduled_at = event.start_at
+            await session.commit()
+
     return link
 
 

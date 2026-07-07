@@ -1060,6 +1060,16 @@
     align-items: stretch;
   }
 
+  .food-planned-info {
+    min-width: 0;
+  }
+
+  .food-planned-meta {
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
   .food-planned-actions {
     justify-content: flex-end;
   }

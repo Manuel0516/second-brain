@@ -353,6 +353,46 @@ async def _linked_planned_meals(session: AsyncSession, event_ids: list[str]) -> 
     return list(rows)
 
 
+async def _linked_all_sessions(session: AsyncSession, event_ids: list[str]) -> list[WorkoutSession]:
+    """All workout sessions (any status) linked via logged_from to the given events."""
+    if not event_ids:
+        return []
+    linked_ids = list(
+        await session.scalars(
+            select(Link.target_id).where(
+                Link.source_type == "event",
+                Link.source_id.in_(event_ids),
+                Link.target_type == "workout_session",
+                Link.relation == "logged_from",
+            )
+        )
+    )
+    if not linked_ids:
+        return []
+    rows = await session.scalars(select(WorkoutSession).where(WorkoutSession.id.in_(linked_ids)))
+    return list(rows)
+
+
+async def _linked_all_meals(session: AsyncSession, event_ids: list[str]) -> list[MealLog]:
+    """All meal logs (any status) linked via logged_from to the given events."""
+    if not event_ids:
+        return []
+    linked_ids = list(
+        await session.scalars(
+            select(Link.target_id).where(
+                Link.source_type == "event",
+                Link.source_id.in_(event_ids),
+                Link.target_type == "meal_log",
+                Link.relation == "logged_from",
+            )
+        )
+    )
+    if not linked_ids:
+        return []
+    rows = await session.scalars(select(MealLog).where(MealLog.id.in_(linked_ids)))
+    return list(rows)
+
+
 async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> None:
     if event_ids:
         await session.execute(
@@ -699,13 +739,21 @@ async def patch_event(
             occurrence_starts = list(_occurrence_starts(event, _as_utc(event.start_at)))
             await _create_linked_entries(session, user, event, fitness, food, occurrence_starts)
     elif "start_at" in values:
-        # Non-recurring reschedule: move the single linked planned entry along with it.
+        # Non-recurring reschedule: move linked entries along with it.
+        # Planned entries (created via the event-editor create form).
         for workout in await _linked_planned_sessions(session, [event.id]):
             workout.scheduled_at = event.start_at
             workout.date = event.start_at
         for meal in await _linked_planned_meals(session, [event.id]):
             meal.scheduled_at = event.start_at
             meal.date = event.start_at
+        # Logged/completed entries linked via search (any status).
+        for workout in await _linked_all_sessions(session, [event.id]):
+            if workout.status != "planned":
+                workout.date = event.start_at
+        for meal in await _linked_all_meals(session, [event.id]):
+            if meal.status != "planned":
+                meal.date = event.start_at
 
     await session.commit()
     await session.refresh(event)
