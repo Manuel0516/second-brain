@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0141](0141-meal-log-delete-fk-order-fix.md)                     | Fix: meal deletion failed on Postgres — deleted photo file row before meal log row (FK violation)   | 2026-07-07 | accepted                   |
 | [0140](0140-compose-google-sync-deploy-fixes.md)                 | Fix: prod Google sign-in 500 — compose.yaml missing sync env vars + api had no internet egress       | 2026-07-06 | accepted                   |
 | [0139](0139-columnnodes-test-editor-leak.md)                     | Fix: leaked tiptap Editor timers in ColumnNodes tests threw after jsdom teardown                     | 2026-07-06 | accepted                   |
 | [0138](0138-google-calendar-sync-and-ics-feeds.md)               | Google Calendar sync (two-way/read-only) + ICS feed subscriptions (migration 024)                   | 2026-07-06 | accepted                   |

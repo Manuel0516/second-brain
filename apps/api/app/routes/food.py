@@ -244,16 +244,7 @@ async def delete_meal_log(
 ) -> None:
     """Delete a meal log, its photo file, and any Link rows pointing to it."""
     log = await _owned_meal_log(log_id, user, session)
-
-    # Delete photo file from MinIO and DB if present
-    if log.photo_file_id is not None:
-        try:
-            remove(user.id, log.photo_file_id)
-        except Exception:
-            pass  # ponytail: orphan-sweep — MinIO may be down
-        file_row = await session.get(File, log.photo_file_id)
-        if file_row is not None:
-            await session.delete(file_row)
+    photo_file_id = log.photo_file_id
 
     # Delete Link rows where target_type="meal_log" and target_id=log_id
     await session.execute(
@@ -263,7 +254,20 @@ async def delete_meal_log(
         )
     )
 
+    # Delete the log before the file it references — MealLog.photo_file_id has
+    # no ORM relationship() to File, so SQLAlchemy won't reorder these deletes
+    # itself, and Postgres rejects deleting a still-referenced file row.
     await session.delete(log)
+
+    if photo_file_id is not None:
+        try:
+            remove(user.id, photo_file_id)
+        except Exception:
+            pass  # ponytail: orphan-sweep — MinIO may be down
+        file_row = await session.get(File, photo_file_id)
+        if file_row is not None:
+            await session.delete(file_row)
+
     await session.commit()
 
 
