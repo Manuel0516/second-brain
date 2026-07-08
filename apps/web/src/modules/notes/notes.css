@@ -492,6 +492,12 @@
    page container itself has entered. */
 .notes-page-head {
   position: relative;
+  /* The springUp animation drives `transform`, which creates a stacking
+     context for this element. Without an explicit z-index here, that
+     context stacks at 0 among siblings — letting later page content
+     (block list, z-index 3-6) paint over the emoji/cover popovers even
+     though the popovers themselves have z-index: 120. */
+  z-index: 10;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;

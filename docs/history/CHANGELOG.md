@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0144](0144-notes-emoji-picker-stacking-context-fix.md)          | Fix: notes page emoji picker unusable — trapped stacking context                                    | 2026-07-08 | accepted                   |
 | [0143](0143-event-editor-link-existing-meals-workouts.md)        | Event editor: search & link existing logged meals and completed workouts                           | 2026-07-07 | accepted                   |
 | [0142](0142-food-overview-logged-meal-mobile-text-overflow.md)   | Fix: logged meal meta text overflow on mobile                                                      | 2026-07-07 | accepted                   |
 | [0141](0141-meal-log-delete-fk-order-fix.md)                     | Fix: meal deletion failed on Postgres — deleted photo file row before meal log row (FK violation)   | 2026-07-07 | accepted                   |
