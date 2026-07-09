@@ -8,6 +8,8 @@ import { useSettings } from '../../context/SettingsContext'
 import { EmojiPicker } from '../../components/EmojiPicker'
 import { CoverPicker, coverClass } from './CoverPicker'
 import type { Backlink, Page, SearchResult } from './types'
+import { ShareManager } from '../../components/ShareManager'
+import { useNoteCollaboration } from './NoteCollaboration'
 
 interface PageViewProps {
   page: Page
@@ -24,6 +26,9 @@ interface PageViewProps {
     input: Partial<Pick<Page, 'properties'>>,
   ) => Promise<void> | void
   onCreatePage?: (parentId: string) => void
+  onRemotePatch?: (
+    input: Partial<Pick<Page, 'title' | 'icon' | 'cover' | 'content'>>,
+  ) => void
 }
 
 export function PageView({
@@ -35,7 +40,11 @@ export function PageView({
   pages,
   onPatchPage,
   onCreatePage,
+  onRemotePatch,
 }: PageViewProps) {
+  const role = page.effective_role ?? 'owner'
+  const canEdit = role !== 'viewer'
+  const collaboration = useNoteCollaboration(page.id, onRemotePatch)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>(
     'saved',
   )
@@ -61,6 +70,14 @@ export function PageView({
     setTitle(page.title)
     setIcon(page.icon || '')
   }
+  useEffect(() => {
+    // Resyncs local edit state with the upstream page — needed when a save
+    // round-trip or a remote collaborator's patch changes title/icon while
+    // this page stays open (not just on page-id change, handled above).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTitle(page.title)
+    setIcon(page.icon || '')
+  }, [page.icon, page.title])
   useEffect(() => () => clearTimeout(metadataTimer.current), [])
 
   const saveMetadata = (input: Pick<Page, 'title'> | Pick<Page, 'icon'>) => {
@@ -97,8 +114,96 @@ export function PageView({
       .catch(() => setSaveState('error'))
   }
 
+  const exportPdf = () => {
+    const printable = document
+      .querySelector('.notes-page')
+      ?.cloneNode(true) as HTMLElement | null
+    if (!printable) return
+    printable
+      .querySelectorAll('[contenteditable]')
+      .forEach((element) => element.removeAttribute('contenteditable'))
+    printable
+      .querySelectorAll(
+        '.notes-breadcrumbs, .notes-save-state, .notes-page-actions, .notes-add-cover-anchor, .notes-cover-change, .editor-icon-popover, .notes-block-gutter, .notes-selection-toolbar, .notes-slash-menu, .notes-mention-menu, .notes-table-toolbar, .notes-col-drop-indicator',
+      )
+      .forEach((element) => element.remove())
+    const iconSlot = printable.querySelector('.editor-icon-picker')
+    if (iconSlot) {
+      const icon = document.createElement('span')
+      icon.className = 'notes-print-icon'
+      icon.textContent = page.icon || ''
+      iconSlot.replaceWith(icon)
+    }
+    const titleInput = printable.querySelector('.notes-title-input')
+    if (titleInput) {
+      const heading = document.createElement('h1')
+      heading.className = 'notes-title-input'
+      heading.textContent = title || 'Untitled'
+      titleInput.replaceWith(heading)
+    }
+    const styles = Array.from(
+      document.head.querySelectorAll('link[rel="stylesheet"], style'),
+    )
+      .map((style) => style.outerHTML)
+      .join('')
+    const popup = window.open('', '_blank')
+    if (!popup) {
+      setSaveState('error')
+      return
+    }
+    popup.addEventListener(
+      'load',
+      () => {
+        popup.focus()
+        popup.print()
+      },
+      { once: true },
+    )
+    popup.document.write(
+      `<!doctype html><html><head><title>Note export</title>${styles}<style>@page{margin:12mm}html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.notes-page{width:100%;margin:0;padding:0}.notes-page-head{margin:0 0 20px}.notes-print-icon{font-size:34px;line-height:1}.notes-title-input{margin:0!important}</style></head><body>${printable.outerHTML}</body></html>`,
+    )
+    popup.document.close()
+    popup.document.title = title || 'Untitled'
+    popup.opener = null
+  }
+
   return (
     <main className="notes-page">
+      <div className={`notes-page-actions${page.cover ? '' : ' no-cover'}`}>
+        <ShareManager
+          resource="pages"
+          resourceId={page.id}
+          collaborators={page.collaborators ?? []}
+          owner={role === 'owner'}
+          effectiveRole={role === 'owner' ? undefined : role}
+          ownerEmail={page.owner_email}
+          ownerName={page.owner_name}
+          onChanged={() => window.location.reload()}
+        />
+        <button type="button" className="notes-print" onClick={exportPdf}>
+          Export PDF
+        </button>
+        {!page.cover && canEdit && (
+          <button
+            ref={coverAnchorRef}
+            type="button"
+            className="notes-add-cover"
+            aria-expanded={coverPickerOpen}
+            onClick={() => setCoverPickerOpen(!coverPickerOpen)}
+          >
+            + Cover
+          </button>
+        )}
+        {!page.cover && coverPickerOpen && (
+          <CoverPicker
+            anchorRef={coverAnchorRef}
+            value={page.cover}
+            onChange={setCover}
+            onClose={() => setCoverPickerOpen(false)}
+            favorites={settings.favorite_covers}
+          />
+        )}
+      </div>
       {page.cover && (
         <div
           className={`notes-cover ${coverClass(page.cover)}`}
@@ -108,15 +213,17 @@ export function PageView({
               : { backgroundImage: `url("${page.cover}")` }
           }
         >
-          <button
-            ref={coverAnchorRef}
-            type="button"
-            className="notes-cover-change"
-            aria-expanded={coverPickerOpen}
-            onClick={() => setCoverPickerOpen(!coverPickerOpen)}
-          >
-            Change cover
-          </button>
+          {canEdit && (
+            <button
+              ref={coverAnchorRef}
+              type="button"
+              className="notes-cover-change"
+              aria-expanded={coverPickerOpen}
+              onClick={() => setCoverPickerOpen(!coverPickerOpen)}
+            >
+              Change cover
+            </button>
+          )}
           {coverPickerOpen && (
             <CoverPicker
               anchorRef={coverAnchorRef}
@@ -160,6 +267,7 @@ export function PageView({
           aria-label="Page title"
           value={title}
           placeholder="Untitled"
+          readOnly={!canEdit}
           onClick={() => {
             // On touch devices without an icon, tapping the title opens
             // the emoji picker so users can add one.
@@ -187,34 +295,16 @@ export function PageView({
           }}
         />
         <span className={`notes-save-state ${saveState}`} role="status">
-          {saveState === 'saving'
-            ? 'Saving…'
-            : saveState === 'error'
-              ? 'Could not save'
-              : 'Saved'}
+          {collaboration.status === 'online'
+            ? `Live · ${collaboration.presence}`
+            : collaboration.status === 'connecting'
+              ? 'Connecting…'
+              : saveState === 'saving'
+                ? 'Saving…'
+                : saveState === 'error'
+                  ? 'Could not save'
+                  : 'Saved'}
         </span>
-        {!page.cover && (
-          <div className="notes-add-cover-anchor">
-            <button
-              ref={coverAnchorRef}
-              type="button"
-              className="notes-add-cover"
-              aria-expanded={coverPickerOpen}
-              onClick={() => setCoverPickerOpen(!coverPickerOpen)}
-            >
-              + Cover
-            </button>
-            {coverPickerOpen && (
-              <CoverPicker
-                anchorRef={coverAnchorRef}
-                value={null}
-                onChange={setCover}
-                onClose={() => setCoverPickerOpen(false)}
-                favorites={settings.favorite_covers}
-              />
-            )}
-          </div>
-        )}
       </div>
       {page.type === 'folder' && pages ? (
         <div className="notes-list-view">
@@ -264,6 +354,7 @@ export function PageView({
           onMentionClick={openNode}
           bulletStyle={settings.notes_bullet_style}
           numberedStyle={settings.notes_numbered_style}
+          readOnly={!canEdit}
         />
       )}
       <Backlinks nodeType="page" nodeId={page.id} onOpen={openNode} />

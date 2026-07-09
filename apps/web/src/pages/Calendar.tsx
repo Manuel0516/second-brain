@@ -222,10 +222,35 @@ export function Calendar() {
     setEditorEvent(draft)
     setDraftPreview(draft)
   }
+  const createAllDayAt = (day: Date) => {
+    const start = startOfDay(day)
+    const defaultCalendar =
+      calendars.find((c) => c.id === settings.default_calendar_id) ??
+      orderCalendars(calendars)[0]
+    const draft = {
+      start_at: start.toISOString(),
+      end_at: start.toISOString(),
+      all_day: true,
+      calendar_id: defaultCalendar?.id,
+    }
+    setEditorEvent(draft)
+    setDraftPreview(draft)
+  }
   const refreshCalendar = useCallback(() => {
     setRefresh((value) => value + 1)
     loadCalendars()
   }, [loadCalendars])
+  useEffect(() => {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const socket = new WebSocket(
+      `${protocol}//${location.host}/api/calendar/updates`,
+    )
+    socket.onmessage = (event) => {
+      if ((JSON.parse(event.data) as { type?: string }).type === 'calendar')
+        refreshCalendar()
+    }
+    return () => socket.close()
+  }, [refreshCalendar])
   const saved = () => {
     setEditorEvent(null)
     setDraftPreview(null)
@@ -680,6 +705,7 @@ export function Calendar() {
                 calendars={calendars}
                 refresh={refresh}
                 onCreate={createAt}
+                onCreateAllDay={createAllDayAt}
                 onEdit={setEditorEvent}
                 onRowHeightChange={changeRowHeight}
                 onHorizontalNavigate={shiftByDays}

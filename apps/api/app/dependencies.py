@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, WebSocket, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -79,3 +79,15 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_websocket_user(websocket: WebSocket, session: AsyncSession) -> User | None:
+    """WebSocket counterpart to get_current_user; the browser sends the same cookie."""
+    token = websocket.cookies.get("access_token")
+    payload = decode_jwt(token) if token else {}
+    if not payload or payload.get("type") != "access" or not payload.get("user_id"):
+        return None
+    from sqlalchemy import select
+
+    user = await session.scalar(select(User).where(User.id == payload["user_id"]))
+    return user if user and user.is_active else None

@@ -9,7 +9,9 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -296,6 +298,57 @@ class Page(Base):
         nullable=False,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ResourceShare(Base):
+    """An explicit account grant for a calendar or page."""
+
+    __tablename__ = "resource_shares"
+    __table_args__ = (
+        UniqueConstraint("resource_type", "resource_id", "recipient_user_id"),
+        Index("ix_resource_shares_recipient", "recipient_user_id", "resource_type"),
+        Index("ix_resource_shares_resource", "resource_type", "resource_id"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    resource_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    resource_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    recipient_user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Recipient-only overrides for calendar shares. Null = inherit the
+    # owner's Calendar.is_visible / Calendar.color.
+    visible: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
+class NoteCollaborationUpdate(Base):
+    """Opaque Yjs update bytes; clients merge them into the note CRDT."""
+
+    __tablename__ = "note_collaboration_updates"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    page_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("pages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    update: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
 
 
 class DatabaseProperty(Base):

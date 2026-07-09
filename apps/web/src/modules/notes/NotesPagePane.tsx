@@ -98,6 +98,16 @@ export function NotesPagePane({
     if (page) await patchById(page.id, input)
   }
 
+  const applyRemotePatch = (
+    input: Partial<Pick<Page, 'title' | 'icon' | 'cover' | 'content'>>,
+  ) => {
+    setPages((current) =>
+      current.map((item) =>
+        item.id === activeId ? { ...item, ...input } : item,
+      ),
+    )
+  }
+
   return (
     <section className="notes-pane" aria-label="Event note">
       <header className="notes-pane-header">
@@ -188,6 +198,7 @@ export function NotesPagePane({
           onOpenEvent={onOpenEvent}
           pages={pages}
           onPatchPage={patchById}
+          onRemotePatch={applyRemotePatch}
         />
       ) : (
         <p className="notes-pane-loading">Loading note…</p>

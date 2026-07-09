@@ -39,6 +39,7 @@ it('selects tapped events and starts pinch resizing from the real touch distance
       calendars={[]}
       refresh={0}
       onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
       onEdit={vi.fn()}
       onRowHeightChange={onRowHeightChange}
       onHorizontalNavigate={vi.fn()}
@@ -93,6 +94,7 @@ it('selects tapped events and starts pinch resizing from the real touch distance
       calendars={[]}
       refresh={0}
       onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
       onEdit={vi.fn()}
       onRowHeightChange={onRowHeightChange}
       onHorizontalNavigate={vi.fn()}
@@ -109,6 +111,7 @@ it('starts event move or resize only after a stationary long press', async () =>
       calendars={[]}
       refresh={0}
       onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
       onEdit={vi.fn()}
       onRowHeightChange={vi.fn()}
       onHorizontalNavigate={vi.fn()}

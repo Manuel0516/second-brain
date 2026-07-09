@@ -8,6 +8,13 @@ export interface CalendarData {
   ics_url?: string | null
   google_calendar_id?: string | null
   last_synced_at?: string | null
+  effective_role?: 'owner' | 'editor' | 'viewer'
+  owner_email?: string | null
+  collaborators?: Array<{
+    user_id: string
+    email: string
+    role: 'viewer' | 'editor'
+  }>
 }
 
 export interface EventConnections {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -185,6 +185,18 @@ export function Notes() {
       throw reason
     }
   }
+
+  const applyRemotePatch = useCallback(
+    (
+      id: string,
+      input: Partial<Pick<Page, 'title' | 'icon' | 'cover' | 'content'>>,
+    ) => {
+      setPages((current) =>
+        current.map((page) => (page.id === id ? { ...page, ...input } : page)),
+      )
+    },
+    [],
+  )
 
   const applyTemplate = async (id: string) => {
     try {
@@ -424,6 +436,7 @@ export function Notes() {
                 pages={pages}
                 onPatchPage={patchPage}
                 onCreatePage={(parentId) => void createPage(parentId)}
+                onRemotePatch={(input) => applyRemotePatch(selected.id, input)}
               />
             ) : (
               <main className="notes-overview" aria-label="All notes">

@@ -17,7 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_async_session
 from app.dependencies import get_current_user
 from app.models import DatabaseProperty, DatabaseView, Page, User
-from app.routes.notes import PageResponse, _descendant_ids, _owned_page, _sync_mentions
+from app.routes.notes import (
+    PageResponse,
+    _descendant_ids,
+    _editable_page,
+    _owned_page,
+    _readable_page,
+    _sync_mentions,
+)
 
 router = APIRouter(prefix="/api", tags=["databases"])
 
@@ -83,7 +90,7 @@ class ViewResponse(BaseModel):
 
 
 async def _owned_database(page_id: str, user: User, session: AsyncSession) -> Page:
-    page = await _owned_page(page_id, user, session)
+    page = await _editable_page(page_id, user, session)
     if page.type != "database":
         raise HTTPException(status_code=422, detail="Page is not a database")
     return page
@@ -93,7 +100,7 @@ async def _owned_property(property_id: str, user: User, session: AsyncSession) -
     prop = await session.get(DatabaseProperty, property_id)
     if prop is None:
         raise HTTPException(status_code=404, detail="Property not found")
-    await _owned_page(prop.page_id, user, session)
+    await _editable_page(prop.page_id, user, session)
     return prop
 
 
@@ -101,7 +108,7 @@ async def _owned_view(view_id: str, user: User, session: AsyncSession) -> Databa
     view = await session.get(DatabaseView, view_id)
     if view is None:
         raise HTTPException(status_code=404, detail="View not found")
-    await _owned_page(view.page_id, user, session)
+    await _editable_page(view.page_id, user, session)
     return view
 
 
@@ -118,7 +125,7 @@ async def list_properties(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[DatabaseProperty]:
-    await _owned_page(page_id, user, session)
+    await _readable_page(page_id, user, session)
     return list(
         await session.scalars(
             select(DatabaseProperty)
@@ -185,7 +192,7 @@ async def list_views(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[DatabaseView]:
-    await _owned_page(page_id, user, session)
+    await _readable_page(page_id, user, session)
     return list(
         await session.scalars(
             select(DatabaseView)

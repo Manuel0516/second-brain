@@ -15,13 +15,26 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.access import shared_ids
 from app.database import get_async_session
 from app.dependencies import get_current_user
 from app.models import File as FileModel
-from app.models import User
+from app.models import Page, User
 from app.storage import allowed_content_type, download, max_file_size, remove, upload
 
 router = APIRouter(prefix="/api", tags=["files"])
+
+
+def _references_file(value: object, file_id: str) -> bool:
+    if isinstance(value, list):
+        return any(_references_file(item, file_id) for item in value)
+    if not isinstance(value, dict):
+        return False
+    return any(
+        item == f"/api/files/{file_id}" or _references_file(item, file_id)
+        for item in value.values()
+    )
+
 
 # ── Schemas ─────────────────────────────────────────────────────────────
 
@@ -243,13 +256,18 @@ async def download_file(
     session: AsyncSession = Depends(get_async_session),
 ) -> FastAPIResponse:
     """Download an owned file from MinIO with the stored content type."""
-    row = await session.scalar(
-        select(FileModel).where(FileModel.id == file_id, FileModel.user_id == user.id)
-    )
+    row = await session.get(FileModel, file_id)
     if row is None:
         raise HTTPException(status_code=404, detail="File not found")
+    if row.user_id != user.id:
+        page_ids = await shared_ids("page", user.id, session)
+        pages = await session.scalars(
+            select(Page.content).where(Page.id.in_(page_ids), Page.deleted_at.is_(None))
+        )
+        if not any(_references_file(content, file_id) for content in pages):
+            raise HTTPException(status_code=404, detail="File not found")
 
-    data, _ = download(user.id, file_id)
+    data, _ = download(row.user_id, file_id)
 
     return FastAPIResponse(
         content=data,

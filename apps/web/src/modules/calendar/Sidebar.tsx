@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiCall, apiErrorMessage } from '../../lib/api'
+import { useAuth } from '../../context/AuthContext'
 import { useSettings } from '../../context/SettingsContext'
 import { Field } from '../../components/Field'
 import { IconButton } from '../../components/IconButton'
@@ -14,6 +15,7 @@ import {
   storedCalendarOrder,
 } from './order'
 import type { CalendarData } from './types'
+import { ShareManager } from '../../components/ShareManager'
 
 const LONG_PRESS_DELAY = 375
 const ROW_GAP = 2 // matches `.calendar-list { gap }` in styles.css
@@ -103,6 +105,7 @@ interface Props {
 
 export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [color, setColor] = useState('#8B5CF6')
@@ -253,6 +256,37 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
       setError(
         await apiErrorMessage(response, 'Could not update the calendar.'),
       )
+  }
+
+  const patchOwnShare = async (calendar: CalendarData, values: object) => {
+    setError('')
+    const response = await apiCall(`/api/calendars/${calendar.id}/my-share`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    })
+    if (response.ok) onChanged()
+    else
+      setError(
+        await apiErrorMessage(
+          response,
+          'Could not update your view of this calendar.',
+        ),
+      )
+  }
+
+  const leaveCalendar = async (calendar: CalendarData) => {
+    if (!user) return
+    setError('')
+    const response = await apiCall(
+      `/api/calendars/${calendar.id}/shares/${user.id}`,
+      { method: 'DELETE' },
+    )
+    if (response.ok) {
+      setMenuFor(null)
+      onChanged()
+    } else
+      setError(await apiErrorMessage(response, 'Could not leave the calendar.'))
   }
 
   const deleteCalendar = async (calendar: CalendarData) => {
@@ -406,10 +440,18 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                 borderColor: calendar.color,
               }}
               onClick={() =>
-                patch(calendar, { is_visible: !calendar.is_visible })
+                calendar.effective_role && calendar.effective_role !== 'owner'
+                  ? patchOwnShare(calendar, { visible: !calendar.is_visible })
+                  : patch(calendar, { is_visible: !calendar.is_visible })
               }
             />
-            <span className="calendar-name">{calendar.name}</span>
+            <span className="calendar-name">
+              {calendar.name}
+              {calendar.effective_role &&
+                calendar.effective_role !== 'owner' && (
+                  <small> · {calendar.effective_role}</small>
+                )}
+            </span>
             <button
               type="button"
               className="calendar-menu-btn"
@@ -442,74 +484,137 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
             >
               ⋯
             </button>
-            {menuFor === calendar.id && (
-              <Popover
-                anchorRef={menuAnchorRef}
-                open
-                onClose={() => setMenuFor(null)}
-                className="cal-card calendar-menu"
-                matchAnchorWidth
-                role="dialog"
-                ariaLabel={`Edit ${calendar.name}`}
-              >
-                <div className="cal-card-head">
-                  <h3>Edit calendar</h3>
-                  <IconButton
-                    icon={
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      >
-                        <path d="M5 5l10 10M15 5L5 15" />
-                      </svg>
-                    }
-                    label="Close"
-                    onClick={() => setMenuFor(null)}
-                    size="sm"
+            {menuFor === calendar.id &&
+              calendar.effective_role !== 'viewer' &&
+              calendar.effective_role !== 'editor' && (
+                <Popover
+                  anchorRef={menuAnchorRef}
+                  open
+                  onClose={() => setMenuFor(null)}
+                  className="cal-card calendar-menu"
+                  role="dialog"
+                  ariaLabel={`Edit ${calendar.name}`}
+                >
+                  <div className="cal-card-head">
+                    <h3>Edit calendar</h3>
+                    <IconButton
+                      icon={
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        >
+                          <path d="M5 5l10 10M15 5L5 15" />
+                        </svg>
+                      }
+                      label="Close"
+                      onClick={() => setMenuFor(null)}
+                      size="sm"
+                    />
+                  </div>
+                  <Field label="Name">
+                    <input
+                      aria-label={`${calendar.name} name`}
+                      defaultValue={calendar.name}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        if (e.key === 'Escape') setMenuFor(null)
+                      }}
+                      onBlur={(e) =>
+                        e.target.value.trim() &&
+                        e.target.value !== calendar.name &&
+                        patch(calendar, { name: e.target.value })
+                      }
+                    />
+                  </Field>
+                  <ColorField
+                    value={calendar.color}
+                    onChange={(c) => patch(calendar, { color: c })}
                   />
-                </div>
-                <Field label="Name">
-                  <input
-                    aria-label={`${calendar.name} name`}
-                    defaultValue={calendar.name}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.currentTarget.blur()
-                      if (e.key === 'Escape') setMenuFor(null)
-                    }}
-                    onBlur={(e) =>
-                      e.target.value.trim() &&
-                      e.target.value !== calendar.name &&
-                      patch(calendar, { name: e.target.value })
-                    }
+                  <div className="cal-card-actions">
+                    <ShareManager
+                      resource="calendars"
+                      resourceId={calendar.id}
+                      collaborators={calendar.collaborators ?? []}
+                      owner
+                      ownerEmail={calendar.owner_email}
+                      onChanged={onChanged}
+                    />
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => setConfirmDelete(calendar)}
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => setMenuFor(null)}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </Popover>
+              )}
+            {menuFor === calendar.id &&
+              (calendar.effective_role === 'viewer' ||
+                calendar.effective_role === 'editor') && (
+                <Popover
+                  anchorRef={menuAnchorRef}
+                  open
+                  onClose={() => setMenuFor(null)}
+                  className="cal-card calendar-menu"
+                  role="dialog"
+                  ariaLabel={`${calendar.name} options`}
+                >
+                  <div className="cal-card-head">
+                    <h3>Shared calendar</h3>
+                    <IconButton
+                      icon={
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        >
+                          <path d="M5 5l10 10M15 5L5 15" />
+                        </svg>
+                      }
+                      label="Close"
+                      onClick={() => setMenuFor(null)}
+                      size="sm"
+                    />
+                  </div>
+                  <ColorField
+                    value={calendar.color}
+                    onChange={(c) => patchOwnShare(calendar, { color: c })}
                   />
-                </Field>
-                <ColorField
-                  value={calendar.color}
-                  onChange={(c) => patch(calendar, { color: c })}
-                />
-                <div className="cal-card-actions">
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => setConfirmDelete(calendar)}
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => setMenuFor(null)}
-                  >
-                    Done
-                  </button>
-                </div>
-              </Popover>
-            )}
+                  <div className="cal-card-actions">
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => void leaveCalendar(calendar)}
+                    >
+                      Leave
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => setMenuFor(null)}
+                    >
+                      Done
+                    </button>
+                  </div>
+                </Popover>
+              )}
           </div>
         ))}
       </div>

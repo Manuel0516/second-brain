@@ -66,6 +66,7 @@ interface Props {
   calendars: CalendarData[]
   refresh: number
   onCreate: (start: Date, end?: Date) => void
+  onCreateAllDay: (day: Date) => void
   onEdit: (event: CalendarEvent) => void
   onRowHeightChange: (value: number) => void
   onHorizontalNavigate: (days: number) => void
@@ -179,6 +180,7 @@ export function TimeGrid({
   calendars,
   refresh,
   onCreate,
+  onCreateAllDay,
   onEdit,
   onRowHeightChange,
   onHorizontalNavigate,
@@ -1089,8 +1091,15 @@ export function TimeGrid({
               .filter(Boolean)
               .join(' ')}
           >
-            <span>{day.toLocaleDateString([], { weekday: 'short' })}</span>
-            <strong>{day.getDate()}</strong>
+            <button
+              type="button"
+              className="week-header-daylabel"
+              aria-label={`Create all-day event ${day.toDateString()}`}
+              onClick={() => onCreateAllDay(day)}
+            >
+              <span>{day.toLocaleDateString([], { weekday: 'short' })}</span>
+              <strong>{day.getDate()}</strong>
+            </button>
             <div className="allday-band">
               {visibleEvents
                 .filter(

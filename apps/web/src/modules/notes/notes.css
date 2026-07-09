@@ -353,36 +353,18 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-tint);
 }
-/* Sits beside the save-state pill, clear of the breadcrumbs. */
-.notes-add-cover-anchor {
-  position: absolute;
-  top: -26px;
-  right: 60px;
-}
 .notes-add-cover {
-  min-height: 24px;
-  padding: 0 8px;
-  border: 0;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 10px var(--font-mono);
   cursor: pointer;
-  opacity: 0;
   transition:
-    opacity 0.14s ease,
     background 0.14s ease,
     color 0.14s ease;
-}
-.notes-page:hover .notes-add-cover,
-.notes-add-cover:focus-visible,
-.notes-add-cover[aria-expanded='true'] {
-  opacity: 1;
-}
-@media (hover: none) {
-  .notes-add-cover {
-    opacity: 1;
-  }
 }
 .notes-add-cover:hover {
   background: var(--bg-raised);
@@ -458,6 +440,7 @@
   overflow: auto;
 }
 .notes-page {
+  position: relative;
   width: min(720px, calc(100% - 56px));
   margin: 0 auto;
   padding: 40px 0 96px;
@@ -587,6 +570,40 @@
   color: var(--text-tertiary);
   font: 10px var(--font-mono);
   letter-spacing: 0.03em;
+}
+.notes-page-actions {
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: blur(4px);
+}
+/* No cover: nothing to overlay, so the row sits in normal flow above the
+   breadcrumbs instead of floating absolutely — avoids stacking on top of
+   the page head/title. */
+.notes-page-actions.no-cover {
+  position: static;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+}
+.notes-print {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 10px var(--font-mono);
+  cursor: pointer;
 }
 .notes-save-state.error,
 .notes-error {

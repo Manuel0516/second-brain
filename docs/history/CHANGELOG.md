@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0146](0146-share-popover-ux-and-collaboration-reliability.md)   | Share popover UX rework, shared-calendar overrides, collaboration reliability fix               | 2026-07-09 | accepted                   |
+| [0145](0145-notes-pdf-export-and-account-sharing.md)             | Notes PDF export, account sharing, and live CRDT collaboration                                  | 2026-07-09 | accepted                   |
 | [0144](0144-notes-emoji-picker-stacking-context-fix.md)          | Fix: notes page emoji picker unusable — trapped stacking context                                    | 2026-07-08 | accepted                   |
 | [0143](0143-event-editor-link-existing-meals-workouts.md)        | Event editor: search & link existing logged meals and completed workouts                           | 2026-07-07 | accepted                   |
 | [0142](0142-food-overview-logged-meal-mobile-text-overflow.md)   | Fix: logged meal meta text overflow on mobile                                                      | 2026-07-07 | accepted                   |

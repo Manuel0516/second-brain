@@ -1,3 +1,10 @@
 [agents]
 max_threads = 4
 max_depth = 1
+
+[mcp_servers.context-mode]
+command = "node"
+args = ["./start.mjs"]
+
+[mcp_servers.context-mode.env]
+CONTEXT_MODE_PLATFORM = "codex"

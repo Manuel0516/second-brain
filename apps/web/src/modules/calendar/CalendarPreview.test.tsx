@@ -44,6 +44,7 @@ it('keeps the draft icon visible in the time grid', () => {
       calendars={calendars}
       refresh={0}
       onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
       onEdit={vi.fn()}
       onRowHeightChange={vi.fn()}
       onHorizontalNavigate={vi.fn()}

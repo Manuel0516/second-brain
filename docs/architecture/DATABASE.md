@@ -191,6 +191,35 @@ Notes/pages module. Nested page tree (Notion-style).
 
 ---
 
+### `resource_shares`
+Explicit grants from a calendar or page owner to one existing account.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| resource_type / resource_id | String / UUID | The shared `calendar` or `page`. |
+| recipient_user_id | UUID FK | Account receiving access. Unique with the resource. |
+| role | String(8) | `viewer` or `editor`. Owners are represented by the resource row, not a share row. |
+| visible | Boolean? | Calendar shares only. Recipient's own show/hide override; null inherits the owner's `Calendar.is_visible`. |
+| color | String(7)? | Calendar shares only. Recipient's own color override; null inherits the owner's `Calendar.color`. |
+| created_at / updated_at | DateTime | Grant audit timestamps. |
+
+Indexes support recipient lookups and checks for a particular resource.
+
+---
+
+### `note_collaboration_updates`
+Durable opaque Yjs updates for a shared note. The browser merges these CRDT updates and writes
+the resulting Tiptap JSON snapshot back to `pages.content`, preserving normal note rendering,
+search, and browser PDF export.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| page_id | UUID FK | Note receiving the update. ON DELETE CASCADE. |
+| update | Binary | Yjs-compatible CRDT update. |
+| created_at | DateTime | Replay order. |
+
+---
+
 ### `database_properties`
 Schema columns of a database page (`pages.type = "database"`).
 
@@ -406,5 +435,6 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 022 | Food core: meal_logs, food_daily_extras, food_* settings |
 | 023 | fitness_stats_range_days and food_stats_range_days on user_settings |
 | 024 | Calendar sync: google_accounts table; sync columns on calendars (google_calendar_id, sync_direction, sync_token, last_synced_at, external_id, ics_url, etag) and calendar_events (external_id, external_etag) |
+| 025 | Account-to-account calendar/page sharing plus durable Yjs note collaboration updates |
 
 Always check `alembic current` before writing a new migration.

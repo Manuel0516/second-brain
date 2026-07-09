@@ -16,6 +16,14 @@ export interface Page {
   created_at: string
   updated_at: string
   deleted_at?: string | null
+  effective_role?: 'owner' | 'editor' | 'viewer'
+  owner_email?: string | null
+  owner_name?: string | null
+  collaborators?: Array<{
+    user_id: string
+    email: string
+    role: 'viewer' | 'editor'
+  }>
 }
 
 export type PropertyType =

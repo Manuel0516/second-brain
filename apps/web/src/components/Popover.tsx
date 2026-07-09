@@ -74,6 +74,11 @@ export function Popover({
     const onPointerDown = (event: PointerEvent) => {
       if (popRef.current?.contains(event.target as Node)) return
       if (anchorRef.current?.contains(event.target as Node)) return
+      // A nested/child Popover (e.g. ShareManager's popover opened from a
+      // button inside this one) portals to its own <body> child, so it
+      // isn't contained by popRef above — without this check, clicking
+      // inside it reads as "outside" and closes this popover too.
+      if ((event.target as Element)?.closest?.('.popover')) return
       onCloseRef.current()
     }
     const onKeyDown = (event: KeyboardEvent) => {

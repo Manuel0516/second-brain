@@ -1,0 +1,91 @@
+.share-manager {
+  position: relative;
+  display: inline-flex;
+}
+.share-trigger {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 10px var(--font-mono);
+  cursor: pointer;
+}
+.share-popover {
+  width: min(360px, 90vw);
+  max-width: min(360px, 90vw);
+  max-height: min(400px, 70vh);
+  padding: 14px;
+}
+.share-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.share-popover-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.share-form,
+.share-person {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+}
+.share-form input,
+.share-form select,
+.share-person select {
+  min-height: 32px;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  padding: 5px 7px;
+  font: 400 12px var(--font-ui);
+}
+.share-person {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.share-person span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-error {
+  margin: 8px 0 0;
+  color: #d9573f;
+  font-size: 12px;
+}
+.share-popover button.primary,
+.share-popover button.danger {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  font: 600 11.5px var(--font-ui);
+  cursor: pointer;
+}
+.share-popover button.primary {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--accent);
+}
+.share-popover button.danger {
+  background: transparent;
+  border-color: transparent;
+  color: #d9573f;
+}
+.share-role {
+  color: var(--text-tertiary);
+  font: 10px var(--font-mono);
+  padding: 4px;
+}

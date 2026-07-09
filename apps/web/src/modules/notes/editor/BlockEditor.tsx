@@ -812,14 +812,17 @@ export function BlockEditor({
     return () => cancelAnimationFrame(frame)
   }, [editor, slash, mention])
   useEffect(() => {
-    if (!editor || editor.isFocused) return
+    if (!editor || editor.isDestroyed || editor.isFocused) return
     // Our own autosave echoing back — the editor already holds this state.
     if (content === lastEmittedRef.current) return
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(editorContent)) {
       editor.commands.setContent(editorContent, { emitUpdate: false })
     }
   }, [editor, content, editorContent])
-  useEffect(() => editor?.setEditable(!readOnly), [editor, readOnly])
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    editor.setEditable(!readOnly)
+  }, [editor, readOnly])
   useEffect(() => {
     let active = true
     if (!mention || !searchRef.current) {

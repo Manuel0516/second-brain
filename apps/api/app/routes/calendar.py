@@ -2,14 +2,25 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator, model_validator
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_async_session
-from app.dependencies import get_current_user
-from app.models import Calendar, CalendarEvent, Link, MealLog, User, WorkoutSession
+from app.access import effective_role, shared_ids
+from app.collaboration import calendar_connections
+from app.database import async_session_factory, get_async_session
+from app.dependencies import get_current_user, get_websocket_user
+from app.models import Calendar, CalendarEvent, Link, MealLog, ResourceShare, User, WorkoutSession
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -55,6 +66,31 @@ class CalendarResponse(BaseModel):
     ics_url: str | None = None
     google_calendar_id: str | None = None
     last_synced_at: datetime | None = None
+    effective_role: Literal["owner", "editor", "viewer"] = "owner"
+    owner_email: str | None = None
+    collaborators: list["CollaboratorResponse"] = []
+
+
+class CollaboratorResponse(BaseModel):
+    user_id: str
+    email: str
+    role: Literal["viewer", "editor"]
+
+
+class ShareWrite(BaseModel):
+    email: EmailStr
+    role: Literal["viewer", "editor"]
+
+
+class SharePatch(BaseModel):
+    role: Literal["viewer", "editor"]
+
+
+class SelfSharePatch(BaseModel):
+    """A recipient's own visibility/color override for a shared calendar."""
+
+    visible: bool | None = None
+    color: str | None = Field(default=None, pattern=HEX)
 
 
 class NoteConnection(BaseModel):
@@ -201,6 +237,66 @@ class BulkEventCopy(BaseModel):
     target_start: datetime
 
 
+def _own_share_overrides(
+    calendar: Calendar, user: User, share: ResourceShare | None
+) -> tuple[bool, str]:
+    """A shared calendar's visibility/color can be overridden per-recipient
+    (ResourceShare.visible/.color) without touching the owner's Calendar row.
+    Falls back to the owner's values when there's no override, or none set."""
+    if calendar.user_id == user.id or share is None:
+        return calendar.is_visible, calendar.color
+    is_visible = share.visible if share.visible is not None else calendar.is_visible
+    color = share.color if share.color is not None else calendar.color
+    return is_visible, color
+
+
+async def calendar_response(
+    calendar: Calendar, user: User, session: AsyncSession
+) -> CalendarResponse:
+    role = await effective_role("calendar", calendar.id, calendar.user_id, user.id, session)
+    assert role is not None
+    owner_email = await session.scalar(select(User.email).where(User.id == calendar.user_id))
+    collaborators: list[CollaboratorResponse] = []
+    own_share: ResourceShare | None = None
+    if role == "owner":
+        rows = await session.execute(
+            select(ResourceShare, User)
+            .join(User, User.id == ResourceShare.recipient_user_id)
+            .where(
+                ResourceShare.resource_type == "calendar",
+                ResourceShare.resource_id == calendar.id,
+            )
+            .order_by(User.email)
+        )
+        collaborators = [
+            CollaboratorResponse(user_id=recipient.id, email=recipient.email, role=share.role)
+            for share, recipient in rows
+        ]
+    else:
+        own_share = await session.scalar(
+            select(ResourceShare).where(
+                ResourceShare.resource_type == "calendar",
+                ResourceShare.resource_id == calendar.id,
+                ResourceShare.recipient_user_id == user.id,
+            )
+        )
+    is_visible, color = _own_share_overrides(calendar, user, own_share)
+    return CalendarResponse(
+        id=calendar.id,
+        name=calendar.name,
+        color=color,
+        is_visible=is_visible,
+        source=calendar.source,
+        sync_direction=calendar.sync_direction,
+        ics_url=calendar.ics_url,
+        google_calendar_id=calendar.google_calendar_id,
+        last_synced_at=calendar.last_synced_at,
+        effective_role=role,
+        owner_email=owner_email,
+        collaborators=collaborators,
+    )
+
+
 def event_response(
     event: CalendarEvent, start: datetime | None = None, end: datetime | None = None
 ) -> EventResponse:
@@ -269,21 +365,36 @@ async def owned_calendar(calendar_id: str, user: User, session: AsyncSession) ->
     return calendar
 
 
+async def readable_calendar(calendar_id: str, user: User, session: AsyncSession) -> Calendar:
+    calendar = await session.get(Calendar, calendar_id)
+    if calendar is None or not await effective_role(
+        "calendar", calendar_id, calendar.user_id, user.id, session
+    ):
+        raise HTTPException(status_code=404, detail="Calendar not found")
+    return calendar
+
+
 async def writable_calendar(calendar_id: str, user: User, session: AsyncSession) -> Calendar:
     """Like owned_calendar, but rejects read-only (ICS-subscribed) calendars."""
-    calendar = await owned_calendar(calendar_id, user, session)
+    calendar = await readable_calendar(calendar_id, user, session)
+    role = await effective_role("calendar", calendar.id, calendar.user_id, user.id, session)
+    if role == "viewer":
+        raise HTTPException(status_code=403, detail="Calendar is read-only")
     if calendar.source == "ics":
         raise HTTPException(status_code=409, detail="ICS calendars are read-only")
     return calendar
 
 
 async def owned_event(event_id: str, user: User, session: AsyncSession) -> CalendarEvent:
-    event = await session.scalar(
-        select(CalendarEvent)
-        .join(Calendar)
-        .where(CalendarEvent.id == event_id, Calendar.user_id == user.id)
-    )
-    if event is None:
+    event = await session.scalar(select(CalendarEvent).where(CalendarEvent.id == event_id))
+    calendar = await session.get(Calendar, event.calendar_id) if event else None
+    if (
+        event is None
+        or calendar is None
+        or not await effective_role(
+            "calendar", event.calendar_id, calendar.user_id, user.id, session
+        )
+    ):
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
@@ -293,6 +404,39 @@ async def writable_event(event_id: str, user: User, session: AsyncSession) -> Ca
     event = await owned_event(event_id, user, session)
     await writable_calendar(event.calendar_id, user, session)
     return event
+
+
+async def notify_calendar(calendar_id: str, session: AsyncSession) -> None:
+    calendar = await session.get(Calendar, calendar_id)
+    if calendar is None:
+        return
+    recipients = [calendar.user_id]
+    recipients.extend(
+        await session.scalars(
+            select(ResourceShare.recipient_user_id).where(
+                ResourceShare.resource_type == "calendar",
+                ResourceShare.resource_id == calendar_id,
+            )
+        )
+    )
+    await calendar_connections.notify(recipients)
+
+
+@router.websocket("/calendar/updates")
+async def calendar_updates(websocket: WebSocket) -> None:
+    async with async_session_factory() as session:
+        user = await get_websocket_user(websocket, session)
+        if user is None:
+            await websocket.close(code=1008)
+            return
+        await calendar_connections.join(user.id, websocket)
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await calendar_connections.leave(user.id, websocket)
 
 
 def _plain_text_to_prosemirror(text: str) -> dict[str, object]:
@@ -466,11 +610,16 @@ async def _create_linked_entries(
 async def get_calendars(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> list[Calendar]:
-    result = await session.scalars(
-        select(Calendar).where(Calendar.user_id == user.id).order_by(Calendar.name)
+) -> list[CalendarResponse]:
+    ids = await shared_ids("calendar", user.id, session)
+    calendars = list(
+        await session.scalars(
+            select(Calendar)
+            .where((Calendar.user_id == user.id) | Calendar.id.in_(ids))
+            .order_by(Calendar.name)
+        )
     )
-    return list(result)
+    return [await calendar_response(calendar, user, session) for calendar in calendars]
 
 
 @router.post("/calendars", response_model=CalendarResponse, status_code=201)
@@ -478,12 +627,12 @@ async def create_calendar(
     data: CalendarWrite,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> Calendar:
+) -> CalendarResponse:
     calendar = Calendar(user_id=user.id, name=data.name.strip(), color=data.color, is_visible=True)
     session.add(calendar)
     await session.commit()
     await session.refresh(calendar)
-    return calendar
+    return await calendar_response(calendar, user, session)
 
 
 @router.patch("/calendars/{calendar_id}", response_model=CalendarResponse)
@@ -492,13 +641,139 @@ async def patch_calendar(
     data: CalendarPatch,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> Calendar:
+) -> CalendarResponse:
     calendar = await owned_calendar(calendar_id, user, session)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(calendar, key, value.strip() if isinstance(value, str) else value)
     await session.commit()
     await session.refresh(calendar)
-    return calendar
+    return await calendar_response(calendar, user, session)
+
+
+@router.patch("/calendars/{calendar_id}/my-share", response_model=CalendarResponse)
+async def patch_own_calendar_share(
+    calendar_id: str,
+    data: SelfSharePatch,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> CalendarResponse:
+    """Let a calendar recipient override their own view (visibility/color)
+    without touching the owner's Calendar row."""
+    calendar = await readable_calendar(calendar_id, user, session)
+    share = await session.scalar(
+        select(ResourceShare).where(
+            ResourceShare.resource_type == "calendar",
+            ResourceShare.resource_id == calendar_id,
+            ResourceShare.recipient_user_id == user.id,
+        )
+    )
+    if share is None:
+        raise HTTPException(status_code=404, detail="Share not found")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(share, key, value)
+    await session.commit()
+    return await calendar_response(calendar, user, session)
+
+
+async def _share_recipient(data: ShareWrite, owner: User, session: AsyncSession) -> User:
+    recipient = await session.scalar(select(User).where(User.email == str(data.email).casefold()))
+    if recipient is None or recipient.id == owner.id:
+        raise HTTPException(status_code=422, detail="Cannot share with that account")
+    return recipient
+
+
+@router.get("/calendars/{calendar_id}/shares", response_model=list[CollaboratorResponse])
+async def list_calendar_shares(
+    calendar_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[CollaboratorResponse]:
+    calendar = await owned_calendar(calendar_id, user, session)
+    return (await calendar_response(calendar, user, session)).collaborators
+
+
+@router.post(
+    "/calendars/{calendar_id}/shares", response_model=CollaboratorResponse, status_code=201
+)
+async def create_calendar_share(
+    calendar_id: str,
+    data: ShareWrite,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> CollaboratorResponse:
+    await owned_calendar(calendar_id, user, session)
+    recipient = await _share_recipient(data, user, session)
+    share = await session.scalar(
+        select(ResourceShare).where(
+            ResourceShare.resource_type == "calendar",
+            ResourceShare.resource_id == calendar_id,
+            ResourceShare.recipient_user_id == recipient.id,
+        )
+    )
+    if share is None:
+        share = ResourceShare(
+            resource_type="calendar",
+            resource_id=calendar_id,
+            recipient_user_id=recipient.id,
+            role=data.role,
+        )
+        session.add(share)
+    else:
+        share.role = data.role
+    await session.commit()
+    return CollaboratorResponse(user_id=recipient.id, email=recipient.email, role=data.role)
+
+
+@router.patch("/calendars/{calendar_id}/shares/{recipient_id}", response_model=CollaboratorResponse)
+async def patch_calendar_share(
+    calendar_id: str,
+    recipient_id: str,
+    data: SharePatch,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> CollaboratorResponse:
+    await owned_calendar(calendar_id, user, session)
+    share = await session.scalar(
+        select(ResourceShare).where(
+            ResourceShare.resource_type == "calendar",
+            ResourceShare.resource_id == calendar_id,
+            ResourceShare.recipient_user_id == recipient_id,
+        )
+    )
+    recipient = await session.get(User, recipient_id)
+    if share is None or recipient is None:
+        raise HTTPException(status_code=404, detail="Share not found")
+    share.role = data.role
+    await session.commit()
+    return CollaboratorResponse(user_id=recipient.id, email=recipient.email, role=share.role)
+
+
+@router.delete("/calendars/{calendar_id}/shares/{recipient_id}", status_code=204)
+async def delete_calendar_share(
+    calendar_id: str,
+    recipient_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> Response:
+    # Either the owner (revoking anyone's access) or the recipient themself
+    # (leaving a calendar shared with them) may delete a share row.
+    calendar = await session.get(Calendar, calendar_id)
+    if calendar is None:
+        raise HTTPException(status_code=404, detail="Calendar not found")
+    if calendar.user_id != user.id and recipient_id != user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    share = await session.scalar(
+        select(ResourceShare).where(
+            ResourceShare.resource_type == "calendar",
+            ResourceShare.resource_id == calendar_id,
+            ResourceShare.recipient_user_id == recipient_id,
+        )
+    )
+    if share is None:
+        raise HTTPException(status_code=404, detail="Share not found")
+    await session.delete(share)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/calendars/{calendar_id}", status_code=204)
@@ -616,12 +891,37 @@ async def get_events(
 ) -> list[EventResponse]:
     if to_date <= from_date:
         raise HTTPException(status_code=422, detail="to_date must be after from_date")
+    shared_calendar_ids = await shared_ids("calendar", user.id, session)
+    accessible_calendars = list(
+        await session.scalars(
+            select(Calendar).where(
+                (Calendar.user_id == user.id) | Calendar.id.in_(shared_calendar_ids)
+            )
+        )
+    )
+    # A shared calendar's visibility can be overridden per-recipient (see
+    # ResourceShare.visible) without touching the owner's Calendar row —
+    # resolve each accessible calendar's *effective* visibility for this user
+    # rather than trusting the owner's Calendar.is_visible alone.
+    own_shares = {
+        share.resource_id: share
+        for share in await session.scalars(
+            select(ResourceShare).where(
+                ResourceShare.resource_type == "calendar",
+                ResourceShare.recipient_user_id == user.id,
+            )
+        )
+    }
+    visible_ids = [
+        calendar.id
+        for calendar in accessible_calendars
+        if _own_share_overrides(calendar, user, own_shares.get(calendar.id))[0]
+    ]
     query = (
         select(CalendarEvent)
         .join(Calendar)
         .where(
-            Calendar.user_id == user.id,
-            Calendar.is_visible.is_(True),
+            Calendar.id.in_(visible_ids),
             CalendarEvent.start_at < to_date,
         )
     )
@@ -665,6 +965,7 @@ async def create_event(
 
     await session.commit()
     await session.refresh(event)
+    await notify_calendar(event.calendar_id, session)
     return event_response(event)
 
 
@@ -699,6 +1000,7 @@ async def patch_event(
         session.add(override)
         await session.commit()
         await session.refresh(override)
+        await notify_calendar(override.calendar_id, session)
         return event_response(override)
 
     for key, value in values.items():
@@ -757,6 +1059,7 @@ async def patch_event(
 
     await session.commit()
     await session.refresh(event)
+    await notify_calendar(event.calendar_id, session)
     return event_response(event)
 
 
@@ -784,6 +1087,8 @@ async def move_events(
             meal.scheduled_at = event.start_at
             meal.date = event.start_at
     await session.commit()
+    for calendar_id in {event.calendar_id for event in events}:
+        await notify_calendar(calendar_id, session)
     return [event_response(event) for event in events]
 
 
@@ -935,6 +1240,7 @@ async def delete_event(
         await _delete_event_links(session, event_ids)
         await session.delete(event)
         await session.commit()
+        await notify_calendar(event.calendar_id, session)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     if occurrence_start is None:
@@ -988,4 +1294,5 @@ async def delete_event(
             d for d in (event.recurrence_exdates or []) if _as_utc(datetime.fromisoformat(d)) < occ
         ]
     await session.commit()
+    await notify_calendar(event.calendar_id, session)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
