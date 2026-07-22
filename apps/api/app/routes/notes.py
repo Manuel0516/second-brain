@@ -1,5 +1,5 @@
 import base64
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from fastapi import (
@@ -270,7 +270,10 @@ async def _node_details(
     session: AsyncSession,
     *,
     include_deleted: bool = False,
-) -> tuple[str, str | None, str | None, str | None] | None:
+) -> tuple[str, str | None, str | None, str | None, date | None] | None:
+    """Returns (title, icon, page_type, parent_title, day). `day` is the record's
+    own date for dated nodes (meal/workout), else None — used to scope links to a
+    single occurrence of a recurring event."""
     if node_type == "page":
         query = select(Page.title, Page.icon, Page.type, Page.parent_page_id).where(
             Page.id == node_id, Page.user_id == user.id
@@ -287,7 +290,7 @@ async def _node_details(
                     Page.id == page_row.parent_page_id, Page.user_id == user.id
                 )
             )
-        return (page_row.title, page_row.icon, page_row.type, parent_title)
+        return (page_row.title, page_row.icon, page_row.type, parent_title, None)
     if node_type == "event":
         event_row = (
             await session.execute(
@@ -296,7 +299,7 @@ async def _node_details(
                 .where(CalendarEvent.id == node_id, Calendar.user_id == user.id)
             )
         ).one_or_none()
-        return (event_row.title, event_row.icon, None, None) if event_row else None
+        return (event_row.title, event_row.icon, None, None, None) if event_row else None
     if node_type == "workout_session":
         workout = (
             await session.execute(
@@ -309,7 +312,7 @@ async def _node_details(
             return None
         when = workout.date or workout.scheduled_at
         title = f"{workout.type} · {when.date()}" if when else workout.type
-        return (title, None, None, None)
+        return (title, None, None, None, when.date() if when else None)
     if node_type == "meal_log":
         meal = await session.scalar(
             select(MealLog).where(MealLog.id == node_id, MealLog.user_id == user.id)
@@ -322,7 +325,7 @@ async def _node_details(
             if when
             else meal.meal_type.capitalize()
         )
-        return (title, None, None, None)
+        return (title, None, None, None, when.date() if when else None)
     return None
 
 
@@ -935,9 +938,13 @@ async def create_event_note(
 @router.get("/events/{event_id}/links", response_model=list[LinkedNodeResponse])
 async def get_event_links(
     event_id: str,
+    on: date | None = Query(None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[LinkedNodeResponse]:
+    # `on` scopes dated links (meal/workout) to a single recurring occurrence:
+    # a series stores one meal per day all linked to the same event id, so
+    # without this every occurrence would show every day's meal.
     await owned_event(event_id, user, session)
     links = await session.scalars(
         select(Link).where(
@@ -953,6 +960,9 @@ async def get_event_links(
         node_type = link.target_type if outgoing else link.source_type
         node_id = link.target_id if outgoing else link.source_id
         details = await _node_details(node_type, node_id, user, session)
+        if on is not None and node_type in {"workout_session", "meal_log"}:
+            if details is None or details[4] != on:
+                continue
         if details and node_type in {"page", "event", "workout_session", "meal_log"}:
             result.append(
                 LinkedNodeResponse(

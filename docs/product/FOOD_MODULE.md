@@ -6,7 +6,7 @@
 FoodLog
   id, date, meal_type: "breakfast"|"lunch"|"dinner"|"snack"
   items   jsonb     # [{ name, quantity, unit, calories, protein, carbs, fat }]
-  photo_id  FK -> Attachment | null      # the photo, if logged that way
+  photo_ids ordered FK list -> Attachment # up to 15 photos, in capture order
   source: "manual" | "ai_capture"        # ready for Phase 5 without a schema change later
   linked_event_id  FK -> CalendarEvent | null
 
@@ -22,6 +22,10 @@ NutritionTarget                          # powers progress bars, same `Goal` pat
 "photo → macros" AI step (Phase 5) a drop-in: the AI just needs to populate the same shape a
 manual entry would, `source` flips to `"ai_capture"`, and every downstream view (daily totals,
 charts) already works without modification.
+
+A meal can contain up to 15 ordered photos so separate dishes captured over a long meal remain
+one log. AI analysis is explicit and evaluates the full persisted photo set as one meal,
+returning combined items and totals. Photos can also be added to or removed from past logs.
 
 ## 2. Daily View
 

@@ -1532,8 +1532,39 @@ input[type='color'] {
   align-items: center;
   gap: 8px;
 }
-.repeat-interval {
-  flex: 0 0 72px;
+/* Number inputs styled to match the Dropdown beside them (.dropdown-trigger). */
+.repeat-interval,
+.repeat-count {
+  flex: 0 0 66px;
+  width: 66px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: 500 14px var(--font-ui);
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.repeat-interval:focus,
+.repeat-count:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+/* Drop the native spinners — the app's inputs are flat. */
+.repeat-interval::-webkit-inner-spin-button,
+.repeat-interval::-webkit-outer-spin-button,
+.repeat-count::-webkit-inner-spin-button,
+.repeat-count::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .repeat-unit {
   flex: 1;
@@ -1622,9 +1653,6 @@ input[type='color'] {
 .repeat-segmented button.active {
   color: var(--text-primary);
   font-weight: 600;
-}
-.repeat-count {
-  flex: 0 0 72px;
 }
 .repeat-times {
   color: var(--text-secondary);

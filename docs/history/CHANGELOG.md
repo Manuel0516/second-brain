@@ -7,6 +7,16 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0156](0156-retire-completed-work-plans.md)                       | Retire completed work plans into permanent history                                             | 2026-07-22 | accepted                   |
+| [0155](0155-color-picker-selection-ring-gray-not-black.md)       | Fix: color picker selection ring gray (not near-black) on light swatches so it stays visible    | 2026-07-22 | accepted                   |
+| [0154](0154-multi-photo-analysis-calendar-sync-greenlet-fix.md)  | Fix: multi-photo analysis exposed calendar-sync MissingGreenlet after rollback                  | 2026-07-22 | accepted                   |
+| [0153](0153-meallog-modal-accent-tokens-in-portal.md)            | Fix: meal log modal primary buttons/focus rings colorless — accent tokens didn't reach the portal | 2026-07-22 | accepted                   |
+| [0152](0152-event-editor-close-cancelled-by-parent-rerender.md)  | Fix: event editor didn't auto-close after saving (parent re-render cancelled the close)         | 2026-07-22 | accepted                   |
+| [0151](0151-multi-photo-meal-log-visual-pass.md)                  | Multi-photo meal log: visual/UX pass (gallery, action hierarchy, mobile touch targets)         | 2026-07-22 | accepted                   |
+| [0150](0150-ics-subscription-color-circle.md)                     | ICS subscription favorite and custom circular color picker                                     | 2026-07-22 | accepted                   |
+| [0149](0149-recurring-event-links-scoped-by-occurrence-date.md)  | Fix: recurring event links show only the opened occurrence's food/fitness entry                 | 2026-07-22 | accepted                   |
+| [0148](0148-multi-photo-meal-logging.md)                          | Multi-photo meal logging with combined AI analysis                                              | 2026-07-22 | accepted                   |
+| [0147](0147-repeat-number-input-style-and-clear-ux.md)           | Repeat editor number inputs restyled to match the app + clearable while typing                  | 2026-07-22 | accepted                   |
 | [0146](0146-share-popover-ux-and-collaboration-reliability.md)   | Share popover UX rework, shared-calendar overrides, collaboration reliability fix               | 2026-07-09 | accepted                   |
 | [0145](0145-notes-pdf-export-and-account-sharing.md)             | Notes PDF export, account sharing, and live CRDT collaboration                                  | 2026-07-09 | accepted                   |
 | [0144](0144-notes-emoji-picker-stacking-context-fix.md)          | Fix: notes page emoji picker unusable — trapped stacking context                                    | 2026-07-08 | accepted                   |

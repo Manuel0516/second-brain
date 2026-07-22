@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 from datetime import UTC, date, datetime, timedelta
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_async_session
 from app.dependencies import get_current_user
-from app.models import File, FoodDailyExtras, Link, MealLog, User
+from app.models import File, FoodDailyExtras, Link, MealLog, MealLogPhoto, User
 from app.storage import download, remove
 
 router = APIRouter(prefix="/api/food", tags=["food"])
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api/food", tags=["food"])
 
 MealType = Literal["breakfast", "lunch", "dinner", "snack"]
 MealStatus = Literal["planned", "logged"]
+MAX_MEAL_PHOTOS = 15
 
 
 class MealLogCreate(BaseModel):
@@ -30,7 +32,7 @@ class MealLogCreate(BaseModel):
     status: MealStatus = "planned"
     scheduled_at: datetime | None = None
     notes: str | None = None
-    photo_file_id: str | None = None
+    photo_file_ids: list[str] = Field(default_factory=list, max_length=MAX_MEAL_PHOTOS)
     calories: float | None = Field(default=None, ge=0)
     protein_g: float | None = Field(default=None, ge=0)
     carbs_g: float | None = Field(default=None, ge=0)
@@ -48,7 +50,7 @@ class MealLogPatch(BaseModel):
     status: MealStatus | None = None
     scheduled_at: datetime | None = None
     notes: str | None = None
-    photo_file_id: str | None = None
+    photo_file_ids: list[str] = Field(default_factory=list, max_length=MAX_MEAL_PHOTOS)
     calories: float | None = Field(default=None, ge=0)
     protein_g: float | None = Field(default=None, ge=0)
     carbs_g: float | None = Field(default=None, ge=0)
@@ -70,7 +72,7 @@ class MealLogResponse(BaseModel):
     status: str
     scheduled_at: datetime | None
     logged_at: datetime | None
-    photo_file_id: str | None
+    photo_file_ids: list[str]
     calories: float | None
     protein_g: float | None
     carbs_g: float | None
@@ -82,10 +84,6 @@ class MealLogResponse(BaseModel):
     ai_items: list[dict[str, object]] | None
     created_at: datetime
     updated_at: datetime
-
-
-class AnalyzeRequest(BaseModel):
-    file_id: str
 
 
 class DaySummary(BaseModel):
@@ -132,7 +130,8 @@ class FoodDailyExtrasResponse(BaseModel):
 # ── AI prompt for /analyze ──────────────────────────────────────────────
 
 _ANALYZE_PROMPT = (
-    "Analyze this meal photo. Return JSON with: "
+    "Analyze all of these meal photos as one meal. Each image may show a different dish; "
+    "include every dish once and return combined totals. Return JSON with: "
     "calories (int), protein_g (float), carbs_g (float), fat_g (float), "
     "water_units (int, glasses of water visible), "
     "veg_units (int, vegetable portions), "
@@ -155,6 +154,92 @@ async def _owned_meal_log(log_id: str, user: User, session: AsyncSession) -> Mea
     return log
 
 
+async def _photo_ids_by_log(log_ids: list[str], session: AsyncSession) -> dict[str, list[str]]:
+    photos_by_log: dict[str, list[str]] = {log_id: [] for log_id in log_ids}
+    if not log_ids:
+        return photos_by_log
+    rows = await session.scalars(
+        select(MealLogPhoto)
+        .where(MealLogPhoto.meal_log_id.in_(log_ids))
+        .order_by(MealLogPhoto.meal_log_id, MealLogPhoto.position)
+    )
+    for row in rows:
+        photos_by_log[row.meal_log_id].append(row.file_id)
+    return photos_by_log
+
+
+def _meal_log_response(log: MealLog, photo_file_ids: list[str]) -> MealLogResponse:
+    values = {
+        name: getattr(log, name)
+        for name in MealLogResponse.model_fields
+        if name != "photo_file_ids"
+    }
+    return MealLogResponse(**values, photo_file_ids=photo_file_ids)
+
+
+async def _meal_log_responses(logs: list[MealLog], session: AsyncSession) -> list[MealLogResponse]:
+    photos_by_log = await _photo_ids_by_log([log.id for log in logs], session)
+    return [_meal_log_response(log, photos_by_log[log.id]) for log in logs]
+
+
+async def _replace_meal_photos(
+    log: MealLog,
+    photo_file_ids: list[str],
+    user: User,
+    session: AsyncSession,
+) -> None:
+    if len(set(photo_file_ids)) != len(photo_file_ids):
+        raise HTTPException(status_code=400, detail="Meal photos must be unique")
+
+    files = (
+        list(await session.scalars(select(File).where(File.id.in_(photo_file_ids))))
+        if photo_file_ids
+        else []
+    )
+    files_by_id = {file.id: file for file in files}
+    if any(
+        file_id not in files_by_id
+        or files_by_id[file_id].user_id != user.id
+        or not files_by_id[file_id].content_type.startswith("image/")
+        for file_id in photo_file_ids
+    ):
+        raise HTTPException(status_code=400, detail="Invalid meal photo")
+
+    assigned = (
+        list(
+            await session.scalars(
+                select(MealLogPhoto).where(MealLogPhoto.file_id.in_(photo_file_ids))
+            )
+        )
+        if photo_file_ids
+        else []
+    )
+    if any(photo.meal_log_id != log.id for photo in assigned):
+        raise HTTPException(status_code=400, detail="A photo is already attached to another meal")
+
+    existing = list(
+        await session.scalars(select(MealLogPhoto).where(MealLogPhoto.meal_log_id == log.id))
+    )
+    old_ids = {photo.file_id for photo in existing}
+    new_ids = set(photo_file_ids)
+
+    await session.execute(delete(MealLogPhoto).where(MealLogPhoto.meal_log_id == log.id))
+    await session.flush()
+    session.add_all(
+        MealLogPhoto(meal_log_id=log.id, file_id=file_id, position=position)
+        for position, file_id in enumerate(photo_file_ids)
+    )
+
+    for file_id in old_ids - new_ids:
+        try:
+            remove(user.id, file_id)
+        except Exception:
+            pass  # ponytail: orphan-sweep — MinIO may be down
+        file_row = await session.get(File, file_id)
+        if file_row is not None:
+            await session.delete(file_row)
+
+
 def _start_of_day(dt: datetime) -> datetime:
     """Return the start of the day (midnight UTC) for the given datetime."""
     return dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -169,7 +254,7 @@ async def list_meal_logs(
     to_date: datetime | None = Query(None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> list[MealLog]:
+) -> list[MealLogResponse]:
     """List meal logs. Defaults to the trailing 7 days."""
     query = select(MealLog).where(MealLog.user_id == user.id)
     if from_date is not None:
@@ -179,7 +264,7 @@ async def list_meal_logs(
     if to_date is not None:
         query = query.where(MealLog.date <= to_date)
     result = await session.scalars(query.order_by(MealLog.date.desc()))
-    return list(result)
+    return await _meal_log_responses(list(result), session)
 
 
 @router.post("/logs", response_model=MealLogResponse, status_code=status.HTTP_201_CREATED)
@@ -187,7 +272,7 @@ async def create_meal_log(
     data: MealLogCreate,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> MealLog:
+) -> MealLogResponse:
     """Create a meal log. If status is 'logged' and logged_at is null, set it to now."""
     logged_at = None
     if data.status == "logged":
@@ -202,7 +287,6 @@ async def create_meal_log(
         scheduled_at=data.scheduled_at,
         logged_at=logged_at,
         notes=data.notes,
-        photo_file_id=data.photo_file_id,
         calories=data.calories,
         protein_g=data.protein_g,
         carbs_g=data.carbs_g,
@@ -213,9 +297,11 @@ async def create_meal_log(
         ai_items=data.ai_items,
     )
     session.add(log)
+    await session.flush()
+    await _replace_meal_photos(log, data.photo_file_ids, user, session)
     await session.commit()
     await session.refresh(log)
-    return log
+    return _meal_log_response(log, data.photo_file_ids)
 
 
 @router.patch("/logs/{log_id}", response_model=MealLogResponse)
@@ -224,16 +310,21 @@ async def update_meal_log(
     data: MealLogPatch,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> MealLog:
+) -> MealLogResponse:
     """Update a meal log. If status is set to 'logged' and logged_at is null, set it to now."""
     log = await _owned_meal_log(log_id, user, session)
-    for key, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    photo_file_ids = changes.pop("photo_file_ids", None)
+    for key, value in changes.items():
         setattr(log, key, value)
+    if photo_file_ids is not None:
+        await _replace_meal_photos(log, photo_file_ids, user, session)
     if log.status == "logged" and log.logged_at is None:
         log.logged_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(log)
-    return log
+    photos_by_log = await _photo_ids_by_log([log.id], session)
+    return _meal_log_response(log, photos_by_log[log.id])
 
 
 @router.delete("/logs/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -242,9 +333,10 @@ async def delete_meal_log(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> None:
-    """Delete a meal log, its photo file, and any Link rows pointing to it."""
+    """Delete a meal log, its photos, and any Link rows pointing to it."""
     log = await _owned_meal_log(log_id, user, session)
-    photo_file_id = log.photo_file_id
+    photos_by_log = await _photo_ids_by_log([log.id], session)
+    photo_file_ids = photos_by_log[log.id]
 
     # Delete Link rows where target_type="meal_log" and target_id=log_id
     await session.execute(
@@ -254,12 +346,11 @@ async def delete_meal_log(
         )
     )
 
-    # Delete the log before the file it references — MealLog.photo_file_id has
-    # no ORM relationship() to File, so SQLAlchemy won't reorder these deletes
-    # itself, and Postgres rejects deleting a still-referenced file row.
+    await session.execute(delete(MealLogPhoto).where(MealLogPhoto.meal_log_id == log.id))
     await session.delete(log)
+    await session.flush()
 
-    if photo_file_id is not None:
+    for photo_file_id in photo_file_ids:
         try:
             remove(user.id, photo_file_id)
         except Exception:
@@ -277,11 +368,10 @@ async def delete_meal_log(
 @router.post("/logs/{log_id}/analyze", response_model=MealLogResponse)
 async def analyze_meal_photo(
     log_id: str,
-    body: AnalyzeRequest,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> MealLog:
-    """Analyze a meal photo via OpenRouter vision model and populate the meal log.
+) -> MealLogResponse:
+    """Analyze all meal photos via OpenRouter vision and populate the meal log.
 
     Fetches the image from MinIO, sends it to OpenRouter with a structured
     prompt, parses the JSON response, and writes nutrition data onto the log.
@@ -296,14 +386,26 @@ async def analyze_meal_photo(
 
     log = await _owned_meal_log(log_id, user, session)
 
-    # Fetch image bytes from MinIO
-    try:
-        image_bytes, content_type = download(user.id, body.file_id)
-    except Exception as err:
-        raise HTTPException(status_code=404, detail="File not found in storage") from err
+    photos_by_log = await _photo_ids_by_log([log.id], session)
+    photo_file_ids = photos_by_log[log.id]
+    if not photo_file_ids:
+        raise HTTPException(status_code=400, detail="Add at least one photo before analysis")
 
-    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    data_uri = f"data:{content_type};base64,{image_b64}"
+    image_parts: list[dict[str, object]] = []
+    try:
+        for file_id in photo_file_ids:
+            image_bytes, content_type = await asyncio.to_thread(download, user.id, file_id)
+            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+            image_parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{content_type};base64,{image_b64}"},
+                }
+            )
+    except Exception as err:
+        raise HTTPException(
+            status_code=404, detail="A meal photo was not found in storage"
+        ) from err
 
     # Call OpenRouter
     try:
@@ -319,13 +421,7 @@ async def analyze_meal_photo(
                     "messages": [
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "text", "text": _ANALYZE_PROMPT},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": data_uri},
-                                },
-                            ],
+                            "content": [{"type": "text", "text": _ANALYZE_PROMPT}, *image_parts],
                         }
                     ],
                 },
@@ -365,13 +461,13 @@ async def analyze_meal_photo(
     log.veg_units = parsed.get("veg_units", 0)
     log.fruit_units = parsed.get("fruit_units", 0)
     log.ai_items = parsed.get("items")
-    log.photo_file_id = body.file_id
     log.status = "logged"
-    log.logged_at = datetime.now(UTC)
+    if log.logged_at is None:
+        log.logged_at = datetime.now(UTC)
 
     await session.commit()
     await session.refresh(log)
-    return log
+    return _meal_log_response(log, photo_file_ids)
 
 
 # ── Summary ─────────────────────────────────────────────────────────────
@@ -400,6 +496,9 @@ async def food_summary(
             .order_by(MealLog.date.desc())
         )
     ).all()
+    meal_responses = {
+        response.id: response for response in await _meal_log_responses(list(logs), session)
+    }
 
     # Fetch all extras in range
     extras = (
@@ -459,7 +558,7 @@ async def food_summary(
                 extras_fruit_units=day_extras.fruit_units if day_extras else 0,
                 meals_planned=planned,
                 meals_logged=logged,
-                meals=[MealLogResponse.model_validate(ml) for ml in day_logs],
+                meals=[meal_responses[ml.id] for ml in day_logs],
             )
         )
         current += timedelta(days=1)
@@ -517,7 +616,7 @@ async def list_unlinked_meals(
     limit: int = Query(default=10, ge=1, le=50),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
-) -> list[MealLog]:
+) -> list[MealLogResponse]:
     """Return logged meals that are NOT linked to any event.
 
     Optional text query filters by meal_type or notes (case-insensitive).
@@ -546,4 +645,4 @@ async def list_unlinked_meals(
     result = await session.scalars(
         query.order_by(MealLog.logged_at.desc(), MealLog.date.desc()).limit(limit)
     )
-    return list(result)
+    return await _meal_log_responses(list(result), session)

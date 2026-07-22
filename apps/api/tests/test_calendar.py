@@ -544,3 +544,30 @@ async def test_following_delete_truncates_series(
     assert deleted.status_code == 204
     events = await _list_events(authenticated_client, 60)
     assert len(events) == 2  # weeks 0 and 1 remain, week 2 onward removed
+
+
+async def test_event_links_scoped_to_occurrence_date(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    series = await _create_series(
+        authenticated_client,
+        calendar.id,
+        rrule="DAILY",
+        recurrence_count=3,
+        connections={"food": {"meal_type": "breakfast"}},
+    )
+    event_id = series["id"]
+
+    # Every occurrence's meal is linked to the same event id.
+    unscoped = await authenticated_client.get(f"/api/events/{event_id}/links")
+    assert unscoped.status_code == 200
+    assert sum(x["target_type"] == "meal_log" for x in unscoped.json()) == 3
+
+    # `on` narrows the Linked panel to just that day's meal.
+    day = _next_monday().date().isoformat()
+    scoped = await authenticated_client.get(f"/api/events/{event_id}/links", params={"on": day})
+    assert scoped.status_code == 200
+    meals = [x for x in scoped.json() if x["target_type"] == "meal_log"]
+    assert len(meals) == 1
+    assert day in meals[0]["title"]

@@ -19,9 +19,9 @@ tab, History tab + past-session editor, live-session per-set notes +
 feeling dots) are shipped. 
 
 **Food superseded**: the food portion of this plan (Phases G1/G2) has been
-replaced by `docs/work/plans/FOOD_PAGE_PLAN.md` (AI photo capture, meal_logs,
-calendar hooks). The old G1 implementation in `food.py` has been reverted to
-a scaffold. See the new plan for the current food scope and ordering.
+completed as the dedicated Food module (AI photo capture, meal logs, and
+calendar hooks), recorded in histories 0116–0127. The retired Food work plan
+is indexed by history 0156.
 
 Revised 2026-07: Food is promoted to **its own
 designed page** (Phase G, below) instead of a bolt-on view, and **calendar

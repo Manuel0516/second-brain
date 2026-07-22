@@ -173,20 +173,29 @@ async def sync_due_calendars() -> None:
     interval = get_settings().calendar_sync_interval_minutes
     cutoff = datetime.now(UTC) - timedelta(minutes=interval)
     async with async_session_factory() as session:
-        due = await session.scalars(
-            select(Calendar).where(
+        rows = await session.execute(
+            select(Calendar.id, Calendar.source)
+            .where(
                 Calendar.source.in_(["google", "ics"]),
                 or_(Calendar.last_synced_at.is_(None), Calendar.last_synced_at < cutoff),
             )
+            .order_by(Calendar.id)
         )
-        for cal in due:
+        due = list(rows.tuples())
+
+    # ponytail: isolate transactions so one rollback cannot expire the remaining calendars.
+    for calendar_id, source in due:
+        async with async_session_factory() as session:
+            cal = await session.get(Calendar, calendar_id)
+            if cal is None:
+                continue
             try:
-                if cal.source == "google":
+                if source == "google":
                     await google_sync.sync_calendar(session, cal)
                 else:
                     await ics_sync.sync_calendar(session, cal)
             except (google_sync.GoogleSyncError, ics_sync.IcsSyncError) as error:
-                logger.warning("Calendar sync failed for %s: %s", cal.id, error)
+                logger.warning("Calendar sync failed for %s: %s", calendar_id, error)
                 await session.rollback()
 
 

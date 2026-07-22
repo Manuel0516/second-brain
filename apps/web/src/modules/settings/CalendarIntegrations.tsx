@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
+import { useSettings } from '../../context/SettingsContext'
 import { apiCall, apiErrorMessage } from '../../lib/api'
+import { onColor } from '../calendar/colors'
 import type { CalendarData } from '../calendar/types'
 
 interface GoogleStatus {
@@ -91,6 +93,11 @@ interface Props {
 }
 
 export function CalendarIntegrations({ calendars, onChanged }: Props) {
+  const { settings } = useSettings()
+  const colorPresets =
+    settings.favorite_colors.length > 0
+      ? settings.favorite_colors
+      : ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F']
   const [, setSearchParams] = useSearchParams()
   // Read the OAuth redirect result (?google=connected|error) exactly once.
   const [oauth] = useState(() => {
@@ -526,7 +533,7 @@ export function CalendarIntegrations({ calendars, onChanged }: Props) {
               display: 'grid',
               gap: 12,
               gridTemplateColumns: '1fr auto',
-              alignItems: 'end',
+              alignItems: 'start',
             }}
           >
             <div
@@ -549,21 +556,66 @@ export function CalendarIntegrations({ calendars, onChanged }: Props) {
               className="settings-field-row"
               style={{ display: 'grid', gap: 6 }}
             >
-              <label htmlFor="ics-feed-color" style={labelStyle}>
-                Color
-              </label>
-              <input
-                id="ics-feed-color"
-                type="color"
-                value={icsColor}
-                onChange={(e) => setIcsColor(e.target.value)}
-                style={{
-                  ...inputStyle,
-                  width: 52,
-                  padding: 4,
-                  cursor: 'pointer',
-                }}
-              />
+              <span style={labelStyle}>Color</span>
+              <div className="color-swatches" style={{ minHeight: 38 }}>
+                {colorPresets.map((preset) => {
+                  const active = icsColor.toLowerCase() === preset.toLowerCase()
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`color-swatch ${active ? 'active' : ''}`}
+                      aria-label={`Use color ${preset}`}
+                      aria-pressed={active}
+                      style={
+                        {
+                          background: preset,
+                          '--cc-on': onColor(preset),
+                        } as React.CSSProperties
+                      }
+                      onClick={() => setIcsColor(preset)}
+                    />
+                  )
+                })}
+                <label
+                  className={`color-custom ${
+                    colorPresets.some(
+                      (preset) =>
+                        preset.toLowerCase() === icsColor.toLowerCase(),
+                    )
+                      ? ''
+                      : 'active'
+                  }`}
+                  title="Custom color"
+                  style={
+                    {
+                      background: icsColor,
+                      '--cc-on': onColor(icsColor),
+                    } as React.CSSProperties
+                  }
+                >
+                  <input
+                    id="ics-feed-color"
+                    type="color"
+                    aria-label="Custom calendar color"
+                    value={icsColor}
+                    onChange={(e) => setIcsColor(e.target.value)}
+                  />
+                  <svg
+                    className="color-custom-icon"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M14.5 3.5a2.1 2.1 0 0 1 3 3l-7.8 7.8-3.9.9.9-3.9z" />
+                    <path d="M12.5 5.5l2 2" />
+                  </svg>
+                </label>
+              </div>
             </div>
           </div>
           <div>

@@ -598,9 +598,6 @@ class MealLog(Base):
     )  # "planned"|"logged"
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     logged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    photo_file_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("files.id"), nullable=True
-    )
     calories: Mapped[float | None] = mapped_column(Float, nullable=True)
     protein_g: Mapped[float | None] = mapped_column(Float, nullable=True)
     carbs_g: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -621,6 +618,24 @@ class MealLog(Base):
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
+
+
+class MealLogPhoto(Base):
+    """An ordered image attached to one meal log."""
+
+    __tablename__ = "meal_log_photos"
+    __table_args__ = (
+        UniqueConstraint("file_id", name="uq_meal_log_photos_file"),
+        UniqueConstraint("meal_log_id", "position", name="uq_meal_log_photos_position"),
+    )
+
+    meal_log_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("meal_logs.id", ondelete="CASCADE"), primary_key=True
+    )
+    file_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("files.id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class FoodDailyExtras(Base):

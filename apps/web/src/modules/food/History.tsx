@@ -129,12 +129,19 @@ export function History({
               >
                 {/* Photo thumbnail */}
                 <div className="food-history-photo">
-                  {meal.photo_file_id ? (
-                    <img
-                      src={`/api/files/${meal.photo_file_id}`}
-                      alt="Meal"
-                      className="food-history-thumb"
-                    />
+                  {meal.photo_file_ids.length > 0 ? (
+                    <>
+                      <img
+                        src={`/api/files/${meal.photo_file_ids[0]}`}
+                        alt="Meal"
+                        className="food-history-thumb"
+                      />
+                      {meal.photo_file_ids.length > 1 && (
+                        <span className="food-history-photo-count">
+                          +{meal.photo_file_ids.length - 1}
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <div className="food-history-no-photo">
                       <svg
@@ -249,7 +256,7 @@ export function History({
       <ConfirmDialog
         open={deleteTarget !== null}
         message="Delete this meal log?"
-        detail="This cannot be undone. The photo will also be deleted."
+        detail="This cannot be undone. All attached photos will also be deleted."
         confirmLabel="Delete"
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

@@ -11,10 +11,10 @@ Last updated: 2026-07-06
 - Backend API: CRUD for meal logs, AI photo analysis via OpenRouter (vision model), summary aggregates, daily extras upsert, calendar hook (event → planned meal).
 - Frontend: dedicated `/food` page with shell mirroring Fitness, sidebar with 7 cards (week bars, calorie ring, macros, water, veg, fruit, body weight), Overview/Stats/History tabs, MealLogModal with AI photo capture flow, FoodSettings page.
 - Calendar event editor: food connection card simplified to Meal + Notes, linked-meal card on edit.
-- All 4 phases of `docs/work/plans/FOOD_PAGE_PLAN.md` complete.
+- All phases are complete and archived in history 0116–0127; the completed work plan was retired in 0156.
 
 **Notes + component architecture plans — CLOSED (2026-07-04, history 0047–0048)**
-- `NOTES_MODULE_PLAN.md` and `COMPONENT_ARCHITECTURE_PLAN.md` both marked done.
+- Both completed plans are archived by their implementation history and were retired in 0156.
 - Cleaned up 13 stray duplicate `" 2"` files left by an editor/sync conflict
   (0047). Sidebar page-tree expand/collapse and collapsible-heading expand now
   animate instead of snapping (0048). `SaveIndicator`/`SearchField`/
@@ -32,7 +32,7 @@ Last updated: 2026-07-06
 - `/settings/notes`: bullet (disc/circle/square/dash) and numbered (decimal/
   alpha/roman) marker schemes with live previews; persisted via Settings API
   (migration 013); applied as pure CSS via editor-root data attributes.
-- `NOTES_MODULE_PLAN.md` is now fully complete.
+- The Notes plan is fully complete and its retired work-plan context is indexed in 0156.
 
 **Notes media & layout — DONE, reworked, polished (2026-07-03, history 0030–0033)**
 - Backend file service: `minio` dep, `files` table (migration 012), `storage.py`,
@@ -94,4 +94,4 @@ See `FIXES.md` for the bug queue.
 
 ## Plans
 
-See `plans/` for upcoming feature implementation plans.
+See `plans/` for active or upcoming feature implementation plans. Completed plans are indexed in history 0156.

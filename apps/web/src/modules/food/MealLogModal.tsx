@@ -17,13 +17,9 @@ interface MealLogModalProps {
   defaultMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 }
 
-type ModalState =
-  | 'empty'
-  | 'camera'
-  | 'uploading'
-  | 'analyzing'
-  | 'result'
-  | 'error'
+type ModalState = 'empty' | 'camera' | 'result' | 'error'
+
+const MAX_MEAL_PHOTOS = 15
 
 interface EditableFields {
   calories: string
@@ -64,13 +60,8 @@ export function MealLogModal({
   const streamRef = useRef<MediaStream | null>(null)
   const [state, setState] = useState<ModalState>('empty')
   const [logId, setLogId] = useState<string | null>(plannedMeal?.id ?? null)
-  const [photoFileId, setPhotoFileId] = useState<string | null>(
-    plannedMeal?.photo_file_id ?? null,
-  )
-  const [photoUrl, setPhotoUrl] = useState<string | null>(
-    plannedMeal?.photo_file_id
-      ? `/api/files/${plannedMeal.photo_file_id}`
-      : null,
+  const [photoFileIds, setPhotoFileIds] = useState<string[]>(
+    plannedMeal?.photo_file_ids ?? [],
   )
   const [fields, setFields] = useState<EditableFields>(emptyFields(plannedMeal))
   const [aiItems, setAiItems] = useState<Record<string, unknown>[] | null>(
@@ -88,18 +79,16 @@ export function MealLogModal({
     plannedMeal?.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   )
   const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
 
   // Reset state when modal opens with a planned meal or when modal closes
   function applyReset() {
     if (open) {
       if (plannedMeal) {
         setLogId(plannedMeal.id)
-        setPhotoFileId(plannedMeal.photo_file_id)
-        setPhotoUrl(
-          plannedMeal.photo_file_id
-            ? `/api/files/${plannedMeal.photo_file_id}`
-            : null,
-        )
+        setPhotoFileIds(plannedMeal.photo_file_ids)
         setFields(emptyFields(plannedMeal))
         setAiItems(plannedMeal.ai_items ?? null)
         setMealTypeSelection(
@@ -107,13 +96,12 @@ export function MealLogModal({
             defaultMealType ??
             'breakfast',
         )
-        setState(plannedMeal.photo_file_id ? 'result' : 'empty')
+        setState('result')
         setErrorMsg(null)
         setMealDate(plannedMeal.date.slice(0, 10))
       } else {
         setLogId(null)
-        setPhotoFileId(null)
-        setPhotoUrl(null)
+        setPhotoFileIds([])
         setFields(emptyFields(null))
         setAiItems(null)
         setMealTypeSelection(defaultMealType ?? 'breakfast')
@@ -121,6 +109,9 @@ export function MealLogModal({
         setErrorMsg(null)
         setMealDate(new Date().toISOString().slice(0, 10))
       }
+      setUploading(false)
+      setUploadProgress('')
+      setAnalyzing(false)
     }
   }
 
@@ -131,90 +122,63 @@ export function MealLogModal({
   }, [open, plannedMeal, defaultMealType])
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ''
-    if (!file) return
-    await handleFile(file)
+    await handleFiles(files)
   }
 
-  async function handleFile(file: File) {
-    setState('uploading')
+  async function handleFiles(files: File[]) {
+    if (uploading || analyzing) return
+    const images = files.filter((file) => file.type.startsWith('image/'))
+    if (images.length === 0) return
+    if (photoFileIds.length + images.length > MAX_MEAL_PHOTOS) {
+      setState(photoFileIds.length > 0 || logId ? 'error' : 'empty')
+      setErrorMsg(`A meal can have up to ${MAX_MEAL_PHOTOS} photos`)
+      return
+    }
+
+    setState('result')
+    setUploading(true)
     setErrorMsg(null)
+    let nextPhotoIds = photoFileIds
 
     try {
-      const uploaded = await uploadFile(file)
-      setPhotoFileId(uploaded.id)
-      setPhotoUrl(`/api/files/${uploaded.id}`)
-
-      setState('analyzing')
-
-      // Create log if not already linked to a planned meal
-      let currentLogId = logId
-      if (!currentLogId) {
-        const created = await createMealLog({
-          date: mealDate,
-          meal_type: mealTypeSelection,
-          status: 'planned',
-        })
-        currentLogId = created.id
-        setLogId(currentLogId)
-      }
-
-      try {
-        const analyzed = await analyzeMealLog(currentLogId, uploaded.id)
-        setFields({
-          calories: analyzed.calories != null ? String(analyzed.calories) : '',
-          protein_g:
-            analyzed.protein_g != null ? String(analyzed.protein_g) : '',
-          carbs_g: analyzed.carbs_g != null ? String(analyzed.carbs_g) : '',
-          fat_g: analyzed.fat_g != null ? String(analyzed.fat_g) : '',
-          water_units:
-            analyzed.water_units != null ? String(analyzed.water_units) : '0',
-          veg_units:
-            analyzed.veg_units != null ? String(analyzed.veg_units) : '0',
-          fruit_units:
-            analyzed.fruit_units != null ? String(analyzed.fruit_units) : '0',
-          notes: analyzed.notes ?? '',
-        })
-        setAiItems(analyzed.ai_items ?? null)
-        setState('result')
-      } catch (analyzeErr) {
-        // Backend guarantees the meal log is NOT modified on analysis failure.
-        // Stay in result-like state but show error and let user fill manually.
-        setState('error')
-        setErrorMsg(
-          analyzeErr instanceof Error
-            ? analyzeErr.message
-            : 'Could not analyze photo',
-        )
+      for (let index = 0; index < images.length; index += 1) {
+        setUploadProgress(`Uploading ${index + 1} of ${images.length}…`)
+        const uploaded = await uploadFile(images[index])
+        nextPhotoIds = [...nextPhotoIds, uploaded.id]
+        setPhotoFileIds(nextPhotoIds)
       }
     } catch (uploadErr) {
       setState('error')
       setErrorMsg(
         uploadErr instanceof Error
           ? uploadErr.message
-          : 'Failed to upload photo',
+          : 'Failed to upload photos',
       )
+    } finally {
+      setUploading(false)
+      setUploadProgress('')
     }
   }
 
   // Paste an image from the clipboard directly into the capture area
   useEffect(() => {
-    if (!open || state !== 'empty') return
+    if (!open || state === 'camera') return
     function onPaste(e: ClipboardEvent) {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
-        i.type.startsWith('image/'),
-      )
-      const file = item?.getAsFile()
-      if (file) {
+      const files = Array.from(e.clipboardData?.items ?? [])
+        .filter((item) => item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null)
+      if (files.length > 0) {
         e.preventDefault()
-        void handleFile(file)
+        void handleFiles(files)
       }
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, state])
+  }, [open, state, photoFileIds, logId])
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault()
@@ -228,8 +192,7 @@ export function MealLogModal({
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) void handleFile(file)
+    void handleFiles(Array.from(e.dataTransfer.files ?? []))
   }
 
   function stopCamera() {
@@ -256,7 +219,7 @@ export function MealLogModal({
 
   function handleCancelCamera() {
     stopCamera()
-    setState('empty')
+    setState(photoFileIds.length > 0 || logId ? 'result' : 'empty')
   }
 
   async function handleCapturePhoto() {
@@ -269,12 +232,12 @@ export function MealLogModal({
     stopCamera()
     canvas.toBlob(async (blob) => {
       if (!blob) {
-        setState('empty')
+        setState(photoFileIds.length > 0 || logId ? 'result' : 'empty')
         return
       }
-      await handleFile(
+      await handleFiles([
         new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' }),
-      )
+      ])
     }, 'image/jpeg')
   }
 
@@ -308,8 +271,6 @@ export function MealLogModal({
         return
       }
     }
-    setPhotoFileId(null)
-    setPhotoUrl(null)
     setFields(emptyFields(plannedMeal))
     setAiItems(null)
     setState('result')
@@ -319,16 +280,57 @@ export function MealLogModal({
     setFields((prev) => ({ ...prev, [field]: value }))
   }
 
+  async function ensureLog(): Promise<string> {
+    if (logId) return logId
+    const created = await createMealLog({
+      date: mealDate,
+      meal_type: mealTypeSelection,
+      status: 'planned',
+      photo_file_ids: photoFileIds,
+    })
+    setLogId(created.id)
+    return created.id
+  }
+
+  async function handleAnalyze() {
+    if (photoFileIds.length === 0 || uploading) return
+    setAnalyzing(true)
+    setErrorMsg(null)
+    try {
+      const currentLogId = await ensureLog()
+      await updateMealLog(currentLogId, { photo_file_ids: photoFileIds })
+      const analyzed = await analyzeMealLog(currentLogId)
+      setFields(emptyFields(analyzed))
+      setAiItems(analyzed.ai_items ?? null)
+      setState('result')
+    } catch (analyzeErr) {
+      setState('error')
+      setErrorMsg(
+        analyzeErr instanceof Error
+          ? analyzeErr.message
+          : 'Could not analyze photos',
+      )
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  function handleRemovePhoto(fileId: string) {
+    setPhotoFileIds((current) => current.filter((id) => id !== fileId))
+    setErrorMsg(null)
+    setState('result')
+  }
+
   async function handleSave() {
-    if (!logId) return
     setSaving(true)
     setErrorMsg(null)
     try {
-      await updateMealLog(logId, {
+      const currentLogId = await ensureLog()
+      await updateMealLog(currentLogId, {
         date: mealDate,
         meal_type: mealTypeSelection,
         status: 'logged',
-        photo_file_id: photoFileId,
+        photo_file_ids: photoFileIds,
         calories: fields.calories ? parseFloat(fields.calories) : null,
         protein_g: fields.protein_g ? parseFloat(fields.protein_g) : null,
         carbs_g: fields.carbs_g ? parseFloat(fields.carbs_g) : null,
@@ -342,6 +344,7 @@ export function MealLogModal({
       onSaved()
       onClose()
     } catch (saveErr) {
+      setState('error')
       setErrorMsg(
         saveErr instanceof Error ? saveErr.message : 'Failed to save meal log',
       )
@@ -351,7 +354,7 @@ export function MealLogModal({
   }
 
   function handleTryManual() {
-    // Fall back to manual entry — keep the logId and photo, let user fill fields
+    // Fall back to manual entry — keep the log and photos, let the user fill fields.
     setState('result')
   }
 
@@ -378,6 +381,22 @@ export function MealLogModal({
         aria-modal="true"
         aria-label="Log meal"
       >
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileSelected}
+          hidden
+        />
+        <input
+          ref={libraryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileSelected}
+          hidden
+        />
         {/* Header */}
         <div className="food-meallog-header">
           <div>
@@ -401,21 +420,6 @@ export function MealLogModal({
         {/* Empty state */}
         {state === 'empty' && (
           <div className="food-meallog-capture">
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFileSelected}
-              style={{ display: 'none' }}
-            />
-            <input
-              ref={libraryInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelected}
-              style={{ display: 'none' }}
-            />
             <div
               className={`food-meallog-capture-area${isDragging ? ' dragging' : ''}`}
               onDragOver={handleDragOver}
@@ -436,7 +440,7 @@ export function MealLogModal({
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="M21 15l-5-5L5 21" />
               </svg>
-              <span>Drag & drop or paste a photo</span>
+              <span>Drag & drop or paste photos</span>
               <span className="food-meallog-capture-hint">
                 or choose an option below
               </span>
@@ -453,7 +457,7 @@ export function MealLogModal({
                   className="food-secondary-button"
                   onClick={() => libraryInputRef.current?.click()}
                 >
-                  Upload photo
+                  Upload photos
                 </button>
               </div>
             </div>
@@ -464,6 +468,11 @@ export function MealLogModal({
             >
               Log manually
             </button>
+            {errorMsg && (
+              <p className="food-meallog-photo-status" role="alert">
+                {errorMsg}
+              </p>
+            )}
           </div>
         )}
 
@@ -496,38 +505,95 @@ export function MealLogModal({
           </div>
         )}
 
-        {/* Uploading */}
-        {state === 'uploading' && (
-          <div className="food-meallog-status">
-            <div className="food-meallog-spinner" />
-            <p>Uploading photo…</p>
-          </div>
-        )}
-
-        {/* Analyzing */}
-        {state === 'analyzing' && (
-          <div className="food-meallog-status">
-            <div className="food-meallog-spinner" />
-            <p>Analyzing with AI…</p>
-          </div>
-        )}
-
         {/* Result / Error (editable form) */}
         {isInModal && (
-          <div
-            className="food-meallog-result"
-            style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
-          >
-            {/* Photo thumbnail */}
-            {photoUrl && (
-              <img src={photoUrl} alt="Meal" className="food-meallog-photo" />
-            )}
+          <div className="food-meallog-result">
+            <div
+              className={`food-meallog-photos${isDragging ? ' dragging' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <div className="food-meallog-label">
+                Photos · {photoFileIds.length}/{MAX_MEAL_PHOTOS}
+              </div>
+              {(photoFileIds.length > 0 || uploading) && (
+                <div className="food-meallog-photo-list">
+                  {photoFileIds.map((fileId, index) => (
+                    <div className="food-meallog-photo-item" key={fileId}>
+                      <img
+                        src={`/api/files/${fileId}`}
+                        alt={`Meal dish ${index + 1}`}
+                        className="food-meallog-photo"
+                      />
+                      <span className="food-meallog-photo-order">
+                        {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        className="food-meallog-photo-remove"
+                        onClick={() => handleRemovePhoto(fileId)}
+                        aria-label={`Remove photo ${index + 1}`}
+                        disabled={uploading || analyzing}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {uploading && (
+                    <div
+                      className="food-meallog-photo-skeleton"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+              )}
+              <div className="food-meallog-photo-actions">
+                <button
+                  type="button"
+                  className="food-secondary-button"
+                  onClick={handleTakePhoto}
+                  disabled={
+                    uploading ||
+                    analyzing ||
+                    photoFileIds.length >= MAX_MEAL_PHOTOS
+                  }
+                >
+                  Take another photo
+                </button>
+                <button
+                  type="button"
+                  className="food-secondary-button"
+                  onClick={() => libraryInputRef.current?.click()}
+                  disabled={
+                    uploading ||
+                    analyzing ||
+                    photoFileIds.length >= MAX_MEAL_PHOTOS
+                  }
+                >
+                  Add photos
+                </button>
+                <button
+                  type="button"
+                  className="food-primary-button"
+                  onClick={handleAnalyze}
+                  disabled={uploading || analyzing || photoFileIds.length === 0}
+                >
+                  {analyzing ? 'Analyzing…' : 'Analyze photos'}
+                </button>
+              </div>
+              {uploading && (
+                <p className="food-meallog-photo-status" role="status">
+                  {uploadProgress}
+                </p>
+              )}
+            </div>
 
             {/* Error banner */}
             {state === 'error' && (
               <div className="food-meallog-error-banner">
                 <p>
-                  Could not analyze photo
+                  Could not process photos
                   {errorMsg ? `: ${errorMsg}` : ''}
                 </p>
                 <button
@@ -713,10 +779,9 @@ export function MealLogModal({
             {/* Save button */}
             <button
               type="button"
-              className="food-primary-button"
-              disabled={saving}
+              className="food-primary-button food-meallog-save"
+              disabled={saving || uploading || analyzing}
               onClick={handleSave}
-              style={{ width: '100%', height: '42px' }}
             >
               {saving ? 'Saving…' : plannedMeal ? 'Log meal' : 'Save meal'}
             </button>

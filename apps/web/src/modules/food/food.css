@@ -367,6 +367,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Portaled to <body>, outside .food-page — re-declare the food accent tokens so
+     primary buttons, input focus rings, and active pills render in the app accent. */
+  --food-accent: var(--accent);
+  --food-accent-tint: color-mix(in srgb, var(--accent) 14%, transparent);
+  --food-accent-border: color-mix(in srgb, var(--accent) 28%, transparent);
+  --food-accent-tint-deep: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .food-meallog-modal {
@@ -483,47 +489,139 @@
   background: var(--bg-tertiary);
 }
 
-/* Status states (uploading / analyzing) */
-.food-meallog-status {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 40px 20px;
-}
-
-.food-meallog-status p {
-  font: 500 13px var(--font-ui);
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.food-meallog-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid rgba(255, 240, 200, 0.1);
-  border-top-color: var(--food-accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Result form */
 .food-meallog-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   animation: fadeUp 0.3s ease both;
 }
 
 .food-meallog-photo {
   width: 100%;
-  max-height: 220px;
+  aspect-ratio: 1;
   object-fit: cover;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
+  transition: border-color 0.14s ease;
+}
+
+.food-meallog-photos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  padding: 10px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+/* Flex gap owns the vertical rhythm inside the well */
+.food-meallog-photos .food-meallog-label {
+  margin-bottom: 0;
+}
+
+.food-meallog-photos.dragging {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.food-meallog-photo-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.food-meallog-photo-item {
+  position: relative;
+}
+
+.food-meallog-photo-item:hover .food-meallog-photo {
+  border-color: var(--border-strong);
+}
+
+/* Order badge (modal, bottom-left) + history extra-photo count (bottom-right) */
+.food-meallog-photo-order,
+.food-history-photo-count {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  font: 600 10px var(--font-mono);
+  line-height: 1.6;
+}
+
+.food-meallog-photo-order {
+  left: 5px;
+  bottom: 5px;
+}
+
+.food-history-photo-count {
+  right: 4px;
+  bottom: 4px;
+}
+
+.food-meallog-photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: #d9573f;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    transform 0.14s ease;
+}
+
+.food-meallog-photo-remove:hover:not(:disabled) {
+  background: rgba(217, 87, 63, 0.12);
+}
+
+.food-meallog-photo-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* On-brand loading tile while photos upload — keeps existing photos visible */
+.food-meallog-photo-skeleton {
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  animation: skeletonPulse 1.2s ease-in-out infinite;
+}
+
+/* Add-controls grouped left, Analyze pushed right as the primary action */
+.food-meallog-photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.food-meallog-photo-actions .food-primary-button {
+  margin-left: auto;
+}
+
+.food-meallog-photo-status {
+  margin: 0;
+  color: var(--text-tertiary);
+  font: 400 11px var(--font-mono);
+}
+
+.food-meallog-save {
+  width: 100%;
+  min-height: 42px;
 }
 
 .food-meallog-label {
@@ -919,6 +1017,7 @@
 }
 
 .food-history-photo {
+  position: relative;
   width: 44px;
   height: 44px;
   flex-shrink: 0;
@@ -1055,6 +1154,29 @@
     grid-template-columns: 1fr;
   }
 
+  /* Narrow layouts: two thumbnails per row */
+  .food-meallog-photo-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 44px touch target for the remove control */
+  .food-meallog-photo-remove {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Add-controls split the row; Analyze spans full width beneath them */
+  .food-meallog-photo-actions .food-secondary-button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .food-meallog-photo-actions .food-primary-button {
+    margin-left: 0;
+    flex-basis: 100%;
+    min-height: 44px;
+  }
+
   .food-planned-card {
     flex-direction: column;
     align-items: stretch;
@@ -1085,6 +1207,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .food-meallog-modal,
+  .food-meallog-photo-skeleton,
   .food-planned-card,
   .food-stats-card,
   .food-history-row,

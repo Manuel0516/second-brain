@@ -1,17 +1,4 @@
 {
-  "enabledPlugins": {
-    "ponytail@ponytail": true,
-    "context-mode@context-mode": true
-  },
-  "extraKnownMarketplaces": {
-    "ponytail": {
-      "source": {
-        "source": "github",
-        "repo": "DietrichGebert/ponytail"
-      }
-    }
-  },
-  "enabledMcpjsonServers": ["context-mode"],
   "permissions": {
     "deny": [
       "Read(./.env)",
@@ -32,5 +19,21 @@
       "Read(./**/*.sqlite*)",
       "Read(./**/*.db)"
     ]
+  },
+  "enabledMcpjsonServers": [
+    "context-mode"
+  ],
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "context-mode@context-mode": true,
+    "frontend-design@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    }
   }
 }

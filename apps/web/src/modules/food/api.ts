@@ -11,7 +11,7 @@ export interface MealLog {
   status: string
   scheduled_at: string | null
   logged_at: string | null
-  photo_file_id: string | null
+  photo_file_ids: string[]
   calories: number | null
   protein_g: number | null
   carbs_g: number | null
@@ -88,7 +88,7 @@ export async function createMealLog(data: {
   status?: string
   scheduled_at?: string | null
   notes?: string | null
-  photo_file_id?: string | null
+  photo_file_ids?: string[]
   calories?: number | null
   protein_g?: number | null
   carbs_g?: number | null
@@ -119,7 +119,7 @@ export async function updateMealLog(
     status?: string
     scheduled_at?: string | null
     notes?: string | null
-    photo_file_id?: string | null
+    photo_file_ids?: string[]
     calories?: number | null
     protein_g?: number | null
     carbs_g?: number | null
@@ -146,14 +146,9 @@ export async function deleteMealLog(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete meal log')
 }
 
-export async function analyzeMealLog(
-  id: string,
-  fileId: string,
-): Promise<MealLog> {
+export async function analyzeMealLog(id: string): Promise<MealLog> {
   const res = await apiCall(`/api/food/logs/${id}/analyze`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_id: fileId }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

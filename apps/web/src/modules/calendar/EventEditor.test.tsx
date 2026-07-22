@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
+import { useEffect, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EventEditor } from './EventEditor'
@@ -332,6 +333,104 @@ describe('EventEditor', () => {
         title: 'Pinned event updated',
       }),
     )
+  })
+
+  it('closes after saving a new repeating event', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify(
+            String(input).endsWith('/api/pages') ? [] : { id: 'event-1' },
+          ),
+          { status: 201 },
+        ),
+      ),
+    )
+    const onSaved = vi.fn()
+    render(
+      <EventEditor
+        calendars={[
+          {
+            id: 'calendar-1',
+            name: 'Default',
+            color: '#8B5CF6',
+            is_visible: true,
+            source: 'local',
+          },
+        ]}
+        event={{
+          start_at: '2026-06-27T10:15:00.000Z',
+          end_at: '2026-06-27T11:15:00.000Z',
+        }}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Event title'), {
+      target: { value: 'Standup' },
+    })
+    // Configure a repeat, then confirm the popover with "Done".
+    fireEvent.click(screen.getByRole('button', { name: 'Repeats' }))
+    fireEvent.click(screen.getByLabelText('Frequency'))
+    fireEvent.click(screen.getByRole('option', { name: 'Week' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), {
+      timeout: 2_000,
+    })
+  })
+
+  it('still closes when the parent re-renders mid-save (WebSocket refresh)', async () => {
+    // Reproduces the real bug: creating an event broadcasts a calendar update,
+    // the parent re-renders with a fresh inline onClose, and the editor's
+    // cleanup must NOT cancel the scheduled close.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: 'event-1' }), { status: 201 }),
+      ),
+    )
+    const onSaved = vi.fn()
+
+    function Harness() {
+      const [, setTick] = useState(0)
+      useEffect(() => {
+        // Mimic a stream of parent re-renders during the close window.
+        const id = setInterval(() => setTick((t) => t + 1), 40)
+        return () => clearInterval(id)
+      }, [])
+      return (
+        <EventEditor
+          calendars={[
+            {
+              id: 'calendar-1',
+              name: 'Default',
+              color: '#8B5CF6',
+              is_visible: true,
+              source: 'local',
+            },
+          ]}
+          event={{
+            start_at: '2026-06-27T10:15:00.000Z',
+            end_at: '2026-06-27T11:15:00.000Z',
+          }}
+          onClose={() => {}}
+          onSaved={onSaved}
+        />
+      )
+    }
+    render(<Harness />)
+
+    fireEvent.change(screen.getByPlaceholderText('Event title'), {
+      target: { value: 'Standup' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), {
+      timeout: 2_000,
+    })
   })
 
   it('locks editor scrolling while the repeat card is open', () => {

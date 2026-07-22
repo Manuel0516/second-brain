@@ -332,6 +332,13 @@ export function EventEditor({
   // single-occurrence overrides and exceptions.
   const occurrenceStart = event.start_at
   const isRecurring = Boolean(event.id && event.rrule)
+  // A recurring series stores one meal/workout per occurrence, all linked to the
+  // same event id. Scope the Linked panel to just this occurrence's date so each
+  // repetition shows only its own food/fitness entry.
+  const linksUrl =
+    isRecurring && occurrenceStart
+      ? `/api/events/${event.id}/links?on=${new Date(occurrenceStart).toISOString().slice(0, 10)}`
+      : `/api/events/${event.id}/links`
   const closingRef = useRef(false)
   const closeTimer = useRef(0)
   const saveStateTimer = useRef(0)
@@ -348,7 +355,7 @@ export function EventEditor({
   const refreshLinks = async () => {
     if (!event.id) return
     try {
-      const response = await apiCall(`/api/events/${event.id}/links`)
+      const response = await apiCall(linksUrl)
       if (!response.ok) return
       const links = await response.json()
       if (Array.isArray(links)) setEventLinks(links)
@@ -361,7 +368,7 @@ export function EventEditor({
     let active = true
     void (async () => {
       try {
-        const response = await apiCall(`/api/events/${event.id}/links`)
+        const response = await apiCall(linksUrl)
         if (!response.ok || !active) return
         const links = await response.json()
         if (Array.isArray(links) && active) {
@@ -391,7 +398,7 @@ export function EventEditor({
     return () => {
       active = false
     }
-  }, [event.id])
+  }, [event.id, linksUrl])
 
   // Link an existing note (page) to this event — the same note can be linked
   // to many events, and an event can link many notes (generic Link edges).
@@ -619,14 +626,22 @@ export function EventEditor({
     const escape = (e: KeyboardEvent) =>
       e.key === 'Escape' && closeWithAnimation(onClose)
     window.addEventListener('keydown', escape)
-    return () => {
-      window.removeEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [closeWithAnimation, onClose])
+
+  // Clear pending timers only on unmount. Keeping this out of the Escape effect
+  // above matters: onClose is an inline prop, so a parent re-render mid-save
+  // (e.g. the WebSocket calendar refresh) would otherwise run this cleanup and
+  // cancel the scheduled close, leaving the card stuck open.
+  useEffect(
+    () => () => {
       window.clearTimeout(closeTimer.current)
       window.clearTimeout(saveStateTimer.current)
       window.cancelAnimationFrame(errorFrame.current)
       window.clearTimeout(errorTimer.current)
-    }
-  }, [closeWithAnimation, onClose])
+    },
+    [],
+  )
 
   const showSaveError = useCallback((message: string) => {
     setError(message)
@@ -2473,15 +2488,24 @@ export function EventEditor({
                     <div className="repeat-line">
                       <input
                         type="number"
-                        min={1}
+                        inputMode="numeric"
                         max={365}
                         className="repeat-interval"
                         aria-label="Interval"
-                        value={recurrence.interval}
+                        value={recurrence.interval || ''}
                         onChange={(e) =>
                           setRecurrence((r) => ({
                             ...r,
-                            interval: Math.max(1, Number(e.target.value) || 1),
+                            interval: Number(e.target.value),
+                          }))
+                        }
+                        onBlur={() =>
+                          setRecurrence((r) => ({
+                            ...r,
+                            interval: Math.min(
+                              365,
+                              Math.max(1, Math.round(r.interval) || 1),
+                            ),
                           }))
                         }
                       />
@@ -2587,17 +2611,23 @@ export function EventEditor({
                             <div className="repeat-line">
                               <input
                                 type="number"
-                                min={1}
+                                inputMode="numeric"
                                 max={730}
                                 aria-label="Occurrence count"
                                 className="repeat-count"
-                                value={recurrence.count}
+                                value={recurrence.count || ''}
                                 onChange={(e) =>
                                   setRecurrence((r) => ({
                                     ...r,
-                                    count: Math.max(
-                                      1,
-                                      Number(e.target.value) || 1,
+                                    count: Number(e.target.value),
+                                  }))
+                                }
+                                onBlur={() =>
+                                  setRecurrence((r) => ({
+                                    ...r,
+                                    count: Math.min(
+                                      730,
+                                      Math.max(1, Math.round(r.count) || 1),
                                     ),
                                   }))
                                 }

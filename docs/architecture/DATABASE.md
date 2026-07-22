@@ -373,7 +373,7 @@ User-defined fitness goals. Target types point at exercise max weight, exercise 
 ---
 
 ### `meal_logs`
-One row per meal — planned or logged. Photos are stored via the `files` table.
+One row per meal — planned or logged. Ordered photo associations live in `meal_log_photos`.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -385,7 +385,6 @@ One row per meal — planned or logged. Photos are stored via the `files` table.
 | status | String(20) | "planned" or "logged". Default "planned". |
 | scheduled_at | DateTime? | Mirrors linked calendar event start for planned meals. |
 | logged_at | DateTime? | When the meal was actually logged. |
-| photo_file_id | UUID FK? | Direct FK to `files.id`. Nullable. |
 | calories | Float? | Total calories for the meal. |
 | protein_g | Float? | Protein in grams. |
 | carbs_g | Float? | Carbs in grams. |
@@ -396,6 +395,18 @@ One row per meal — planned or logged. Photos are stored via the `files` table.
 | notes | Text? | Free-text notes. |
 | ai_items | JSON? | Raw AI item breakdown `[{name, quantity, calories, ...}]` for the edit view. |
 | created_at / updated_at | DateTime | UTC timestamps. |
+
+---
+
+### `meal_log_photos`
+Ordered images attached to a meal. The API limits each meal to 15 photos and validates that every
+file is an image owned by the same user as the meal.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| meal_log_id | UUID FK | Parent meal. Part of the composite primary key; cascades on meal deletion. |
+| file_id | UUID FK | Attached `files` row. Part of the composite primary key and globally unique. |
+| position | Integer | Zero-based display and AI-analysis order; unique within the meal. |
 
 ---
 
@@ -436,5 +447,7 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 023 | fitness_stats_range_days and food_stats_range_days on user_settings |
 | 024 | Calendar sync: google_accounts table; sync columns on calendars (google_calendar_id, sync_direction, sync_token, last_synced_at, external_id, ics_url, etag) and calendar_events (external_id, external_etag) |
 | 025 | Account-to-account calendar/page sharing plus durable Yjs note collaboration updates |
+| 026 | Per-recipient visibility and color overrides for shared calendars |
+| 027 | Ordered multi-photo meal attachments; replaces `meal_logs.photo_file_id` |
 
 Always check `alembic current` before writing a new migration.
