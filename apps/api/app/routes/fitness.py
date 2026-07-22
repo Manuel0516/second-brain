@@ -1002,6 +1002,7 @@ async def create_set_entry(
         rpe=data.rpe,
         distance_km=data.distance_km,
         duration_min=data.duration_min,
+        feeling=data.feeling,
         notes=data.notes,
     )
     session.add(entry)

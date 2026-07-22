@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0158](0158-fitness-set-feeling-persistence.md)                   | Fix: fitness history dropped the saved feeling for each set                                     | 2026-07-22 | accepted                   |
 | [0157](0157-iphone-photo-upload-nginx-limit.md)                   | Fix: iPhone photo uploads rejected by nginx body-size limit                                     | 2026-07-22 | accepted                   |
 | [0156](0156-retire-completed-work-plans.md)                       | Retire completed work plans into permanent history                                             | 2026-07-22 | accepted                   |
 | [0155](0155-color-picker-selection-ring-gray-not-black.md)       | Fix: color picker selection ring gray (not near-black) on light swatches so it stays visible    | 2026-07-22 | accepted                   |
