@@ -222,7 +222,7 @@ async def upload_file(
 
     data = await file.read()
     if len(data) > max_file_size():
-        raise HTTPException(status_code=400, detail="File too large (max 10 MB)")
+        raise HTTPException(status_code=400, detail="File too large (max 50 MB)")
 
     file_id = str(uuid4())
     name = file.filename or "untitled"

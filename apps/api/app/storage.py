@@ -18,7 +18,7 @@ _ALLOWED_CONTENT_TYPES: set[str] = {
     "image/webp",
     "image/svg+xml",
 }
-_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 def allowed_content_type(content_type: str) -> bool:

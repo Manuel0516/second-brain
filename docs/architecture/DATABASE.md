@@ -256,7 +256,7 @@ object key `{user_id}/{file_id}`; this table is the ownership/metadata index.
 | user_id | UUID FK | Owner. Every read is ownership-checked. |
 | name | String(255) | Original filename. |
 | content_type | String(100) | Validated on upload (png/jpeg/gif/webp/svg). |
-| size | Integer | Bytes. Uploads are capped at 10 MB. |
+| size | Integer | Bytes. Uploads are capped at 50 MB. |
 | created_at | DateTime | UTC. |
 
 Served via `GET /api/files/{id}` (streamed from MinIO with long cache
