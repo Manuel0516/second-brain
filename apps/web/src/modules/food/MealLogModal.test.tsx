@@ -246,6 +246,11 @@ describe('MealLogModal focus and dismissal', () => {
       target: { files: [new File(['9'], 'new.jpg', { type: 'image/jpeg' })] },
     })
     await screen.findByAltText('Meal dish 2')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Analyze photos' }),
+      ).toBeEnabled(),
+    )
 
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).not.toHaveBeenCalled()

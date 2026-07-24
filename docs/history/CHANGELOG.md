@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0196](0196-meal-photo-dirty-test-stability.md)                         | Stabilize the uploaded-photo dirty-state test                                                          | 2026-07-24 | accepted                   |
 | [0195](0195-calendar-time-grid-settle-fix.md)                           | Remove the calendar time-grid settle jump                                                              | 2026-07-24 | accepted                   |
 | [0194](0194-monochrome-favicon-light-mode.md)                           | Make the monochrome favicon follow app appearance                                                      | 2026-07-24 | accepted                   |
 | [0193](0193-static-asset-permissions.md)                                | Normalize static asset permissions                                                                     | 2026-07-24 | accepted                   |
