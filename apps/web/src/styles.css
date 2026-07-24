@@ -1147,6 +1147,10 @@ input[type='color'] {
 .week-scroll {
   --row-h: 48px;
   --calendar-swipe-x: 0px;
+  /* Overridden per-gesture (settleDrag) to scale with the distance actually
+     left to travel, so a small correction and a near-full-day correction both
+     glide at a similar felt speed instead of the same fixed time. */
+  --calendar-swipe-duration: 0.16s;
   flex: 1;
   overflow: auto;
   overflow-x: hidden;
@@ -1156,10 +1160,27 @@ input[type='color'] {
 }
 .week-scroll > .week-grid {
   transform: translateX(var(--calendar-swipe-x));
-  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--calendar-swipe-duration)
+    cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 .week-scroll.is-swiping > .week-grid {
+  transition: none;
+}
+/* The fixed time-label gutter is the grid's first child, so it would slide
+   along with the day columns; counter-translate it so it stays put while
+   everything else pans (buffer days are now real column widths, not a token
+   nudge, so this offset is large enough to matter). */
+.week-header > div:first-child,
+.time-grid > div:first-child {
+  position: relative;
+  z-index: 5;
+  background: var(--bg-base);
+  transform: translateX(calc(-1 * var(--calendar-swipe-x)));
+  transition: transform var(--calendar-swipe-duration)
+    cubic-bezier(0.22, 1, 0.36, 1);
+}
+.week-scroll.is-swiping > .week-grid > div:first-child {
   transition: none;
 }
 .week-grid {
@@ -2963,6 +2984,9 @@ input[type='color'] {
     animation: none;
   }
   .week-scroll > .week-grid {
+    transition: none;
+  }
+  .week-grid > div:first-child {
     transition: none;
   }
 }

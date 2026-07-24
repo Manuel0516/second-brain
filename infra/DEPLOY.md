@@ -266,6 +266,7 @@ that referenced attachments can be opened through the application.
 | Traefik 403                    | `dig +short brain.zero-five.space` must return the VPN address; configure split DNS or a VPN-only hosts entry if it returns Cloudflare addresses |
 | Traefik 502                    | `web` health/logs and membership in the external `traefik` network                     |
 | API 502 from nginx             | `docker compose logs api`; API health and migration startup                            |
+| Static asset missing           | Check the response `Content-Type`; nginx can return the SPA `index.html` with HTTP 200 for a missing asset, so rebuild the web image and verify the asset is copied into `/usr/share/nginx/html` |
 | Logo asset 403                 | Check file modes in `/usr/share/nginx/html`; rebuild the web image after applying the Dockerfile permission normalization |
 | Production configuration error | `APP_ENVIRONMENT`, JWT secret, initial password, and container `DATABASE_URL`          |
 | Hub entry missing              | The `hub.*` labels on `web` and the Hub's Docker discovery scope                       |

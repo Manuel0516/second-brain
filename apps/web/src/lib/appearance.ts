@@ -27,16 +27,19 @@ export function logoAssetFor(style: VisualStyle): string {
   return style === 'monochrome' ? '/logo-white.png' : '/logo-neon-planet.png'
 }
 
-/**
- * The favicon asset for the given visual style. Favicons are scaled into a square
- * slot with no `object-fit` control, so — unlike the in-page logo — this needs a
- * square canvas or the browser stretches it. `logo-neon-planet.png` already is one;
- * Monochrome gets its own square-padded variant instead of reusing `logoAssetFor()`.
- */
-export function faviconAssetFor(style: VisualStyle): string {
-  return style === 'monochrome'
-    ? '/favicon-monochrome.png'
-    : '/logo-neon-planet.png'
+/** The favicon asset for the given visual style and color mode. */
+export function faviconAssetFor(
+  style: VisualStyle,
+  theme: ColorMode = 'system',
+): string {
+  if (style === 'neon') return '/logo-neon-planet.png'
+
+  const light =
+    theme === 'light' ||
+    (theme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-color-scheme: light)').matches)
+  return light ? '/favicon-monochrome-black.svg' : '/favicon-monochrome.png'
 }
 
 let transitionTimer = 0
@@ -63,11 +66,22 @@ export function applyTheme(theme: ColorMode, animate = false) {
     if (next) root.dataset.theme = next
     else delete root.dataset.theme
   })
+  applyFavicon((root.dataset.visualStyle as VisualStyle) || 'neon')
 }
 
 function applyFavicon(style: VisualStyle) {
   const link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
-  if (link) link.href = faviconAssetFor(style)
+  if (link) {
+    const theme: ColorMode =
+      document.documentElement.dataset.theme === 'light'
+        ? 'light'
+        : document.documentElement.dataset.theme === 'dark'
+          ? 'dark'
+          : 'system'
+    const href = faviconAssetFor(style, theme)
+    link.href = href
+    link.type = href.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
+  }
 }
 
 /** Sets `data-visual-style` and the favicon. Call pre-mount with the cached value to avoid a flash. */

@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { apiCall } from '../../lib/api'
 import {
   clampRowHeight,
@@ -13,6 +13,7 @@ import {
   minuteAtPointer,
   resizeIsoRange,
   shiftIsoRange,
+  withBufferDays,
 } from './time'
 import { occurrenceKey } from './types'
 import type { CalendarData, CalendarEvent } from './types'
@@ -24,6 +25,30 @@ const TIME_COL = 52
 const DRAG_THRESHOLD = 3
 const LONG_PRESS_DELAY = 650
 const TOUCH_RESIZE_EDGE = 18
+// Extra days rendered off-screen on each side so horizontal scroll reveals real
+// content instead of a fake nudge. Bump if fast flicks show empty buffer days.
+const BUFFER_DAYS = 1
+// Trackpad momentum scrolling keeps sending decaying wheel events with gaps
+// well past 100ms between them; too short a gap here was cutting a single
+// fast flick into several small fragments (each rounding to its own nearest
+// day, often springing back) instead of one continuous multi-day glide.
+const WHEEL_IDLE_MS = 220
+// How far (in ms) to project the release velocity forward before rounding to
+// the nearest day boundary — the settle spring's fixed destination, decided
+// once up front so a fast flick can target more than one day away.
+const FLING_PROJECTION_MS = 150
+// Critically-damped spring constants (tuned in seconds) for the settle
+// animation: damping = 2*sqrt(stiffness) is the critical ratio — the fastest
+// approach to the target with no overshoot, so it can't bounce back past a
+// day boundary and swing forward again.
+const SPRING_STIFFNESS = 170
+const SPRING_DAMPING = 2 * Math.sqrt(SPRING_STIFFNESS)
+// Safety cutoff in case the spring never quite crosses the "settled" epsilon
+// (shouldn't happen for a critically-damped spring, but bounds the worst case).
+const SPRING_MAX_MS = 2000
+// Cancel-drag uses a short plain glide back to rest (no fling projection —
+// a cancel should feel like an abrupt stop, not a continued momentum).
+const FINAL_SETTLE_MS = 120
 
 interface NewSelection {
   day: Date
@@ -187,6 +212,7 @@ export function TimeGrid({
   draftEvent,
   draftReplaceKey,
 }: Props) {
+  const renderDays = withBufferDays(days, BUFFER_DAYS, BUFFER_DAYS)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [newSelection, setNewSelection] = useState<NewSelection | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -204,7 +230,6 @@ export function TimeGrid({
   const pasteTargetRef = useRef<Date | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const didInitialScroll = useRef(false)
-  const horizontalWheel = useRef(0)
   const wheelNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [resizingDay, setResizingDay] = useState<string | null>(null)
   const setCurrentGesture = (next: Gesture | null) => {
@@ -228,8 +253,6 @@ export function TimeGrid({
       }
     | {
         phase: 'swipe'
-        startX: number
-        deltaX: number
         x: number
         y: number
         pointerId: number
@@ -251,23 +274,215 @@ export function TimeGrid({
 
   const touchStateRef = useRef<TouchState>({ phase: 'idle' })
 
-  const previewHorizontalNavigation = useCallback(
-    (pointerDelta: number, active = true) => {
-      const element = scrollRef.current
-      if (!element) return
-      const offset = Math.max(-32, Math.min(32, pointerDelta * 0.18))
-      element.classList.toggle('is-swiping', active)
-      element.style.setProperty('--calendar-swipe-x', `${offset}px`)
-    },
-    [],
+  // Cumulative horizontal drag, in px, always rebased back into (-dayWidth, dayWidth)
+  // as day boundaries are crossed — see applyDrag.
+  const dragPx = useRef(0)
+  // Recent drag speed (px/ms, same sign convention as dragPx) and when it was
+  // last sampled — lets settleDrag project a fast flick a bit further, instead
+  // of only ever being able to land one day past wherever the raw drag ended.
+  const dragVelocity = useRef(0)
+  const lastDragTime = useRef(0)
+
+  // Real rendered width of one day column, measured from the DOM (not derived
+  // from a formula) so it always matches what's actually on screen — but
+  // cached rather than re-measured on every wheel tick/animation frame.
+  // getBoundingClientRect() forces a synchronous layout recalculation, and
+  // every applyOffset call just wrote a style property; measuring on every
+  // single rAF frame (up to ~60/s) is a write-then-read layout-thrash loop
+  // that can itself stutter the animation it's trying to drive. The column
+  // width doesn't change mid-gesture, only on resize/view changes, both of
+  // which explicitly refresh the cache below.
+  const dayWidthCache = useRef<number | null>(null)
+  const measureDayWidth = useCallback(() => {
+    const measured =
+      scrollRef.current?.querySelector<HTMLElement>('.day-column')
+    // jsdom returns 0 for layout rects; the 80px floor keeps that (and the
+    // rebase loop below) from ever dividing by/looping on zero.
+    dayWidthCache.current = Math.max(
+      80,
+      measured?.getBoundingClientRect().width || 0,
+    )
+    return dayWidthCache.current
+  }, [])
+  const dayWidthPx = useCallback(
+    () => dayWidthCache.current ?? measureDayWidth(),
+    [measureDayWidth],
   )
 
-  const resetHorizontalPreview = useCallback(() => {
+  // In-flight momentum coast (see settleDrag), so a new real drag starting
+  // mid-coast can cancel it instead of fighting it.
+  const coastFrame = useRef<number | null>(null)
+  const stopCoast = useCallback(() => {
+    if (coastFrame.current !== null) {
+      cancelAnimationFrame(coastFrame.current)
+      coastFrame.current = null
+    }
+  }, [])
+
+  // Core offset update, shared by real drag input and the settle spring
+  // below. `offsetDeltaPx` is in "content offset" terms: positive shifts the
+  // grid right (reveals earlier days). Each time the cumulative drag crosses
+  // a full day-width, the cursor shifts by one day and the drag is rebased by
+  // that same width — same calendar day ends up in the same viewport pixels
+  // right before and after, so the rebase is visually a no-op and arbitrarily
+  // long/fast scrolling just keeps revealing real days.
+  //
+  // `dw` is passed in rather than re-measured here on every call: a settle
+  // animation re-triggers React renders (via onHorizontalNavigate) mid-flight,
+  // and re-querying the DOM on every single animation frame risked catching
+  // a transient in-between layout state and using a subtly different width
+  // than the one the caller's target/threshold math was based on — a real
+  // (if small) mismatch that showed up as a visible jump right at the end.
+  const applyOffset = useCallback(
+    (offsetDeltaPx: number, dw: number) => {
+      const element = scrollRef.current
+      if (!element) return
+      dragPx.current += offsetDeltaPx
+      let shifted = 0
+      while (dragPx.current <= -dw) {
+        dragPx.current += dw
+        shifted += 1
+      }
+      while (dragPx.current >= dw) {
+        dragPx.current -= dw
+        shifted -= 1
+      }
+      // The cursor update and transform rebase represent one visual operation.
+      // Commit the new day columns before writing the rebased offset so the
+      // browser cannot paint one frame with old events in their new positions.
+      if (shifted) flushSync(() => onHorizontalNavigate(shifted))
+      element.classList.add('is-swiping')
+      element.style.setProperty(
+        '--calendar-swipe-x',
+        `${-BUFFER_DAYS * dw + dragPx.current}px`,
+      )
+    },
+    [onHorizontalNavigate],
+  )
+
+  // Applies a live drag/scroll increment from real pointer/wheel input and
+  // tracks its speed, so a released gesture can hand off to a coast that
+  // continues at the same speed instead of an unrelated canned animation.
+  const applyDrag = useCallback(
+    (offsetDeltaPx: number) => {
+      stopCoast()
+      const now = performance.now()
+      const dt = lastDragTime.current ? now - lastDragTime.current : 16
+      lastDragTime.current = now
+      dragVelocity.current = offsetDeltaPx / Math.max(1, dt)
+      applyOffset(offsetDeltaPx, dayWidthPx())
+    },
+    [applyOffset, dayWidthPx, stopCoast],
+  )
+
+  // Ends a gesture with a single critically-damped spring, seeded with the
+  // actual release velocity when it points toward the fixed destination.
+  // Rounding can put the nearest boundary behind a slow release, so velocity
+  // pointing away from that boundary is discarded and each step is clamped
+  // to the target. The settle therefore approaches monotonically: no tiny
+  // forward movement followed by a correction in the opposite direction.
+  const settleDrag = useCallback(() => {
     const element = scrollRef.current
     if (!element) return
+    stopCoast()
+    const dw = dayWidthPx()
+    const v0 = dragVelocity.current
+    // Absolute (unrebased) position/target, so the spring can freely travel
+    // through more than one day for a fast flick — applyOffset below still
+    // does the actual (bounded) rebase-and-commit per day crossing.
+    const projected = dragPx.current + v0 * FLING_PROJECTION_MS
+    const target = Math.round(projected / dw) * dw
+    let pos = dragPx.current
+    const distance = target - pos
+    let vel = distance * v0 > 0 ? v0 * 1000 : 0
+    let lastTime = performance.now()
+    const startTime = lastTime
+
+    const finish = () => {
+      const residual = target - pos
+      if (Math.abs(residual) > 0.01) applyOffset(residual, dw)
+      dragVelocity.current = 0
+      lastDragTime.current = 0
+      // Keep transitions disabled for the paint that applies the exact final
+      // offset. Removing this class in the same frame could make the browser
+      // animate a day-width rebase that is meant to be visually neutral.
+      coastFrame.current = requestAnimationFrame(() => {
+        coastFrame.current = null
+        element.classList.remove('is-swiping')
+      })
+    }
+
+    const step = (now: number) => {
+      const dt = Math.min(0.032, (now - lastTime) / 1000)
+      lastTime = now
+      const accel = SPRING_STIFFNESS * (target - pos) - SPRING_DAMPING * vel
+      vel += accel * dt
+      let delta = vel * dt
+      if ((target - pos) * (target - pos - delta) <= 0) {
+        delta = target - pos
+        vel = 0
+      }
+      pos += delta
+      applyOffset(delta, dw)
+      const settled = Math.abs(target - pos) < 0.5 && Math.abs(vel) < 5
+      if (settled || now - startTime > SPRING_MAX_MS) {
+        coastFrame.current = null
+        finish()
+        return
+      }
+      coastFrame.current = requestAnimationFrame(step)
+    }
+
+    if (Math.abs(target - pos) < 0.5 && Math.abs(vel) < 5) {
+      finish()
+    } else {
+      coastFrame.current = requestAnimationFrame(step)
+    }
+  }, [applyOffset, dayWidthPx, stopCoast])
+
+  // Discards an in-progress gesture (e.g. a second touch arriving) with no commit.
+  const cancelDrag = useCallback(() => {
+    const element = scrollRef.current
+    if (!element) return
+    stopCoast()
+    const dw = dayWidthPx()
+    dragPx.current = 0
+    dragVelocity.current = 0
+    lastDragTime.current = 0
     element.classList.remove('is-swiping')
-    element.style.setProperty('--calendar-swipe-x', '0px')
-  }, [])
+    element.style.setProperty(
+      '--calendar-swipe-duration',
+      `${FINAL_SETTLE_MS}ms`,
+    )
+    element.style.setProperty('--calendar-swipe-x', `${-BUFFER_DAYS * dw}px`)
+  }, [dayWidthPx, stopCoast])
+
+  // Keeps the grid's rest position (hiding the leading buffer day(s)) aligned
+  // with the actual measured day-column width — on mount, when the view
+  // changes (day/week column count differs), and on window resize. Skipped
+  // mid-gesture so it doesn't fight with an in-progress drag.
+  useLayoutEffect(() => {
+    const element = scrollRef.current
+    if (!element) return
+    element.style.setProperty(
+      '--calendar-swipe-x',
+      `${-BUFFER_DAYS * measureDayWidth()}px`,
+    )
+  }, [days.length, measureDayWidth])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (dragPx.current !== 0) return
+      const element = scrollRef.current
+      if (!element) return
+      element.style.setProperty(
+        '--calendar-swipe-x',
+        `${-BUFFER_DAYS * measureDayWidth()}px`,
+      )
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [measureDayWidth])
 
   const clearLongPress = (state: TouchState) => {
     if (state.phase === 'pending' && state.timer) clearTimeout(state.timer)
@@ -276,7 +491,7 @@ export function TimeGrid({
   const cancelTouch = () => {
     clearLongPress(touchStateRef.current)
     touchStateRef.current = { phase: 'idle' }
-    resetHorizontalPreview()
+    cancelDrag()
     setCurrentGesture(null)
     setResizingDay(null)
   }
@@ -310,7 +525,7 @@ export function TimeGrid({
     })
     if (state.mode === 'resize') {
       const dayIndex = Number(state.column.dataset.dayIndex)
-      setResizingDay(days[dayIndex]?.toDateString() ?? null)
+      setResizingDay(renderDays[dayIndex]?.toDateString() ?? null)
     }
     touchStateRef.current = {
       phase: 'event-drag',
@@ -405,11 +620,9 @@ export function TimeGrid({
       if (dx < THRESHOLD && dy < THRESHOLD) return
       clearLongPress(state)
       if (dx > dy) {
-        previewHorizontalNavigation(e.clientX - state.x)
+        applyDrag(e.clientX - state.x)
         touchStateRef.current = {
           phase: 'swipe',
-          startX: state.x,
-          deltaX: e.clientX - state.x,
           x: e.clientX,
           y: e.clientY,
           pointerId: e.pointerId,
@@ -426,10 +639,9 @@ export function TimeGrid({
     }
 
     if (state.phase === 'swipe' && e.pointerId === state.pointerId) {
-      previewHorizontalNavigation(e.clientX - state.startX)
+      applyDrag(e.clientX - state.x)
       touchStateRef.current = {
         ...state,
-        deltaX: e.clientX - state.startX,
         x: e.clientX,
         y: e.clientY,
       }
@@ -496,7 +708,7 @@ export function TimeGrid({
           ) as HTMLElement | null
           if (col?.dataset.dayIndex !== undefined) {
             const dayIdx = Number(col.dataset.dayIndex)
-            onCreate(dateAtMinute(days[dayIdx], minute))
+            onCreate(dateAtMinute(renderDays[dayIdx], minute))
           }
         }
         touchStateRef.current = { phase: 'idle' }
@@ -519,18 +731,7 @@ export function TimeGrid({
     }
 
     if (state.phase === 'swipe') {
-      const COMMIT_THRESHOLD = 50
-      resetHorizontalPreview()
-      if (Math.abs(state.deltaX) >= COMMIT_THRESHOLD) {
-        const viewportWidth =
-          (scrollRef.current?.clientWidth || window.innerWidth) - TIME_COL
-        const dayWidth = Math.max(80, viewportWidth / days.length)
-        const distance = Math.max(
-          1,
-          Math.min(days.length, Math.round(Math.abs(state.deltaX) / dayWidth)),
-        )
-        onHorizontalNavigate(state.deltaX < 0 ? distance : -distance)
-      }
+      settleDrag()
       touchStateRef.current = { phase: 'idle' }
       return
     }
@@ -553,20 +754,41 @@ export function TimeGrid({
     touchStateRef.current = { phase: 'idle' }
   }
 
+  // Fetch the buffered range (renderDays), not just the visible days, so peek
+  // columns already have real event data by the time a scroll reveals them.
+  // Keyed on primitive timestamps, not the array reference, since renderDays is
+  // recomputed fresh every render — an array-reference dependency would refire
+  // this fetch on every unrelated re-render (e.g. every event-drag pointermove).
+  const rangeKey = `${renderDays[0]?.getTime() ?? 0}:${
+    renderDays[renderDays.length - 1]?.getTime() ?? 0
+  }`
+  // A fast multi-day settle fires onHorizontalNavigate — and so this fetch —
+  // once per day crossed, in quick succession. Real network responses can
+  // resolve out of order, so without a sequence guard an older response can
+  // land after a newer one and overwrite the display with stale events right
+  // as the scroll finishes — looking exactly like a random reload/jump.
+  const eventsRequestId = useRef(0)
   const loadEvents = useCallback(() => {
-    const from = new Date(days[0])
+    const requestId = ++eventsRequestId.current
+    const [rangeFrom, rangeTo] = rangeKey.split(':').map(Number)
+    const from = new Date(rangeFrom)
     from.setHours(0, 0, 0, 0)
-    const to = new Date(days[days.length - 1])
+    const to = new Date(rangeTo)
     to.setDate(to.getDate() + 1)
     to.setHours(0, 0, 0, 0)
     apiCall(
       `/api/events?from_date=${from.toISOString()}&to_date=${to.toISOString()}`,
     )
       .then(async (response) => {
+        if (requestId !== eventsRequestId.current) return
         if (response.ok) setEvents(await response.json())
       })
-      .catch(() => setInteractionError('Could not load calendar events.'))
-  }, [days])
+      .catch(() => {
+        if (requestId === eventsRequestId.current) {
+          setInteractionError('Could not load calendar events.')
+        }
+      })
+  }, [rangeKey])
 
   useEffect(loadEvents, [loadEvents, refresh])
 
@@ -602,37 +824,20 @@ export function TimeGrid({
         return
       }
       event.preventDefault()
-      horizontalWheel.current += event.deltaX
-      previewHorizontalNavigation(-horizontalWheel.current)
+      applyDrag(-event.deltaX)
       if (wheelNavTimer.current) clearTimeout(wheelNavTimer.current)
       wheelNavTimer.current = setTimeout(() => {
         wheelNavTimer.current = null
-        const total = horizontalWheel.current
-        horizontalWheel.current = 0
-        resetHorizontalPreview()
-        const viewportWidth = element.clientWidth - TIME_COL
-        const dayWidth =
-          viewportWidth > 0
-            ? Math.max(80, Math.min(180, viewportWidth / days.length))
-            : 80
-        const distance = Math.trunc(total / dayWidth)
-        if (distance) onHorizontalNavigate(distance)
-      }, 100)
+        settleDrag()
+      }, WHEEL_IDLE_MS)
     }
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => {
       element.removeEventListener('wheel', onWheel)
       if (wheelNavTimer.current) clearTimeout(wheelNavTimer.current)
-      resetHorizontalPreview()
+      cancelDrag()
     }
-  }, [
-    days.length,
-    onHorizontalNavigate,
-    onRowHeightChange,
-    previewHorizontalNavigation,
-    resetHorizontalPreview,
-    rowHeight,
-  ])
+  }, [applyDrag, cancelDrag, onRowHeightChange, rowHeight, settleDrag])
 
   useEffect(() => {
     const element = scrollRef.current
@@ -1023,7 +1228,7 @@ export function TimeGrid({
       .elementFromPoint(pointer.clientX, pointer.clientY)
       ?.closest('.day-column') as HTMLElement | null
     if (!column || column.dataset.dayIndex === undefined) return
-    const day = days[Number(column.dataset.dayIndex)]
+    const day = renderDays[Number(column.dataset.dayIndex)]
     if (!day) return
     const minute = minuteAtPointer(
       pointer.clientY,
@@ -1057,10 +1262,15 @@ export function TimeGrid({
     loadEvents()
   }
 
-  const columns = `${TIME_COL}px repeat(${days.length}, ${
+  const columns = `${TIME_COL}px repeat(${renderDays.length}, ${
     days.length === 1 ? '1fr' : 'minmax(96px, 1fr)'
   })`
-  const minWidth = days.length === 1 ? 'auto' : TIME_COL + days.length * 96
+  const minWidth =
+    days.length === 1 ? 'auto' : TIME_COL + renderDays.length * 96
+  // Grid renders wider than the viewport by exactly the buffer's share, so the
+  // extra day columns sit off-screen (clipped by .week-scroll's overflow-x:
+  // hidden) at the same per-day width as the visible ones.
+  const gridWidth = `${(renderDays.length / days.length) * 100}%`
   const today = new Date()
   const colorFor = (event: CalendarEvent) => {
     const calendar = calendars.find((item) => item.id === event.calendar_id)
@@ -1130,10 +1340,10 @@ export function TimeGrid({
         )}
       <div
         className="week-grid week-header"
-        style={{ gridTemplateColumns: columns, minWidth }}
+        style={{ gridTemplateColumns: columns, minWidth, width: gridWidth }}
       >
         <div />
-        {days.map((day) => (
+        {renderDays.map((day) => (
           <div
             key={day.toISOString()}
             className={[
@@ -1201,7 +1411,7 @@ export function TimeGrid({
       </div>
       <div
         className="week-grid time-grid"
-        style={{ gridTemplateColumns: columns, minWidth }}
+        style={{ gridTemplateColumns: columns, minWidth, width: gridWidth }}
       >
         <div>
           {HOURS.map((hour) => (
@@ -1210,7 +1420,7 @@ export function TimeGrid({
             </div>
           ))}
         </div>
-        {days.map((day, dayIndex) => (
+        {renderDays.map((day, dayIndex) => (
           <div
             className={`day-column ${sameDay(day, today) ? 'today-column' : ''} ${
               isWeekend(day) && !sameDay(day, today) ? 'weekend-column' : ''
@@ -1439,7 +1649,7 @@ export function TimeGrid({
                             if (col?.dataset.dayIndex !== undefined) {
                               const dayIdx = Number(col.dataset.dayIndex)
                               setResizingDay(
-                                days[dayIdx]?.toDateString() ?? null,
+                                renderDays[dayIdx]?.toDateString() ?? null,
                               )
                             }
                             startEventGesture(pointer, event, 'resize')

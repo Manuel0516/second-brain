@@ -6,6 +6,7 @@ import {
   minuteAtPointer,
   resizeIsoRange,
   shiftIsoRange,
+  withBufferDays,
 } from './time'
 import { occurrenceKey } from './types'
 
@@ -35,6 +36,22 @@ describe('clampRowHeight', () => {
     expect(clampRowHeight(10)).toBe(28)
     expect(clampRowHeight(48)).toBe(48)
     expect(clampRowHeight(500)).toBe(110)
+  })
+})
+
+describe('withBufferDays', () => {
+  it('extends the day range on each side, rolling over month boundaries', () => {
+    const days = [
+      new Date('2026-02-27T00:00:00'),
+      new Date('2026-02-28T00:00:00'),
+    ]
+    const result = withBufferDays(days, 1, 1)
+    expect(result.map((d) => d.toDateString())).toEqual([
+      new Date('2026-02-26T00:00:00').toDateString(),
+      new Date('2026-02-27T00:00:00').toDateString(),
+      new Date('2026-02-28T00:00:00').toDateString(),
+      new Date('2026-03-01T00:00:00').toDateString(),
+    ])
   })
 })
 

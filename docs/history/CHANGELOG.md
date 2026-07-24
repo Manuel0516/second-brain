@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0195](0195-calendar-time-grid-settle-fix.md)                           | Remove the calendar time-grid settle jump                                                              | 2026-07-24 | accepted                   |
+| [0194](0194-monochrome-favicon-light-mode.md)                           | Make the monochrome favicon follow app appearance                                                      | 2026-07-24 | accepted                   |
 | [0193](0193-static-asset-permissions.md)                                | Normalize static asset permissions                                                                     | 2026-07-24 | accepted                   |
 | [0192](0192-fitness-history-set-card-redesign.md)                       | Fitness history set card redesign                                                                    | 2026-07-24 | accepted                   |
 | [0191](0191-deployment-readiness-check.md)                              | Internal deployment readiness check                                                                    | 2026-07-24 | accepted                   |

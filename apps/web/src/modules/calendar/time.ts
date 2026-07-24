@@ -39,6 +39,20 @@ export function daysOf(view: 'day' | 'week' | 'month', cursor: Date) {
   })
 }
 
+export function withBufferDays(days: Date[], before: number, after: number) {
+  const lead = Array.from({ length: before }, (_, i) => {
+    const d = new Date(days[0])
+    d.setDate(d.getDate() - (before - i))
+    return d
+  })
+  const trail = Array.from({ length: after }, (_, i) => {
+    const d = new Date(days[days.length - 1])
+    d.setDate(d.getDate() + i + 1)
+    return d
+  })
+  return [...lead, ...days, ...trail]
+}
+
 export function clampRowHeight(value: number) {
   return Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, value))
 }

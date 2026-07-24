@@ -69,10 +69,16 @@ jobs:
             docker compose logs --tail=100 api web >&2
             exit 1
           fi
-          for asset in logo-neon-planet.png logo-white.png favicon-monochrome.png; do
-            if ! docker compose exec -T web \
-              wget -q -O - "http://127.0.0.1/$asset" >/dev/null 2>/dev/null; then
-              echo "Static asset check failed: /$asset" >&2
+          for asset in logo-neon-planet.png logo-white.png favicon-monochrome.png favicon-monochrome-black.svg; do
+            case "$asset" in
+              *.svg) expected_type="image/svg+xml" ;;
+              *.png) expected_type="image/png" ;;
+              *) echo "Unknown static asset type: $asset" >&2; exit 1 ;;
+            esac
+            response=$(docker compose exec -T web \
+              wget -S -O /dev/null "http://127.0.0.1/$asset" 2>&1 || true)
+            if ! printf '%s\n' "$response" | grep -qi "content-type: $expected_type"; then
+              echo "Static asset check failed: /$asset (expected $expected_type)" >&2
               docker compose logs --tail=100 web >&2
               exit 1
             fi

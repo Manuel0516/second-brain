@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import {
   applyBackendAppearance,
   applyCachedVisualStyleBeforeMount,
+  applyTheme,
   applyVisualStyle,
   faviconAssetFor,
   logoAssetFor,
@@ -54,11 +55,19 @@ test('applyVisualStyle sets data-visual-style on the root element', () => {
 test('applyVisualStyle updates the favicon to match the active style', () => {
   const favicon = () => document.querySelector("link[rel='icon']")
 
+  applyTheme('light')
+  applyVisualStyle('monochrome')
+  expect(favicon()?.getAttribute('href')).toBe('/favicon-monochrome-black.svg')
+  expect(favicon()?.getAttribute('type')).toBe('image/svg+xml')
+
+  applyTheme('dark')
   applyVisualStyle('monochrome')
   expect(favicon()?.getAttribute('href')).toBe('/favicon-monochrome.png')
+  expect(favicon()?.getAttribute('type')).toBe('image/png')
 
   applyVisualStyle('neon')
   expect(favicon()?.getAttribute('href')).toBe('/logo-neon-planet.png')
+  expect(favicon()?.getAttribute('type')).toBe('image/png')
 })
 
 test('logoAssetFor follows the active visual style', () => {
@@ -66,9 +75,12 @@ test('logoAssetFor follows the active visual style', () => {
   expect(logoAssetFor('monochrome')).toBe('/logo-white.png')
 })
 
-test('faviconAssetFor uses a square asset so the browser never stretches it', () => {
+test('faviconAssetFor follows color mode for monochrome and visual style for neon', () => {
   expect(faviconAssetFor('neon')).toBe('/logo-neon-planet.png')
-  expect(faviconAssetFor('monochrome')).toBe('/favicon-monochrome.png')
+  expect(faviconAssetFor('monochrome', 'light')).toBe(
+    '/favicon-monochrome-black.svg',
+  )
+  expect(faviconAssetFor('monochrome', 'dark')).toBe('/favicon-monochrome.png')
 })
 
 test('applyBackendAppearance is authoritative and replaces a stale cache', () => {

@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useCallback, useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { TimeGrid } from './TimeGrid'
@@ -182,7 +183,7 @@ it('starts event move or resize only after a stationary long press', async () =>
   expect(eventButton).toHaveStyle({ height: '72px' })
 })
 
-it('coalesces a burst of horizontal wheel events into one navigate call', async () => {
+it('navigates progressively as horizontal wheel scrolling crosses day boundaries', async () => {
   const onHorizontalNavigate = vi.fn()
   const { container } = render(
     <TimeGrid
@@ -202,16 +203,138 @@ it('coalesces a burst of horizontal wheel events into one navigate call', async 
   vi.useFakeTimers()
 
   // A single trackpad flick worth two day-steps, delivered as several wheel
-  // events (as real trackpads do) — should still produce one call.
+  // events with realistic spacing (real trackpads don't deliver them in the
+  // same instant, which would otherwise read as an unrealistic ~infinite
+  // velocity). Each full day crossed navigates immediately — not just once
+  // at the end — so continuous scrolling stays smooth at any speed/distance
+  // instead of jumping.
   for (let i = 0; i < 4; i++) {
     fireEvent.wheel(scroller, { deltaX: 50, deltaY: 0, clientX: 100 })
+    act(() => vi.advanceTimersByTime(16))
   }
-  expect(onHorizontalNavigate).not.toHaveBeenCalled()
+  expect(onHorizontalNavigate).toHaveBeenCalledTimes(2)
+  expect(onHorizontalNavigate).toHaveBeenCalledWith(1)
   expect(scroller).toHaveClass('is-swiping')
 
-  act(() => vi.advanceTimersByTime(150))
-  expect(onHorizontalNavigate).toHaveBeenCalledTimes(1)
-  expect(onHorizontalNavigate).toHaveBeenCalledWith(2)
+  // Gesture ends — the settle spring continues from the release velocity
+  // (possibly crossing further days, like a real flick) and always lands
+  // exactly on a day boundary. The exact number of extra days depends on the
+  // spring's physics, so assert the invariant (clean boundary, not mid-drag)
+  // rather than a specific call count.
+  act(() => vi.advanceTimersByTime(3000))
   expect(scroller).not.toHaveClass('is-swiping')
-  expect(scroller.style.getPropertyValue('--calendar-swipe-x')).toBe('0px')
+  const finalOffset = Number(
+    scroller.style.getPropertyValue('--calendar-swipe-x').replace('px', ''),
+  )
+  expect(Math.abs(finalOffset % 80)).toBeLessThan(0.5)
+})
+
+it('settles monotonically and keeps transitions off through the final position', async () => {
+  const { container } = render(
+    <TimeGrid
+      days={[day]}
+      rowHeight={48}
+      calendars={[]}
+      refresh={0}
+      onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
+      onEdit={vi.fn()}
+      onRowHeightChange={vi.fn()}
+      onHorizontalNavigate={vi.fn()}
+    />,
+  )
+  await screen.findByRole('button', { name: 'Touch event' })
+  const scroller = container.querySelector<HTMLElement>('.week-scroll')!
+  vi.useFakeTimers()
+
+  // A slowing gesture ends while still moving right, but its nearest boundary
+  // is back to the left. Settling must head directly there without first
+  // continuing in the release direction.
+  act(() => vi.advanceTimersByTime(16))
+  fireEvent.wheel(scroller, { deltaX: -25, deltaY: 0, clientX: 100 })
+  act(() => vi.advanceTimersByTime(200))
+  fireEvent.wheel(scroller, { deltaX: -5, deltaY: 0, clientX: 100 })
+  const offsets = [
+    Number(
+      scroller.style.getPropertyValue('--calendar-swipe-x').replace('px', ''),
+    ),
+  ]
+
+  let reachedFinalOffset = false
+  for (let elapsed = 0; elapsed < 2500; elapsed += 16) {
+    act(() => vi.advanceTimersByTime(16))
+    const offset = Number(
+      scroller.style.getPropertyValue('--calendar-swipe-x').replace('px', ''),
+    )
+    offsets.push(offset)
+    if (offset === -80) {
+      reachedFinalOffset = true
+      break
+    }
+  }
+
+  expect(reachedFinalOffset).toBe(true)
+  expect(
+    offsets.every(
+      (offset, index) => index === 0 || offset <= offsets[index - 1],
+    ),
+  ).toBe(true)
+  expect(scroller).toHaveClass('is-swiping')
+
+  act(() => vi.advanceTimersByTime(16))
+  expect(scroller).not.toHaveClass('is-swiping')
+  expect(scroller.style.getPropertyValue('--calendar-swipe-x')).toBe('-80px')
+})
+
+it('commits new day columns before rebasing the horizontal transform', async () => {
+  function NavigatingGrid() {
+    const [visibleDay, setVisibleDay] = useState(day)
+    const navigate = useCallback((distance: number) => {
+      setVisibleDay((current) => {
+        const next = new Date(current)
+        next.setDate(next.getDate() + distance)
+        return next
+      })
+    }, [])
+
+    return (
+      <TimeGrid
+        days={[visibleDay]}
+        rowHeight={48}
+        calendars={[]}
+        refresh={0}
+        onCreate={vi.fn()}
+        onCreateAllDay={vi.fn()}
+        onEdit={vi.fn()}
+        onRowHeightChange={vi.fn()}
+        onHorizontalNavigate={navigate}
+      />
+    )
+  }
+
+  const { container } = render(<NavigatingGrid />)
+  await screen.findByRole('button', { name: 'Touch event' })
+  const scroller = container.querySelector<HTMLElement>('.week-scroll')!
+  const labelsAtRebase: string[][] = []
+  const nativeSetProperty = CSSStyleDeclaration.prototype.setProperty
+
+  vi.spyOn(scroller.style, 'setProperty').mockImplementation(
+    (property, value, priority) => {
+      if (property === '--calendar-swipe-x' && value === '-80px') {
+        labelsAtRebase.push(
+          [...container.querySelectorAll('.week-header-daylabel strong')].map(
+            (label) => label.textContent ?? '',
+          ),
+        )
+      }
+      nativeSetProperty.call(scroller.style, property, value, priority)
+    },
+  )
+
+  fireEvent.wheel(scroller, { deltaX: 80, deltaY: 0, clientX: 100 })
+
+  expect(labelsAtRebase.length).toBeGreaterThan(0)
+  expect(
+    labelsAtRebase.every((labels) => labels.join(',') === '27,28,29'),
+  ).toBe(true)
 })
