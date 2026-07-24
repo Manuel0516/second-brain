@@ -113,6 +113,53 @@ describe('EventEditor', () => {
     )
   })
 
+  it('allows a single-day all-day event and stores an exclusive end date', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 'event-1' }), { status: 201 }),
+      )
+    const onSaved = vi.fn()
+
+    render(
+      <EventEditor
+        calendars={[
+          {
+            id: 'calendar-1',
+            name: 'Default',
+            color: '#8B5CF6',
+            is_visible: true,
+            source: 'local',
+          },
+        ]}
+        event={{
+          start_at: '2026-06-27T00:00:00.000Z',
+          end_at: '2026-06-27T00:00:00.000Z',
+          all_day: true,
+        }}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />,
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('Event title'), {
+      target: { value: 'Holiday' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce(), {
+      timeout: 2_000,
+    })
+    const request = fetchMock.mock.calls.find(
+      ([url]) => String(url) === '/api/events',
+    )?.[1]
+    const body = JSON.parse(String(request?.body))
+    expect(body.all_day).toBe(true)
+    expect(
+      new Date(body.end_at).getTime() - new Date(body.start_at).getTime(),
+    ).toBe(24 * 60 * 60 * 1000)
+  })
+
   it('creates the note inside the chosen folder', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0199](0199-all-day-event-date-range.md)                                | All-day event date range                                                                                | 2026-07-24 | accepted                   |
+| [0198](0198-calendar-today-all-day-spacing.md)                          | Calendar today all-day spacing                                                                         | 2026-07-24 | accepted                   |
 | [0197](0197-production-favicon-fallback.md)                             | Add a reliable production favicon fallback                                                             | 2026-07-24 | pending approval           |
 | [0196](0196-meal-photo-dirty-test-stability.md)                         | Stabilize the uploaded-photo dirty-state test                                                          | 2026-07-24 | accepted                   |
 | [0195](0195-calendar-time-grid-settle-fix.md)                           | Remove the calendar time-grid settle jump                                                              | 2026-07-24 | accepted                   |

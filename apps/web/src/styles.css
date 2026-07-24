@@ -1258,6 +1258,9 @@ input[type='color'] {
   margin-top: 4px;
   padding: 0 4px;
 }
+.week-header .today .allday-band {
+  margin-top: 8px;
+}
 .allday-band:empty {
   display: none;
 }
@@ -1266,6 +1269,7 @@ input[type='color'] {
   width: 100%;
   overflow: hidden;
   padding: 2px 6px;
+  margin-bottom: 4px;
   border: 0;
   border-left: 3px solid;
   border-radius: 4px;

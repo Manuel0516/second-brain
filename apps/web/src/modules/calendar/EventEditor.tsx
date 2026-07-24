@@ -178,6 +178,28 @@ function localValue(value: string) {
   return local.toISOString().slice(0, 16)
 }
 
+function offsetLocalDay(value: string, days: number) {
+  const date = new Date(value)
+  date.setDate(date.getDate() + days)
+  return localValue(date.toISOString())
+}
+
+function editorEndValue(event: Partial<CalendarEvent>) {
+  const value = event.end_at ?? event.start_at ?? ''
+  const start = localValue(event.start_at ?? '')
+  const end = localValue(event.end_at ?? '')
+  if (
+    !event.all_day ||
+    !event.start_at ||
+    !event.end_at ||
+    new Date(event.end_at) <= new Date(event.start_at) ||
+    start.slice(0, 10) === end.slice(0, 10)
+  ) {
+    return localValue(value)
+  }
+  return offsetLocalDay(event.end_at, -1)
+}
+
 export function EventEditor({
   calendars,
   event,
@@ -206,7 +228,7 @@ export function EventEditor({
     title: event.title ?? '',
     calendar_id: event.calendar_id ?? orderedCalendars[0]?.id ?? '',
     start_at: localValue(event.start_at ?? ''),
-    end_at: localValue(event.end_at ?? event.start_at ?? ''),
+    end_at: editorEndValue(event),
     all_day: event.all_day ?? false,
     color_override: event.color_override ?? '',
     location: event.location ?? '',
@@ -731,13 +753,24 @@ export function EventEditor({
         return fail('Add an event title.')
       }
       const start = new Date(form.start_at)
-      const end = new Date(form.end_at)
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      const editorEnd = new Date(form.end_at)
+      if (Number.isNaN(start.getTime()) || Number.isNaN(editorEnd.getTime())) {
         return fail('Choose a valid start and end time.')
       }
-      if (end <= start) {
+      if (form.all_day && datePart(form.end_at) < datePart(form.start_at)) {
+        return fail('The end date cannot be before the start date.')
+      }
+      if (!form.all_day && editorEnd <= start) {
         return fail('The end time must be after the start time.')
       }
+      const end = form.all_day
+        ? new Date(
+            offsetLocalDay(
+              `${datePart(form.end_at)}T${timePart(form.start_at)}`,
+              1,
+            ),
+          )
+        : editorEnd
       if (form.connect_finance && Number(form.finance_amount) <= 0) {
         return fail('Add a finance amount greater than zero.')
       }
