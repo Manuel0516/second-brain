@@ -20,7 +20,7 @@ beforeEach(() => {
   document.head.querySelector("link[rel='icon']")?.remove()
   const favicon = document.createElement('link')
   favicon.rel = 'icon'
-  favicon.href = '/logo-neon-planet.png'
+  favicon.href = '/favicon-monochrome.png?v=20260724-white'
   document.head.appendChild(favicon)
 })
 
@@ -52,21 +52,27 @@ test('applyVisualStyle sets data-visual-style on the root element', () => {
   expect(document.documentElement.dataset.visualStyle).toBe('neon')
 })
 
-test('applyVisualStyle updates the favicon to match the active style', () => {
+test('applyVisualStyle keeps a visible cache-busted favicon across appearance modes', () => {
   const favicon = () => document.querySelector("link[rel='icon']")
 
   applyTheme('light')
   applyVisualStyle('monochrome')
-  expect(favicon()?.getAttribute('href')).toBe('/favicon-monochrome-black.svg')
-  expect(favicon()?.getAttribute('type')).toBe('image/svg+xml')
+  expect(favicon()?.getAttribute('href')).toBe(
+    '/favicon-monochrome.png?v=20260724-white',
+  )
+  expect(favicon()?.getAttribute('type')).toBe('image/png')
 
   applyTheme('dark')
   applyVisualStyle('monochrome')
-  expect(favicon()?.getAttribute('href')).toBe('/favicon-monochrome.png')
+  expect(favicon()?.getAttribute('href')).toBe(
+    '/favicon-monochrome.png?v=20260724-white',
+  )
   expect(favicon()?.getAttribute('type')).toBe('image/png')
 
   applyVisualStyle('neon')
-  expect(favicon()?.getAttribute('href')).toBe('/logo-neon-planet.png')
+  expect(favicon()?.getAttribute('href')).toBe(
+    '/favicon-monochrome.png?v=20260724-white',
+  )
   expect(favicon()?.getAttribute('type')).toBe('image/png')
 })
 
@@ -75,12 +81,8 @@ test('logoAssetFor follows the active visual style', () => {
   expect(logoAssetFor('monochrome')).toBe('/logo-white.png')
 })
 
-test('faviconAssetFor follows color mode for monochrome and visual style for neon', () => {
-  expect(faviconAssetFor('neon')).toBe('/logo-neon-planet.png')
-  expect(faviconAssetFor('monochrome', 'light')).toBe(
-    '/favicon-monochrome-black.svg',
-  )
-  expect(faviconAssetFor('monochrome', 'dark')).toBe('/favicon-monochrome.png')
+test('faviconAssetFor returns the browser-chrome-safe favicon', () => {
+  expect(faviconAssetFor()).toBe('/favicon-monochrome.png?v=20260724-white')
 })
 
 test('applyBackendAppearance is authoritative and replaces a stale cache', () => {

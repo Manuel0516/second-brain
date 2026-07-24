@@ -27,19 +27,9 @@ export function logoAssetFor(style: VisualStyle): string {
   return style === 'monochrome' ? '/logo-white.png' : '/logo-neon-planet.png'
 }
 
-/** The favicon asset for the given visual style and color mode. */
-export function faviconAssetFor(
-  style: VisualStyle,
-  theme: ColorMode = 'system',
-): string {
-  if (style === 'neon') return '/logo-neon-planet.png'
-
-  const light =
-    theme === 'light' ||
-    (theme === 'system' &&
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-color-scheme: light)').matches)
-  return light ? '/favicon-monochrome-black.svg' : '/favicon-monochrome.png'
+/** ponytail: one cache-busted tab icon stays visible across browser chrome themes. */
+export function faviconAssetFor(): string {
+  return '/favicon-monochrome.png?v=20260724-white'
 }
 
 let transitionTimer = 0
@@ -66,21 +56,15 @@ export function applyTheme(theme: ColorMode, animate = false) {
     if (next) root.dataset.theme = next
     else delete root.dataset.theme
   })
-  applyFavicon((root.dataset.visualStyle as VisualStyle) || 'neon')
+  applyFavicon()
 }
 
-function applyFavicon(style: VisualStyle) {
+function applyFavicon() {
   const link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
   if (link) {
-    const theme: ColorMode =
-      document.documentElement.dataset.theme === 'light'
-        ? 'light'
-        : document.documentElement.dataset.theme === 'dark'
-          ? 'dark'
-          : 'system'
-    const href = faviconAssetFor(style, theme)
+    const href = faviconAssetFor()
     link.href = href
-    link.type = href.endsWith('.svg') ? 'image/svg+xml' : 'image/png'
+    link.type = 'image/png'
   }
 }
 
@@ -91,7 +75,7 @@ export function applyVisualStyle(style: VisualStyle, animate = false) {
   withOptionalTransition(animate && changed, () => {
     root.dataset.visualStyle = style
   })
-  applyFavicon(style)
+  applyFavicon()
 }
 
 /**

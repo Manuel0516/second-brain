@@ -69,9 +69,10 @@ jobs:
             docker compose logs --tail=100 api web >&2
             exit 1
           fi
-          for asset in logo-neon-planet.png logo-white.png favicon-monochrome.png favicon-monochrome-black.svg; do
+          for asset in logo-neon-planet.png logo-white.png favicon-monochrome.png favicon-monochrome-black.svg favicon.ico; do
             case "$asset" in
               *.svg) expected_type="image/svg+xml" ;;
+              favicon.ico) expected_type="image/png" ;;
               *.png) expected_type="image/png" ;;
               *) echo "Unknown static asset type: $asset" >&2; exit 1 ;;
             esac
