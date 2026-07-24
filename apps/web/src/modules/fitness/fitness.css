@@ -21,6 +21,26 @@
   --fit-accent-tint-deep: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+@keyframes fitnessSmoothIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.fit-sidebar-content {
+  padding: 20px 16px;
+  animation: fadeUp 0.22s ease-out both;
+}
+
+.fit-body-metric-row {
+  animation: fitnessSmoothIn 0.28s ease-out both;
+}
+
 /* ── Tabs (Phase F3) ─────────────────────────────────────────────── */
 
 .fitness-tabs {
@@ -50,7 +70,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fitnessSmoothIn 0.28s ease-out both;
   animation-delay: var(--enter-delay, 0ms);
   min-width: 0;
 }
@@ -72,7 +92,7 @@
 .fit-overview-skeleton {
   height: 190px;
   animation:
-    springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both,
+    fitnessSmoothIn 0.28s ease-out both,
     skeletonPulse 1.2s ease-in-out infinite;
   animation-delay: var(--enter-delay, 0ms), 0ms;
 }
@@ -90,7 +110,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .fit-overview-card,
-  .fit-overview-empty {
+  .fit-overview-empty,
+  .fit-sidebar-content,
+  .fit-topbar,
+  .fit-body-metric-row {
     animation: none;
   }
   .fit-overview-skeleton {
@@ -210,7 +233,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fitnessSmoothIn 0.28s ease-out both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
@@ -371,7 +394,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--bg-elevated);
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fitnessSmoothIn 0.28s ease-out both;
 }
 
 .fit-live-exercise {
@@ -1078,6 +1101,15 @@
   align-items: end;
 }
 
+.fit-metric-form-grid > div,
+.fit-metric-form-grid input {
+  min-width: 0;
+}
+
+.fit-metric-form-grid input {
+  max-width: 100%;
+}
+
 @media (max-width: 720px) {
   .fit-metric-form-grid {
     grid-template-columns: 1fr 1fr;
@@ -1085,6 +1117,16 @@
 
   .fit-metric-form-grid > button {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .fit-metric-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fit-metric-form-grid > button {
+    grid-column: auto;
   }
 }
 
@@ -1268,6 +1310,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .fit-history-session,
+  .fit-live-exercise,
   .fit-live,
   .fit-live-status > span {
     animation: none;
@@ -1424,7 +1467,7 @@
   flex-shrink: 0;
   padding: 18px 28px 14px;
   border-bottom: 1px solid var(--border);
-  animation: fadeDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fadeDown 0.24s ease-out both;
 }
 
 .fit-topbar-row {
@@ -1457,6 +1500,11 @@
   cursor: pointer;
   transition: background 0.15s;
   flex-shrink: 0;
+}
+
+.fit-topbar-nav > .fit-topbar-nav-btn:first-child {
+  position: relative;
+  z-index: 42;
 }
 
 .fit-topbar-nav-btn:hover:not(:disabled) {
@@ -1548,12 +1596,6 @@
     position: relative;
   }
 
-  .fit-topbar-nav > .fit-topbar-nav-btn:first-child {
-    position: absolute;
-    left: 0;
-    top: 2px;
-  }
-
   .fit-topbar-title {
     text-align: center;
   }
@@ -1572,6 +1614,32 @@
   }
 }
 
+@media (max-width: 1024px) {
+  .fit-topbar-row {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .fit-topbar-nav {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .fitness-tabs,
+  .fit-topbar-actions {
+    margin-inline: auto;
+  }
+
+  .fit-topbar-actions {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .fit-topbar-actions button {
+    width: 100%;
+  }
+}
+
 /* Planned-workouts strip above the Overview graphs. */
 .fit-planned-list {
   margin-bottom: 24px;
@@ -1586,7 +1654,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fitnessSmoothIn 0.28s ease-out both;
 }
 
 .fit-planned-card.highlight {
@@ -1953,7 +2021,7 @@
   transition:
     background 0.14s ease,
     border-color 0.14s ease;
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fitnessSmoothIn 0.28s ease-out both;
   animation-delay: var(--enter-delay, 0ms);
 }
 

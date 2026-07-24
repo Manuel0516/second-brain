@@ -167,7 +167,7 @@ export function GoalsSection({
                 key={goal.id}
                 className="fit-goal-card"
                 style={
-                  { '--enter-delay': `${i * 40}ms` } as React.CSSProperties
+                  { '--enter-delay': `${i * 24}ms` } as React.CSSProperties
                 }
               >
                 <ProgressBar

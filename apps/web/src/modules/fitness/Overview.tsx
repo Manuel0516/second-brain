@@ -180,7 +180,7 @@ export function Overview({
           <div
             key={i}
             className="fit-overview-card fit-overview-skeleton"
-            style={{ '--enter-delay': `${i * 60}ms` } as React.CSSProperties}
+            style={{ '--enter-delay': `${i * 24}ms` } as React.CSSProperties}
           />
         ))}
       </div>
@@ -228,7 +228,7 @@ export function Overview({
   }
 
   let delay = 0
-  const nextDelay = () => `${delay++ * 60}ms`
+  const nextDelay = () => `${delay++ * 24}ms`
 
   return (
     <>

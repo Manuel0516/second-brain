@@ -554,7 +554,7 @@ export function SessionWizard({
                         onClick={() => toggleEx(c.name, c.category)}
                         style={
                           {
-                            '--enter-delay': `${i * 30}ms`,
+                            '--enter-delay': `${i * 18}ms`,
                           } as React.CSSProperties
                         }
                       >

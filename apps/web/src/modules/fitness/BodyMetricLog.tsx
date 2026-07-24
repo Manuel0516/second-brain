@@ -52,14 +52,14 @@ export function BodyMetricLog() {
             {recentMetrics.map((metric, i) => (
               <div
                 key={metric.id}
+                className="fit-body-metric-row"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
                   padding: '5px 10px',
                   borderRadius: 'var(--r-sm)',
-                  animation: `springUp 0.5s cubic-bezier(.16,1,.3,1) both`,
-                  animationDelay: `${i * 30}ms`,
+                  animationDelay: `${i * 18}ms`,
                 }}
               >
                 <span

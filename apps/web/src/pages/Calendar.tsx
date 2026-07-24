@@ -59,6 +59,9 @@ export function Calendar() {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
   )
+  const [isRailMobile, setIsRailMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 800,
+  )
   // Use settings.default_view with 'week' as fallback
   const initialView = (
     typeof window !== 'undefined' ? settings.default_view : 'week'
@@ -168,6 +171,16 @@ export function Calendar() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)')
     const update = () => setIsMobile(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 800px)')
+    const update = () => {
+      setIsRailMobile(media.matches)
+      setSidebarOpen(!media.matches)
+    }
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [])
@@ -294,7 +307,7 @@ export function Calendar() {
       }}
     >
       {/* ── Rail (always visible on desktop, toggles with sidebar on mobile) ── */}
-      {(!isMobile || sidebarOpen) && (
+      {(!isRailMobile || sidebarOpen) && (
         <AppRail active="calendar" onNavigate={navigate} />
       )}
 
@@ -409,39 +422,37 @@ export function Calendar() {
                 </button>
               </div>
 
-              <div className="cal-toolbar-secondary">
-                <div className="calendar-tabs">
-                  <Segmented
-                    value={view}
-                    options={VIEWS}
-                    labels={{ day: 'Day', week: 'Week', month: 'Month' }}
-                    ariaLabel="Calendar view"
-                    onChange={(item) => {
-                      navDir.current = VIEWS.indexOf(item) - VIEWS.indexOf(view)
-                      animateNav.current = true
-                      setView(item)
-                    }}
-                  />
-                </div>
-                <button
-                  className="cal-new-event-button"
-                  aria-label="New event"
-                  onClick={() => createAt(new Date())}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M10 3v14M3 10h14" />
-                  </svg>
-                </button>
+              <div className="calendar-tabs">
+                <Segmented
+                  value={view}
+                  options={VIEWS}
+                  labels={{ day: 'Day', week: 'Week', month: 'Month' }}
+                  ariaLabel="Calendar view"
+                  onChange={(item) => {
+                    navDir.current = VIEWS.indexOf(item) - VIEWS.indexOf(view)
+                    animateNav.current = true
+                    setView(item)
+                  }}
+                />
               </div>
+              <button
+                className="cal-new-event-button"
+                aria-label="New event"
+                onClick={() => createAt(new Date())}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M10 3v14M3 10h14" />
+                </svg>
+              </button>
             </div>
           </div>
 

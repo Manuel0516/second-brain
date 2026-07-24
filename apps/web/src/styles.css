@@ -644,6 +644,43 @@ button:not(.calendar-event):active {
     opacity 0.2s ease,
     transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Keep the data-heavy module sidebars compact without changing the shared panel width. */
+.food-page .app-sidebar,
+.fitness-page .app-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  transition:
+    width 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.food-page .app-sidebar::-webkit-scrollbar,
+.fitness-page .app-sidebar::-webkit-scrollbar {
+  width: 2px;
+}
+
+.food-page .app-sidebar,
+.fitness-page .app-sidebar {
+  padding-right: 6px;
+}
+
+.food-page .app-sidebar.closed,
+.fitness-page .app-sidebar.closed {
+  padding-right: 0;
+}
+
+.food-sidebar-content,
+.fit-sidebar-content {
+  padding: 20px 16px;
+}
+
+.food-page .app-sidebar > .food-sidebar-content,
+.fitness-page .app-sidebar > .fit-sidebar-content {
+  padding-right: 10px;
+}
+
 /* Desktop: collapse to zero width. */
 .app-sidebar.closed {
   width: 0;
@@ -966,10 +1003,12 @@ input[type='color'] {
   width: min(100%, 720px);
   margin: 0 auto;
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
 }
 .cal-toolbar-primary {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: 26px 26px minmax(0, 1fr) 26px auto;
   align-items: center;
   gap: 8px;
@@ -1011,15 +1050,12 @@ input[type='color'] {
   padding: 0 15px;
   font: 500 11.5px var(--font-ui);
 }
-.cal-toolbar-secondary {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
 .calendar-tabs {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: end;
   width: 300px;
-  max-width: calc(100% - 42px);
+  max-width: calc(100% - 46px);
   flex: 0 1 300px;
 }
 .calendar-tabs .repeat-segmented button {
@@ -1027,6 +1063,8 @@ input[type='color'] {
   white-space: nowrap;
 }
 .cal-new-event-button {
+  grid-column: 2;
+  grid-row: 2;
   width: 34px;
   height: 34px;
   padding: 0;
@@ -1036,6 +1074,57 @@ input[type='color'] {
 }
 .cal-new-event-button:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+@media (min-width: 801px) {
+  .cal-toolbar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cal-toolbar-primary {
+    flex: 0 1 auto;
+    grid-column: auto;
+  }
+
+  .calendar-tabs {
+    grid-column: auto;
+    grid-row: auto;
+    justify-self: auto;
+  }
+
+  .cal-new-event-button {
+    grid-column: auto;
+    grid-row: auto;
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 800px) {
+  .cal-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 12px;
+  }
+
+  .cal-toolbar-primary {
+    flex: 1 0 100%;
+    grid-column: auto;
+  }
+
+  .calendar-tabs {
+    grid-column: auto;
+    grid-row: auto;
+    justify-self: auto;
+  }
+
+  .cal-new-event-button {
+    grid-column: auto;
+    grid-row: auto;
+  }
 }
 
 @keyframes daySlideRight {

@@ -148,7 +148,8 @@ Always create a new migration for changes.
 
 ## Production notes
 
-The app runs behind nginx on the VPS. Traefik handles TLS. The URL is `brain.zero-five.space`.
+The app runs behind nginx on the VPS. Traefik handles TLS and restricts
+`brain.zero-five.space` to the WireGuard VPN subnet (`10.8.0.0/24`).
 
 All infra tasks (fail2ban, Traefik HSTS, backups, Tailscale) require explicit owner approval
 before being applied — see `docs/history/0006-production-deploy-hardening.md`.

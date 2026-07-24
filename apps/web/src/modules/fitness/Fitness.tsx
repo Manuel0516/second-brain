@@ -172,6 +172,9 @@ export function Fitness() {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
   )
+  const [isRailMobile, setIsRailMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 800,
+  )
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
@@ -469,6 +472,16 @@ export function Fitness() {
     return () => media.removeEventListener('change', update)
   }, [])
 
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 800px)')
+    const update = () => {
+      setIsRailMobile(media.matches)
+      setSidebarOpen(!media.matches)
+    }
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
   function handleStartSession(
     session: ActiveSession,
     sourceSessionId?: string,
@@ -698,10 +711,9 @@ export function Fitness() {
         height: '100vh',
         overflow: 'hidden',
         background: 'var(--bg-base)',
-        animation: 'fadeUp .4s cubic-bezier(.16,1,.3,1) both',
       }}
     >
-      {(!isMobile || sidebarOpen) && (
+      {(!isRailMobile || sidebarOpen) && (
         <AppRail active="fitness" onNavigate={navigate} />
       )}
 
@@ -739,12 +751,7 @@ export function Fitness() {
             />
           }
         >
-          <div
-            style={{
-              padding: '20px 16px',
-              animation: 'slideInL .3s ease both',
-            }}
-          >
+          <div className="fit-sidebar-content">
             {/* This week */}
             <div
               style={{
@@ -1045,11 +1052,6 @@ export function Fitness() {
                   }
                   aria-pressed={sidebarOpen}
                   className="fit-topbar-nav-btn"
-                  style={{
-                    position: isMobile ? 'absolute' : undefined,
-                    left: isMobile ? 0 : undefined,
-                    top: isMobile ? 2 : undefined,
-                  }}
                 >
                   <svg
                     width="15"

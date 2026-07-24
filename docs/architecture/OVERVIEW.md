@@ -43,7 +43,7 @@ MinIO (S3-compatible)
   └── file attachments (receipts, photos) — not yet wired to frontend
 
 Traefik (reverse proxy)
-  └── TLS termination, routes brain.zero-five.space → nginx → frontend + /api
+  └── TLS termination + WireGuard allowlist, routes brain.zero-five.space → nginx → frontend + /api
 ```
 
 ---

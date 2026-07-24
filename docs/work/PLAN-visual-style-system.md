@@ -28,7 +28,7 @@ preference:
 - Calendar colors, note highlights, charts that encode multiple data series,
   workout feeling colors, success, warning, danger, and user-selected colors
   remain meaningful. Monochrome applies to the app chrome, not the user's data.
-- Use the supplied `apps/web/public/Blanco_SinFondo.png` for Monochrome and the
+- Use the supplied `apps/web/public/logo-white.png` for Monochrome and the
   existing `logo-neon-planet.png` for Neon.
 - No new dependency or new component pattern is needed.
 
@@ -236,4 +236,3 @@ Acceptance requires:
 - Reduced-motion behavior remains respected.
 - Reload, logout/login, and backend refresh resolve to the expected style.
 - Root `npm run check` passes.
-

@@ -55,7 +55,6 @@ jobs:
           docker compose build api web
           docker compose up -d --remove-orphans
           docker compose ps
-          curl --fail --silent --show-error \
-            --retry 12 --retry-all-errors --retry-delay 5 \
-            https://brain.zero-five.space/api/ready
+          docker compose exec -T web \
+            wget -q -O - http://127.0.0.1/api/ready >/dev/null
           REMOTE

@@ -3,6 +3,8 @@
 This guide deploys Second Brain into the existing Zero Five VPS stack at
 `brain.zero-five.space`. The Hub's Traefik instance owns ports 80/443, TLS, and
 container routing. Second Brain does not run another reverse proxy on the host.
+The application route is VPN-only: the hostname must resolve to the WireGuard
+address and Traefik only accepts clients from `10.8.0.0/24`.
 
 ## Existing VPS contract
 
@@ -10,13 +12,14 @@ container routing. Second Brain does not run another reverse proxy on the host.
 - The Hub router is already running Traefik with the `websecure` entrypoint and
   `letsencrypt` certificate resolver.
 - Traefik owns the external Docker network named `traefik`.
-- DNS for `brain.zero-five.space` points to the VPS.
+- DNS for `brain.zero-five.space` resolves to the VPS's VPN address (`10.8.0.1`)
+  for VPN clients; it must not expose the public VPS address.
 - Only Second Brain's nginx `web` service joins `traefik`. The API, PostgreSQL,
   and MinIO remain on Compose's private `internal` network with no host ports.
 
 The labels in `compose.yaml` are the integration contract. They register the
-HTTPS route with Traefik and make Second Brain visible in the Hub as an
-admin-only web app. Do not recreate these labels in the Hub stack.
+VPN-only HTTPS route with Traefik and make Second Brain visible in the Hub as
+an admin-only web app. Do not recreate these labels in the Hub stack.
 
 ## 1. One-time application setup
 
@@ -95,6 +98,8 @@ run a separate migration command during a normal single-node deployment.
 
 ## 4. Verify the Hub route
 
+Run the external route checks from a device connected to the VPN:
+
 ```bash
 curl --fail --silent --show-error https://brain.zero-five.space/api/health
 curl --fail --silent --show-error https://brain.zero-five.space/api/ready
@@ -119,10 +124,10 @@ docker network inspect traefik
 docker compose logs --tail=100 web api
 ```
 
-The public request path is:
+The private request path is:
 
 ```text
-internet -> Hub Traefik -> secondbrain web/nginx -> api:8000
+VPN client -> wg0 -> Hub Traefik -> secondbrain web/nginx -> api:8000
 ```
 
 ## 5. First login and 2FA
@@ -139,7 +144,8 @@ password.
 `.github/workflows/deploy.yml` deploys every successful `main` push after the
 existing `CI` workflow passes. It connects with SSH, checks out the exact commit
 that CI tested, rebuilds the application containers, runs migrations through
-the API entrypoint, and verifies the public readiness endpoint.
+the API entrypoint, and verifies readiness through the internal nginx container
+path. This avoids requiring the deployment host to reach the VPN-only hostname.
 
 Create a dedicated SSH key for GitHub Actions. Add its public key to
 `/home/manuel/.ssh/authorized_keys` on the VPS. Add these secrets to the
@@ -259,9 +265,9 @@ that referenced attachments can be opened through the application.
 | Deploy refuses local changes   | Inspect `git status` on the VPS and preserve or remove the intentional change manually |
 | SSH host verification fails    | Refresh `VPS_KNOWN_HOSTS` only after verifying the VPS host-key fingerprint            |
 
-## 11. Optional private access
+## 11. Private access
 
-Tailscale remains an optional extra layer. If enabled, configure it in the
-existing Hub/Traefik stack because that stack owns ingress. Do not bind or
-publish ports from this Compose project to bypass the router. App login and
-TOTP remain enabled even when access is limited to the tailnet.
+VPN-only access is enforced by the `secondbrain-vpn-only` Traefik middleware in
+`compose.yaml`. Keep the hostname on the VPN address and do not add host-bound
+ports to this Compose project to bypass the router. App login and TOTP remain
+enabled as a second layer of protection.

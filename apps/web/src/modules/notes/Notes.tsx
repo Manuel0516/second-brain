@@ -71,6 +71,9 @@ export function Notes() {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
   )
+  const [isRailMobile, setIsRailMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 800,
+  )
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
@@ -108,7 +111,10 @@ export function Notes() {
   }, [])
   useEffect(() => {
     const drawer = window.matchMedia('(max-width: 800px)')
-    const updateDrawer = () => setSidebarOpen(!drawer.matches)
+    const updateDrawer = () => {
+      setIsRailMobile(drawer.matches)
+      setSidebarOpen(!drawer.matches)
+    }
     drawer.addEventListener('change', updateDrawer)
     return () => drawer.removeEventListener('change', updateDrawer)
   }, [])
@@ -245,7 +251,7 @@ export function Notes() {
 
   return (
     <div className="notes-shell">
-      {(!isMobile || sidebarOpen) && (
+      {(!isRailMobile || sidebarOpen) && (
         <AppRail active="notes" onNavigate={navigate} />
       )}
       <div className="notes-workspace">

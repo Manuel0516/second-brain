@@ -24,9 +24,7 @@ function writeCachedVisualStyle(style: VisualStyle) {
 
 /** The brand logo asset for the given visual style — shared by the app rail and login screen. */
 export function logoAssetFor(style: VisualStyle): string {
-  return style === 'monochrome'
-    ? '/Blanco_SinFondo.png'
-    : '/logo-neon-planet.png'
+  return style === 'monochrome' ? '/logo-white.png' : '/logo-neon-planet.png'
 }
 
 /**

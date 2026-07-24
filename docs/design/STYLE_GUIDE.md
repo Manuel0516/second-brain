@@ -132,7 +132,7 @@ only the app-chrome tokens below.
 ```
 
 The brand logo also switches per style: Neon always uses `logo-neon-planet.png` with its
-cyan glow; Monochrome uses `Blanco_SinFondo.png` (white asset, unchanged in dark, forced
+cyan glow; Monochrome uses `logo-white.png` (white asset, unchanged in dark, forced
 to black in light via a `.brand-logo` CSS `filter: brightness(0)` rule — there is no
 separate light asset). The `glow` keyframe reads its color from `--logo-glow-rgb` rather
 than a hard-coded cyan value, so it never leaks Neon's color into Monochrome.

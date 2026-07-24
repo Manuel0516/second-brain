@@ -63,7 +63,7 @@ test('applyVisualStyle updates the favicon to match the active style', () => {
 
 test('logoAssetFor follows the active visual style', () => {
   expect(logoAssetFor('neon')).toBe('/logo-neon-planet.png')
-  expect(logoAssetFor('monochrome')).toBe('/Blanco_SinFondo.png')
+  expect(logoAssetFor('monochrome')).toBe('/logo-white.png')
 })
 
 test('faviconAssetFor uses a square asset so the browser never stretches it', () => {

@@ -66,6 +66,11 @@
   flex-shrink: 0;
 }
 
+.food-topbar-nav > .food-topbar-nav-btn:first-child {
+  position: relative;
+  z-index: 42;
+}
+
 .food-topbar-nav-btn:hover:not(:disabled) {
   background: var(--bg-raised);
 }
@@ -322,12 +327,6 @@
     position: relative;
   }
 
-  .food-topbar-nav > .food-topbar-nav-btn:first-child {
-    position: absolute;
-    left: 0;
-    top: 2px;
-  }
-
   .food-topbar-title {
     text-align: center;
   }
@@ -342,6 +341,32 @@
 
   .food-topbar-actions button {
     flex: 1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .food-topbar-row {
+    justify-content: center;
+    align-items: center;
+  }
+
+  .food-topbar-nav {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .food-tabs,
+  .food-topbar-actions {
+    margin-inline: auto;
+  }
+
+  .food-topbar-actions {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .food-topbar-actions button {
+    width: 100%;
   }
 }
 

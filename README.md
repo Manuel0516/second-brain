@@ -50,7 +50,7 @@ This runs frontend formatting, linting, type checks, tests, and build plus backe
 
 ## Production containers
 
-The base Compose file is production-safe: only the nginx web container joins the external `traefik` network. API, PostgreSQL, and MinIO have no public ports.
+The base Compose file is production-safe: only the nginx web container joins the external `traefik` network, and Traefik limits that route to the WireGuard VPN subnet. API, PostgreSQL, and MinIO have no public ports.
 
 ```bash
 docker compose config

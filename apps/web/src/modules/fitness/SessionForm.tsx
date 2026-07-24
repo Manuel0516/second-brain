@@ -322,7 +322,7 @@ export function SessionForm({
               key={session.id}
               id={`session-row-${session.id}`}
               className={`fit-history-session${editingId === session.id ? ' editing' : ''}`}
-              style={{ animationDelay: `${index * 40}ms` }}
+              style={{ animationDelay: `${index * 24}ms` }}
             >
               {editingId === session.id ? (
                 <div className="fit-history-editor">

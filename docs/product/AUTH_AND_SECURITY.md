@@ -1,15 +1,15 @@
 # Auth & Security
 
-Single-user app, but reachable on the open internet via your VPS — so the login isn't a
-formality, it's the only thing standing between your entire life data and anyone who finds
-the URL. Treat it accordingly.
+Single-user app, reachable through the private VPN route on your VPS. The VPN boundary
+reduces the attack surface, but login remains mandatory because network access alone is not
+an identity check.
 
 ## 1. Login Model
 - **No signup flow** — exactly one account, seeded at deploy time (via a CLI command or env
   var on first boot), not through a public registration form.
 - **Credentials**: email (or just a username) + password, hashed with `argon2` (preferred
   over bcrypt for new projects — better resistance to GPU cracking).
-- **Optional TOTP 2FA** — strongly recommended given public exposure. Standard
+- **Optional TOTP 2FA** — strongly recommended as a second factor even with private access. Standard
   authenticator-app flow (Google Authenticator/Authy/1Password all work), stored as an
   encrypted secret, enabled from a settings page.
 

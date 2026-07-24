@@ -116,6 +116,9 @@ export function Food() {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
   )
+  const [isRailMobile, setIsRailMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 800,
+  )
   const [sidebarOpen, setSidebarOpen] = useState(
     () => typeof window === 'undefined' || window.innerWidth > 800,
   )
@@ -200,6 +203,16 @@ export function Food() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)')
     const update = () => setIsMobile(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 800px)')
+    const update = () => {
+      setIsRailMobile(media.matches)
+      setSidebarOpen(!media.matches)
+    }
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [])
@@ -335,7 +348,7 @@ export function Food() {
         animation: 'fadeUp .4s cubic-bezier(.16,1,.3,1) both',
       }}
     >
-      {(!isMobile || sidebarOpen) && (
+      {(!isRailMobile || sidebarOpen) && (
         <AppRail active="food" onNavigate={navigate} />
       )}
 
@@ -374,10 +387,8 @@ export function Food() {
           }
         >
           <div
-            style={{
-              padding: '20px 16px',
-              animation: 'slideInL .3s ease both',
-            }}
+            className="food-sidebar-content"
+            style={{ animation: 'slideInL .3s ease both' }}
           >
             {/* 1. This week bars */}
             <div className="food-sidebar-section-label">This week</div>
@@ -764,11 +775,6 @@ export function Food() {
                   }
                   aria-pressed={sidebarOpen}
                   className="food-topbar-nav-btn"
-                  style={{
-                    position: isMobile ? 'absolute' : undefined,
-                    left: isMobile ? 0 : undefined,
-                    top: isMobile ? 2 : undefined,
-                  }}
                 >
                   <svg
                     width="15"
