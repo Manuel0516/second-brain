@@ -101,6 +101,8 @@ run a separate migration command during a normal single-node deployment.
 Run the external route checks from a device connected to the VPN:
 
 ```bash
+dig +short brain.zero-five.space
+# Expected: the WireGuard/VPS address (currently 10.8.0.1), not Cloudflare IPs.
 curl --fail --silent --show-error https://brain.zero-five.space/api/health
 curl --fail --silent --show-error https://brain.zero-five.space/api/ready
 curl --silent --show-error --head https://brain.zero-five.space/
@@ -185,8 +187,12 @@ docker compose config --quiet
 docker compose build api web
 docker compose up -d
 docker compose ps
-curl --fail --silent --show-error https://brain.zero-five.space/api/ready
+docker compose exec -T web \
+  wget -q -O - http://127.0.0.1/api/ready >/dev/null
 ```
+
+Run the external hostname checks only from a device connected to the VPN; the
+Traefik route intentionally returns `403` to requests outside `10.8.0.0/24`.
 
 Compose replaces only changed services and preserves the named PostgreSQL and
 MinIO volumes.
@@ -257,8 +263,10 @@ that referenced attachments can be opened through the application.
 | Symptom                        | Check                                                                                  |
 | ------------------------------ | -------------------------------------------------------------------------------------- |
 | Traefik 404                    | Host rule, `websecure` entrypoint, and `brain.zero-five.space` DNS                     |
+| Traefik 403                    | `dig +short brain.zero-five.space` must return the VPN address; configure split DNS or a VPN-only hosts entry if it returns Cloudflare addresses |
 | Traefik 502                    | `web` health/logs and membership in the external `traefik` network                     |
 | API 502 from nginx             | `docker compose logs api`; API health and migration startup                            |
+| Logo asset 403                 | Check file modes in `/usr/share/nginx/html`; rebuild the web image after applying the Dockerfile permission normalization |
 | Production configuration error | `APP_ENVIRONMENT`, JWT secret, initial password, and container `DATABASE_URL`          |
 | Hub entry missing              | The `hub.*` labels on `web` and the Hub's Docker discovery scope                       |
 | Login returns 429              | Wait for the configured rate-limit window and inspect the login-attempt audit data     |

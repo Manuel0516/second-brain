@@ -491,85 +491,96 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                       {draft.sets.map((set, setIdx) => (
                         <div className="fit-history-set" key={setIdx}>
                           <strong>S{setIdx + 1}</strong>
-                          {isCardio ? (
-                            <>
-                              <label>
-                                <span>Distance</span>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="0.01"
-                                  value={set.distance_km}
-                                  onChange={(e) =>
-                                    updateSet(
-                                      exIdx,
-                                      setIdx,
-                                      'distance_km',
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="—"
-                                />
-                              </label>
-                              <label>
-                                <span>Time</span>
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="0.1"
-                                  value={set.duration_min}
-                                  onChange={(e) =>
-                                    updateSet(
-                                      exIdx,
-                                      setIdx,
-                                      'duration_min',
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="—"
-                                />
-                              </label>
-                            </>
-                          ) : (
-                            <>
-                              <label>
-                                <span>Reps</span>
-                                <input
-                                  type="number"
-                                  value={set.reps}
-                                  onChange={(e) =>
-                                    updateSet(
-                                      exIdx,
-                                      setIdx,
-                                      'reps',
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="8"
-                                />
-                              </label>
-                              <label>
-                                <span>{settings.fitness_weight_unit}</span>
-                                <input
-                                  type="number"
-                                  value={set.weight}
-                                  onChange={(e) =>
-                                    updateSet(
-                                      exIdx,
-                                      setIdx,
-                                      'weight',
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="—"
-                                />
-                              </label>
-                            </>
-                          )}
+                          <button
+                            type="button"
+                            className="fit-remove-button"
+                            aria-label={`Remove set ${setIdx + 1}`}
+                            onClick={() => removeSet(exIdx, setIdx)}
+                          >
+                            ×
+                          </button>
+                          <div className="fit-history-set-fields">
+                            {isCardio ? (
+                              <>
+                                <label>
+                                  <span>Distance</span>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.01"
+                                    value={set.distance_km}
+                                    onChange={(e) =>
+                                      updateSet(
+                                        exIdx,
+                                        setIdx,
+                                        'distance_km',
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="—"
+                                  />
+                                </label>
+                                <label>
+                                  <span>Time</span>
+                                  <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    value={set.duration_min}
+                                    onChange={(e) =>
+                                      updateSet(
+                                        exIdx,
+                                        setIdx,
+                                        'duration_min',
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="—"
+                                  />
+                                </label>
+                              </>
+                            ) : (
+                              <>
+                                <label>
+                                  <span>Reps</span>
+                                  <input
+                                    type="number"
+                                    value={set.reps}
+                                    onChange={(e) =>
+                                      updateSet(
+                                        exIdx,
+                                        setIdx,
+                                        'reps',
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="8"
+                                  />
+                                </label>
+                                <label>
+                                  <span>{settings.fitness_weight_unit}</span>
+                                  <input
+                                    type="number"
+                                    value={set.weight}
+                                    onChange={(e) =>
+                                      updateSet(
+                                        exIdx,
+                                        setIdx,
+                                        'weight',
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="—"
+                                  />
+                                </label>
+                              </>
+                            )}
+                          </div>
                           <fieldset
                             className="fit-feeling"
                             aria-label={`${draft.name} set ${setIdx + 1} feeling`}
                           >
+                            <span aria-hidden="true">Feel</span>
                             {FEELING_LABELS.map((label, feelingIndex) => {
                               const feeling = feelingIndex + 1
                               return (
@@ -611,14 +622,6 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                               }
                             />
                           </label>
-                          <button
-                            type="button"
-                            className="fit-remove-button"
-                            aria-label={`Remove set ${setIdx + 1}`}
-                            onClick={() => removeSet(exIdx, setIdx)}
-                          >
-                            ×
-                          </button>
                         </div>
                       ))}
                     </div>

@@ -13,5 +13,7 @@ FROM nginx:1.29-alpine
 
 COPY infra/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+# The VPS checkout may use a restrictive umask; nginx must be able to read all static files.
+RUN chmod -R a+rX /usr/share/nginx/html
 
 EXPOSE 80

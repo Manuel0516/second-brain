@@ -7,6 +7,9 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0193](0193-static-asset-permissions.md)                                | Normalize static asset permissions                                                                     | 2026-07-24 | accepted                   |
+| [0192](0192-fitness-history-set-card-redesign.md)                       | Fitness history set card redesign                                                                    | 2026-07-24 | accepted                   |
+| [0191](0191-deployment-readiness-check.md)                              | Internal deployment readiness check                                                                    | 2026-07-24 | accepted                   |
 | [0190](0190-stable-food-fitness-sidebar-padding.md)                     | Stable Food and Fitness sidebar padding                                                                | 2026-07-24 | accepted                   |
 | [0189](0189-sidebar-padding-transition-removal.md)                      | Sidebar padding transition removal                                                                      | 2026-07-24 | accepted                   |
 | [0188](0188-fitness-smoother-loading-motion.md)                         | Fitness smoother loading motion                                                                        | 2026-07-24 | accepted                   |
