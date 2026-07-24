@@ -713,7 +713,11 @@ export function AdminSettings() {
           </div>
         )}
 
-        {error && <p style={{ fontSize: 12, color: '#D9573F' }}>{error}</p>}
+        {error && (
+          <p role="alert" style={{ fontSize: 12, color: '#D9573F' }}>
+            {error}
+          </p>
+        )}
       </SettingsCard>
     </div>
   )

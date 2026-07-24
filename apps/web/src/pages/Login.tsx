@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logoAssetFor, readCachedVisualStyle } from '../lib/appearance'
@@ -15,27 +15,47 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [totpRequired, setTotpRequired] = useState(false)
+  const totpInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (isAuthenticated && !success) navigate('/calendar', { replace: true })
   }, [isAuthenticated, success, navigate])
 
+  // Credentials live only in this component's state; clear them on unmount so
+  // nothing lingers if the user navigates away mid-flow.
+  useEffect(() => {
+    return () => {
+      setPassword('')
+      setTotp('')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (totpRequired) {
+      totpInputRef.current?.focus()
+      totpInputRef.current?.select()
+    }
+  }, [totpRequired])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading || success) return
     setError('')
     setLoading(true)
     try {
       const result = await login(email, password, totp)
       if (result === 'totp_required') {
         setTotpRequired(true)
-        setPassword('')
       } else if (result === 'success') {
         setSuccess(true)
+        setPassword('')
+        setTotp('')
         setTimeout(() => navigate('/calendar', { replace: true }), 450)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
       setTotp('')
+      totpInputRef.current?.focus()
     } finally {
       setLoading(false)
     }
@@ -122,6 +142,7 @@ export function Login() {
 
         {error && (
           <div
+            role="alert"
             style={{
               marginBottom: 14,
               padding: '9px 13px',
@@ -136,6 +157,13 @@ export function Login() {
             {error}
           </div>
         )}
+        <span
+          role="status"
+          aria-live="polite"
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+        >
+          {loading ? 'Signing in…' : success ? 'Signed in, redirecting…' : ''}
+        </span>
 
         <form onSubmit={handleSubmit}>
           {!totpRequired && (
@@ -219,6 +247,7 @@ export function Login() {
               </label>
               <input
                 id="totp"
+                ref={totpInputRef}
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
@@ -276,6 +305,7 @@ export function Login() {
           >
             {loading && (
               <div
+                aria-hidden="true"
                 style={{
                   width: 14,
                   height: 14,
@@ -287,7 +317,13 @@ export function Login() {
               />
             )}
             {success && (
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <svg
+                aria-hidden="true"
+                width="15"
+                height="15"
+                viewBox="0 0 16 16"
+                fill="none"
+              >
                 <path
                   d="M3 8.5L6.5 12L13 4"
                   stroke="white"

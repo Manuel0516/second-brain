@@ -1,6 +1,7 @@
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { useSettings } from '../../context/SettingsContext'
+import { SettingsNumberField } from './SettingsNumberField'
 
 export function FoodSettings() {
   const { settings, patch } = useSettings()
@@ -30,135 +31,100 @@ export function FoodSettings() {
       </div>
 
       <SettingsCard title="Targets">
-        <div style={{ display: 'grid', gap: 12 }}>
-          <label className="cal-field" htmlFor="settings-daily-meal-goal">
-            Daily meal goal
-            <input
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div className="settings-number-grid">
+            <SettingsNumberField
               id="settings-daily-meal-goal"
-              type="number"
+              label="Meals / day"
               min={1}
               max={20}
+              suffix="meals"
               value={settings.food_daily_meal_goal}
-              onChange={(e) =>
-                patch({ food_daily_meal_goal: Number(e.target.value) })
+              onCommit={(v) =>
+                patch({
+                  food_daily_meal_goal: v ?? settings.food_daily_meal_goal,
+                })
               }
             />
-          </label>
-          <label className="cal-field" htmlFor="settings-calorie-target">
-            Calorie target (kcal)
-            <input
+            <SettingsNumberField
               id="settings-calorie-target"
-              type="number"
+              label="Calories"
               min={0}
-              value={settings.food_calorie_target ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_calorie_target: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
+              nullable
+              suffix="kcal"
+              value={settings.food_calorie_target}
+              onCommit={(v) => patch({ food_calorie_target: v })}
             />
-          </label>
-          <label className="cal-field" htmlFor="settings-protein-target">
-            Protein target (g)
-            <input
-              id="settings-protein-target"
-              type="number"
-              min={0}
-              step={0.1}
-              value={settings.food_protein_target_g ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_protein_target_g: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
-          <label className="cal-field" htmlFor="settings-carbs-target">
-            Carbs target (g)
-            <input
-              id="settings-carbs-target"
-              type="number"
-              min={0}
-              step={0.1}
-              value={settings.food_carbs_target_g ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_carbs_target_g: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
-          <label className="cal-field" htmlFor="settings-fat-target">
-            Fat target (g)
-            <input
-              id="settings-fat-target"
-              type="number"
-              min={0}
-              step={0.1}
-              value={settings.food_fat_target_g ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_fat_target_g: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
-          <label className="cal-field" htmlFor="settings-water-target">
-            Water target (units)
-            <input
-              id="settings-water-target"
-              type="number"
-              min={0}
-              value={settings.food_water_target_units ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_water_target_units: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
-          <label className="cal-field" htmlFor="settings-veg-target">
-            Vegetables target (units)
-            <input
-              id="settings-veg-target"
-              type="number"
-              min={0}
-              value={settings.food_veg_target_units ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_veg_target_units: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
-          <label className="cal-field" htmlFor="settings-fruit-target">
-            Fruits target (units)
-            <input
-              id="settings-fruit-target"
-              type="number"
-              min={0}
-              value={settings.food_fruit_target_units ?? ''}
-              onChange={(e) =>
-                patch({
-                  food_fruit_target_units: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-            />
-          </label>
+          </div>
+
+          <div>
+            <div className="settings-subgroup-label">Macros</div>
+            <div className="settings-number-grid">
+              <SettingsNumberField
+                id="settings-protein-target"
+                label="Protein"
+                min={0}
+                step={0.1}
+                nullable
+                suffix="g"
+                value={settings.food_protein_target_g}
+                onCommit={(v) => patch({ food_protein_target_g: v })}
+              />
+              <SettingsNumberField
+                id="settings-carbs-target"
+                label="Carbs"
+                min={0}
+                step={0.1}
+                nullable
+                suffix="g"
+                value={settings.food_carbs_target_g}
+                onCommit={(v) => patch({ food_carbs_target_g: v })}
+              />
+              <SettingsNumberField
+                id="settings-fat-target"
+                label="Fat"
+                min={0}
+                step={0.1}
+                nullable
+                suffix="g"
+                value={settings.food_fat_target_g}
+                onCommit={(v) => patch({ food_fat_target_g: v })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="settings-subgroup-label">Daily units</div>
+            <div className="settings-number-grid">
+              <SettingsNumberField
+                id="settings-water-target"
+                label="Water"
+                min={0}
+                nullable
+                suffix="units"
+                value={settings.food_water_target_units}
+                onCommit={(v) => patch({ food_water_target_units: v })}
+              />
+              <SettingsNumberField
+                id="settings-veg-target"
+                label="Vegetables"
+                min={0}
+                nullable
+                suffix="units"
+                value={settings.food_veg_target_units}
+                onCommit={(v) => patch({ food_veg_target_units: v })}
+              />
+              <SettingsNumberField
+                id="settings-fruit-target"
+                label="Fruit"
+                min={0}
+                nullable
+                suffix="units"
+                value={settings.food_fruit_target_units}
+                onCommit={(v) => patch({ food_fruit_target_units: v })}
+              />
+            </div>
+          </div>
         </div>
       </SettingsCard>
 

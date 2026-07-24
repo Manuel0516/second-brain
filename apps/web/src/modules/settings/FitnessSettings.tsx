@@ -2,6 +2,7 @@ import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { ToggleRow } from '../../components/ToggleRow'
 import { useSettings } from '../../context/SettingsContext'
+import { SettingsNumberField } from './SettingsNumberField'
 
 export function FitnessSettings() {
   const { settings, patch } = useSettings()
@@ -32,19 +33,19 @@ export function FitnessSettings() {
 
       <SettingsCard title="Rest timer">
         <div style={{ display: 'grid', gap: 12 }}>
-          <label className="cal-field" htmlFor="settings-rest-seconds">
-            Rest duration (seconds)
-            <input
-              id="settings-rest-seconds"
-              type="number"
-              min={10}
-              max={600}
-              value={settings.fitness_rest_seconds}
-              onChange={(e) =>
-                patch({ fitness_rest_seconds: Number(e.target.value) })
-              }
-            />
-          </label>
+          <SettingsNumberField
+            id="settings-rest-seconds"
+            label="Rest duration"
+            min={10}
+            max={600}
+            suffix="seconds"
+            value={settings.fitness_rest_seconds}
+            onCommit={(v) =>
+              patch({
+                fitness_rest_seconds: v ?? settings.fitness_rest_seconds,
+              })
+            }
+          />
           <ToggleRow
             label="Auto-start rest timer after a set"
             checked={settings.fitness_auto_start_rest}
@@ -65,23 +66,16 @@ export function FitnessSettings() {
         title="Weekly target"
         description="Number of sessions you aim to complete each week. Leave empty to hide progress."
       >
-        <label className="cal-field" htmlFor="settings-weekly-target">
-          Sessions per week
-          <input
-            id="settings-weekly-target"
-            type="number"
-            min={0}
-            max={14}
-            value={settings.fitness_weekly_session_target ?? ''}
-            onChange={(e) =>
-              patch({
-                fitness_weekly_session_target: e.target.value
-                  ? Number(e.target.value)
-                  : null,
-              })
-            }
-          />
-        </label>
+        <SettingsNumberField
+          id="settings-weekly-target"
+          label="Sessions per week"
+          min={0}
+          max={14}
+          nullable
+          suffix="sessions"
+          value={settings.fitness_weekly_session_target}
+          onCommit={(v) => patch({ fitness_weekly_session_target: v })}
+        />
       </SettingsCard>
 
       <SettingsCard

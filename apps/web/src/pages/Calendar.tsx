@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppRail } from '../components/AppRail'
+import { Segmented } from '../components/Segmented'
 import { Sidebar } from '../modules/calendar/Sidebar'
 import { TimeGrid } from '../modules/calendar/TimeGrid'
 import { MonthView } from '../modules/calendar/MonthView'
@@ -20,7 +21,6 @@ import { apiCall } from '../lib/api'
 
 type View = 'day' | 'week' | 'month'
 const VIEWS: View[] = ['day', 'week', 'month']
-const PILL_WIDTH = 62
 const NotesPagePane = lazy(() =>
   import('../modules/notes/NotesPagePane').then((module) => ({
     default: module.NotesPagePane,
@@ -180,7 +180,7 @@ export function Calendar() {
     const name = navDir.current < 0 ? 'daySlideLeft' : 'daySlideRight'
     el.style.animation = 'none'
     void el.offsetWidth // reflow to restart the animation
-    el.style.animation = `${name} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`
+    el.style.animation = `${name} 0.18s cubic-bezier(0.16, 1, 0.3, 1)`
   }, [cursor, view])
 
   const changeRowHeight = useCallback((value: number) => {
@@ -272,27 +272,16 @@ export function Calendar() {
     setCursor(startCursorFor(isMobile, settings.week_start))
   }
   const shiftByDays = useCallback((days: number) => {
+    if (!days) return
+    // ponytail: gesture navigation updates once without replaying the page-load
+    // animation; the live drag feedback in TimeGrid already communicates motion.
+    animateNav.current = false
     setCursor((current) => {
       const next = new Date(current)
       next.setDate(next.getDate() + days)
       return next
     })
   }, [])
-
-  const navBtnStyle: React.CSSProperties = {
-    width: 26,
-    height: 26,
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border)',
-    borderRadius: 6,
-    color: 'var(--text-secondary)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-    cursor: 'pointer',
-    transition: 'background .15s',
-  }
 
   return (
     <div
@@ -349,330 +338,110 @@ export function Calendar() {
             className="cal-topbar enter"
             style={{
               ['--enter-delay' as string]: '50ms',
-              display: 'flex',
-              padding: isMobile ? '12px 14px' : '18px 28px 14px',
-              borderBottom: '1px solid var(--border)',
-              flexShrink: 0,
-              animation: 'fadeDown .35s cubic-bezier(.16,1,.3,1) both',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: isMobile ? 'stretch' : 'center',
-                justifyContent: isMobile ? 'center' : 'space-between',
-                gap: 12,
-                width: '100%',
-                position: isMobile ? 'relative' : undefined,
-              }}
-            >
-              {/* Date nav */}
-              <div
-                className="cal-topbar-nav"
-                style={{
-                  display: 'flex',
-                  flexDirection: isMobile ? 'column' : 'row',
-                  alignItems: 'center',
-                  gap: isMobile ? 10 : 12,
-                  flex: isMobile ? '1 1 100%' : undefined,
-                }}
-              >
-                {isMobile ? (
-                  <>
-                    {/* Row 1: toggle absolute left + centered title */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '100%',
-                        position: 'relative',
-                      }}
-                    >
-                      <button
-                        onClick={() => setSidebarOpen((open) => !open)}
-                        aria-label={
-                          sidebarOpen ? 'Hide navigation' : 'Show navigation'
-                        }
-                        aria-pressed={sidebarOpen}
-                        style={{
-                          ...navBtnStyle,
-                          position: 'absolute',
-                          left: 0,
-                        }}
-                      >
-                        <svg
-                          width="15"
-                          height="15"
-                          viewBox="0 0 20 20"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
-                          <path d="M7.5 3.5v13" />
-                        </svg>
-                      </button>
-                      <h2
-                        style={{
-                          fontSize: 17,
-                          fontWeight: 700,
-                          letterSpacing: '-.01em',
-                          color: 'var(--text-primary)',
-                          margin: 0,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {formatTitle(view, cursor, days, isMobile)}
-                      </h2>
-                    </div>
-                    {/* Row 2: nav arrows + Today button */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                      }}
-                    >
-                      <button
-                        style={navBtnStyle}
-                        onClick={() => shift(-1)}
-                        aria-label="Previous"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        onClick={goToday}
-                        style={{
-                          height: 26,
-                          padding: '0 10px',
-                          background:
-                            'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
-                          border: 'none',
-                          borderRadius: 6,
-                          fontSize: 11.5,
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                          transition: 'background .15s',
-                        }}
-                      >
-                        Today
-                      </button>
-                      <button
-                        style={navBtnStyle}
-                        onClick={() => shift(1)}
-                        aria-label="Next"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setSidebarOpen((open) => !open)}
-                      aria-label={
-                        sidebarOpen ? 'Hide navigation' : 'Show navigation'
-                      }
-                      aria-pressed={sidebarOpen}
-                      style={navBtnStyle}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = 'var(--bg-raised)')
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background =
-                          'var(--bg-elevated)')
-                      }
-                    >
-                      <svg
-                        width="15"
-                        height="15"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
-                        <path d="M7.5 3.5v13" />
-                      </svg>
-                    </button>
-                    <h2
-                      style={{
-                        fontSize: 17,
-                        fontWeight: 700,
-                        letterSpacing: '-.01em',
-                        color: 'var(--text-primary)',
-                        margin: 0,
-                      }}
-                    >
-                      {formatTitle(view, cursor, days, isMobile)}
-                    </h2>
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      <button
-                        style={navBtnStyle}
-                        onClick={() => shift(-1)}
-                        aria-label="Previous"
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background =
-                            'var(--bg-raised)')
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.background =
-                            'var(--bg-elevated)')
-                        }
-                      >
-                        ‹
-                      </button>
-                      <button
-                        style={navBtnStyle}
-                        onClick={() => shift(1)}
-                        aria-label="Next"
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background =
-                            'var(--bg-raised)')
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.background =
-                            'var(--bg-elevated)')
-                        }
-                      >
-                        ›
-                      </button>
-                    </div>
-                    <button
-                      onClick={goToday}
-                      style={{
-                        height: 26,
-                        padding: '0 10px',
-                        background:
-                          'color-mix(in srgb, var(--text-tertiary) 12%, transparent)',
-                        border: 'none',
-                        borderRadius: 6,
-                        fontSize: 11.5,
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        transition: 'background .15s',
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          'color-mix(in srgb, var(--text-tertiary) 18%, transparent)')
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background =
-                          'color-mix(in srgb, var(--text-tertiary) 12%, transparent)')
-                      }
-                    >
-                      Today
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* View pills */}
-              <div
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: 3,
-                  alignSelf: isMobile ? 'center' : undefined,
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 3,
-                    left: 3 + VIEWS.indexOf(view) * PILL_WIDTH,
-                    width: PILL_WIDTH,
-                    height: 'calc(100% - 6px)',
-                    background: 'var(--bg-raised)',
-                    borderRadius: 6,
-                    transition:
-                      'left .22s cubic-bezier(.16,1,.3,1), width .22s cubic-bezier(.16,1,.3,1)',
-                    zIndex: 0,
-                  }}
-                />
-                {VIEWS.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      navDir.current = VIEWS.indexOf(v) - VIEWS.indexOf(view)
-                      animateNav.current = true
-                      setView(v)
-                    }}
-                    style={{
-                      position: 'relative',
-                      zIndex: 1,
-                      width: PILL_WIDTH,
-                      padding: '5px 0',
-                      border: 'none',
-                      background: 'transparent',
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 500,
-                      textTransform: 'capitalize',
-                      cursor: 'pointer',
-                      transition: 'color .2s',
-                      color:
-                        view === v
-                          ? 'var(--text-primary)'
-                          : 'var(--text-tertiary)',
-                    }}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-
-              {/* New event */}
-              <button
-                aria-label="New event"
-                onClick={() => createAt(new Date())}
-                style={{
-                  ...(isMobile
-                    ? { position: 'absolute', top: 2, right: 0 }
-                    : { flexShrink: 0 }),
-                  width: 34,
-                  height: 34,
-                  background: 'var(--accent-tint)',
-                  border: '1px solid var(--accent-tint-border)',
-                  borderRadius: 8,
-                  color: 'var(--accent)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'background .15s',
-                  zIndex: 4,
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background =
-                    'color-mix(in srgb, var(--accent) 18%, transparent)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'var(--accent-tint)')
-                }
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
+            <div className="cal-toolbar">
+              <div className="cal-toolbar-primary">
+                <button
+                  className="cal-toolbar-button"
+                  onClick={() => setSidebarOpen((open) => !open)}
+                  aria-label={
+                    sidebarOpen ? 'Hide navigation' : 'Show navigation'
+                  }
+                  aria-pressed={sidebarOpen}
                 >
-                  <path d="M10 4v12M4 10h12" />
-                </svg>
-              </button>
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+                    <path d="M7.5 3.5v13" />
+                  </svg>
+                </button>
+                <button
+                  className="cal-toolbar-button"
+                  onClick={() => shift(-1)}
+                  aria-label="Previous"
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m12 4-6 6 6 6" />
+                  </svg>
+                </button>
+                <h2>{formatTitle(view, cursor, days, isMobile)}</h2>
+                <button
+                  className="cal-toolbar-button"
+                  onClick={() => shift(1)}
+                  aria-label="Next"
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m8 4 6 6-6 6" />
+                  </svg>
+                </button>
+                <button className="cal-today-button" onClick={goToday}>
+                  Today
+                </button>
+              </div>
+
+              <div className="cal-toolbar-secondary">
+                <div className="calendar-tabs">
+                  <Segmented
+                    value={view}
+                    options={VIEWS}
+                    labels={{ day: 'Day', week: 'Week', month: 'Month' }}
+                    ariaLabel="Calendar view"
+                    onChange={(item) => {
+                      navDir.current = VIEWS.indexOf(item) - VIEWS.indexOf(view)
+                      animateNav.current = true
+                      setView(item)
+                    }}
+                  />
+                </div>
+                <button
+                  className="cal-new-event-button"
+                  aria-label="New event"
+                  onClick={() => createAt(new Date())}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M10 3v14M3 10h14" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 

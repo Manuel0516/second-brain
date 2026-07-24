@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useId, useRef, useState, useEffect } from 'react'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Segmented } from '../../components/Segmented'
-import { CategoryBadge, isCardioName } from './exerciseLibrary'
+import { useDialogFocus } from '../../components/useDialogFocus'
+import { CategoryBadge, FEELING_LABELS, isCardioName } from './exerciseLibrary'
 import {
   createSession,
   fetchExercises,
@@ -17,6 +19,8 @@ interface SetDraft {
   weight: string
   distance_km: string
   duration_min: string
+  feeling: number | null
+  notes: string
 }
 
 interface ExerciseDraft {
@@ -32,7 +36,21 @@ interface Props {
 }
 
 function emptySet(): SetDraft {
-  return { reps: '', weight: '', distance_km: '', duration_min: '' }
+  return {
+    reps: '',
+    weight: '',
+    distance_km: '',
+    duration_min: '',
+    feeling: null,
+    notes: '',
+  }
+}
+
+interface DraftSnapshot {
+  sessionType: string
+  date: string
+  notes: string
+  exercises: ExerciseDraft[]
 }
 
 export function LogPastModal({ open, onClose, onSaved }: Props) {
@@ -49,6 +67,10 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
   const [exercises, setExercises] = useState<ExerciseDraft[]>([])
   const [searchText, setSearchText] = useState('')
   const [editCategoryIdx, setEditCategoryIdx] = useState<number | null>(null)
+  const [baseline, setBaseline] = useState<DraftSnapshot | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (open) {
@@ -57,6 +79,41 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
         .catch(() => setKnownExercises([]))
     }
   }, [open])
+
+  // Snapshot whatever the form holds the moment it opens — including a
+  // leftover unsaved draft from a previous open — as the "clean" baseline.
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBaseline({ sessionType, date, notes, exercises })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  function isDirty(): boolean {
+    if (!baseline) return false
+    return (
+      sessionType !== baseline.sessionType ||
+      date !== baseline.date ||
+      notes !== baseline.notes ||
+      JSON.stringify(exercises) !== JSON.stringify(baseline.exercises)
+    )
+  }
+
+  function requestClose() {
+    if (submitting) return
+    if (isDirty()) {
+      setConfirmDiscard(true)
+      return
+    }
+    onClose()
+  }
+
+  useDialogFocus({
+    open,
+    dialogRef,
+    onEscape: requestClose,
+  })
 
   const searchTextLower = searchText.trim().toLowerCase()
   const searchHasMatch = Boolean(
@@ -101,7 +158,7 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
   function updateSet(
     exIdx: number,
     setIdx: number,
-    field: keyof SetDraft,
+    field: 'reps' | 'weight' | 'distance_km' | 'duration_min' | 'notes',
     value: string,
   ) {
     setExercises((prev) =>
@@ -117,6 +174,22 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
     )
   }
 
+  function updateSetFeeling(
+    exIdx: number,
+    setIdx: number,
+    feeling: number | null,
+  ) {
+    setExercises((prev) =>
+      prev.map((ex, i) => {
+        if (i !== exIdx) return ex
+        return {
+          ...ex,
+          sets: ex.sets.map((s, j) => (j === setIdx ? { ...s, feeling } : s)),
+        }
+      }),
+    )
+  }
+
   function addSet(exIdx: number) {
     setExercises((prev) =>
       prev.map((ex, i) => {
@@ -124,7 +197,10 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
         const last = ex.sets.at(-1)
         return {
           ...ex,
-          sets: [...ex.sets, last ? { ...last } : emptySet()],
+          sets: [
+            ...ex.sets,
+            last ? { ...last, feeling: null, notes: '' } : emptySet(),
+          ],
         }
       }),
     )
@@ -202,6 +278,8 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
               duration_min: set.duration_min
                 ? parseFloat(set.duration_min)
                 : null,
+              feeling: set.feeling,
+              notes: set.notes.trim() || null,
             })
           } else {
             await createSetEntry(session.id, {
@@ -214,6 +292,8 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                     settings.fitness_weight_unit,
                   )
                 : null,
+              feeling: set.feeling,
+              notes: set.notes.trim() || null,
             })
           }
         }
@@ -238,23 +318,26 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
     <div
       className="fit-logpast-backdrop"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
+        if (e.target === e.currentTarget) requestClose()
       }}
       role="presentation"
     >
-      <div className="fit-logpast-modal" role="dialog" aria-modal="true">
+      <div
+        className="fit-logpast-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        ref={dialogRef}
+      >
         {/* Header */}
         <div className="fit-logpast-header">
           <div>
-            <h3>Log past workout</h3>
+            <h3 id={titleId}>Log past workout</h3>
             <p>Record a session you already completed.</p>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="fit-logpast-close"
             aria-label="Close"
           >
@@ -270,18 +353,12 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
           <div className="fit-logpast-meta">
             <div>
               <div className="fit-logpast-label">Session type</div>
-              <div className="fit-logpast-pills">
-                {SESSION_TYPES.map((t) => (
-                  <button
-                    type="button"
-                    key={t}
-                    onClick={() => setSessionType(t)}
-                    className={`fit-type-pill${sessionType === t ? ' active' : ''}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                value={sessionType}
+                options={[...SESSION_TYPES]}
+                onChange={setSessionType}
+                ariaLabel="Session type"
+              />
             </div>
             <label className="cal-field">
               <span>Date</span>
@@ -489,6 +566,51 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
                               </label>
                             </>
                           )}
+                          <fieldset
+                            className="fit-feeling"
+                            aria-label={`${draft.name} set ${setIdx + 1} feeling`}
+                          >
+                            {FEELING_LABELS.map((label, feelingIndex) => {
+                              const feeling = feelingIndex + 1
+                              return (
+                                <button
+                                  key={label}
+                                  type="button"
+                                  className={
+                                    set.feeling === feeling ? 'active' : ''
+                                  }
+                                  aria-label={label}
+                                  aria-pressed={set.feeling === feeling}
+                                  title={label}
+                                  onClick={() =>
+                                    updateSetFeeling(
+                                      exIdx,
+                                      setIdx,
+                                      set.feeling === feeling ? null : feeling,
+                                    )
+                                  }
+                                >
+                                  <span />
+                                </button>
+                              )
+                            })}
+                          </fieldset>
+                          <label className="fit-history-set-note">
+                            <span>Set note</span>
+                            <input
+                              value={set.notes}
+                              maxLength={500}
+                              placeholder="Add a note"
+                              onChange={(e) =>
+                                updateSet(
+                                  exIdx,
+                                  setIdx,
+                                  'notes',
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </label>
                           <button
                             type="button"
                             className="fit-remove-button"
@@ -554,6 +676,19 @@ export function LogPastModal({ open, onClose, onSaved }: Props) {
           </button>
         </form>
       </div>
+      <ConfirmDialog
+        open={confirmDiscard}
+        message="Discard changes?"
+        detail="This logged workout hasn't been saved yet."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        danger
+        onCancel={() => setConfirmDiscard(false)}
+        onConfirm={() => {
+          setConfirmDiscard(false)
+          onClose()
+        }}
+      />
     </div>
   )
 }

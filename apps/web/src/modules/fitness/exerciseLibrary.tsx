@@ -76,6 +76,10 @@ export function isCardioName(name: string): boolean {
   return CARDIO_NAMES.has(name)
 }
 
+/** Shared 1–5 feeling scale labels — live logging, past logging, and history
+ * editing all render the same five-button feeling fieldset. */
+export const FEELING_LABELS = ['Dying', 'Rough', 'OK', 'Good', 'Great']
+
 export interface ActiveSession {
   type: string
   exercises: ActiveExercise[]

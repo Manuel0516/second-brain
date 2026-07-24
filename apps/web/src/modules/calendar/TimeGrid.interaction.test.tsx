@@ -181,3 +181,37 @@ it('starts event move or resize only after a stationary long press', async () =>
   })
   expect(eventButton).toHaveStyle({ height: '72px' })
 })
+
+it('coalesces a burst of horizontal wheel events into one navigate call', async () => {
+  const onHorizontalNavigate = vi.fn()
+  const { container } = render(
+    <TimeGrid
+      days={[day]}
+      rowHeight={48}
+      calendars={[]}
+      refresh={0}
+      onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
+      onEdit={vi.fn()}
+      onRowHeightChange={vi.fn()}
+      onHorizontalNavigate={onHorizontalNavigate}
+    />,
+  )
+  await screen.findByRole('button', { name: 'Touch event' })
+  const scroller = container.querySelector<HTMLElement>('.week-scroll')!
+  vi.useFakeTimers()
+
+  // A single trackpad flick worth two day-steps, delivered as several wheel
+  // events (as real trackpads do) — should still produce one call.
+  for (let i = 0; i < 4; i++) {
+    fireEvent.wheel(scroller, { deltaX: 50, deltaY: 0, clientX: 100 })
+  }
+  expect(onHorizontalNavigate).not.toHaveBeenCalled()
+  expect(scroller).toHaveClass('is-swiping')
+
+  act(() => vi.advanceTimersByTime(150))
+  expect(onHorizontalNavigate).toHaveBeenCalledTimes(1)
+  expect(onHorizontalNavigate).toHaveBeenCalledWith(2)
+  expect(scroller).not.toHaveClass('is-swiping')
+  expect(scroller.style.getPropertyValue('--calendar-swipe-x')).toBe('0px')
+})

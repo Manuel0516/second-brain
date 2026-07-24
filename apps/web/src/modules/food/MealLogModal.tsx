@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useId, useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Field } from '../../components/Field'
+import { useDialogFocus } from '../../components/useDialogFocus'
 import {
   uploadFile,
   analyzeMealLog,
@@ -47,6 +49,14 @@ function emptyFields(meal?: MealLog | null): EditableFields {
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const
 
+interface DirtySnapshot {
+  fields: EditableFields
+  mealTypeSelection: (typeof MEAL_TYPES)[number]
+  mealDate: string
+  photoFileIds: string[]
+  aiItems: Record<string, unknown>[] | null
+}
+
 export function MealLogModal({
   open,
   onClose,
@@ -82,44 +92,86 @@ export function MealLogModal({
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
+  const [baseline, setBaseline] = useState<DirtySnapshot | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const titleId = useId()
+  const descriptionId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
 
-  // Reset state when modal opens with a planned meal or when modal closes
-  function applyReset() {
-    if (open) {
-      if (plannedMeal) {
-        setLogId(plannedMeal.id)
-        setPhotoFileIds(plannedMeal.photo_file_ids)
-        setFields(emptyFields(plannedMeal))
-        setAiItems(plannedMeal.ai_items ?? null)
-        setMealTypeSelection(
+  // Reset state when modal opens with a planned meal or when modal closes.
+  // Returns the snapshot it applied so it can also become the dirty baseline.
+  function applyReset(): DirtySnapshot | null {
+    if (!open) return null
+    let snapshot: DirtySnapshot
+    if (plannedMeal) {
+      snapshot = {
+        fields: emptyFields(plannedMeal),
+        mealTypeSelection:
           (plannedMeal.meal_type as (typeof MEAL_TYPES)[number]) ??
-            defaultMealType ??
-            'breakfast',
-        )
-        setState('result')
-        setErrorMsg(null)
-        setMealDate(plannedMeal.date.slice(0, 10))
-      } else {
-        setLogId(null)
-        setPhotoFileIds([])
-        setFields(emptyFields(null))
-        setAiItems(null)
-        setMealTypeSelection(defaultMealType ?? 'breakfast')
-        setState('empty')
-        setErrorMsg(null)
-        setMealDate(new Date().toISOString().slice(0, 10))
+          defaultMealType ??
+          'breakfast',
+        mealDate: plannedMeal.date.slice(0, 10),
+        photoFileIds: plannedMeal.photo_file_ids,
+        aiItems: plannedMeal.ai_items ?? null,
       }
-      setUploading(false)
-      setUploadProgress('')
-      setAnalyzing(false)
+      setLogId(plannedMeal.id)
+      setState('result')
+    } else {
+      snapshot = {
+        fields: emptyFields(null),
+        mealTypeSelection: defaultMealType ?? 'breakfast',
+        mealDate: new Date().toISOString().slice(0, 10),
+        photoFileIds: [],
+        aiItems: null,
+      }
+      setLogId(null)
+      setState('empty')
     }
+    setPhotoFileIds(snapshot.photoFileIds)
+    setFields(snapshot.fields)
+    setAiItems(snapshot.aiItems)
+    setMealTypeSelection(snapshot.mealTypeSelection)
+    setErrorMsg(null)
+    setMealDate(snapshot.mealDate)
+    setUploading(false)
+    setUploadProgress('')
+    setAnalyzing(false)
+    return snapshot
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    applyReset()
+    setBaseline(applyReset())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, plannedMeal, defaultMealType])
+
+  function isDirty(): boolean {
+    if (!baseline) return false
+    return (
+      JSON.stringify({
+        fields,
+        mealTypeSelection,
+        mealDate,
+        photoFileIds,
+        aiItems,
+      }) !== JSON.stringify(baseline)
+    )
+  }
+
+  function requestClose() {
+    if (saving || uploading || analyzing) return
+    if (isDirty()) {
+      setConfirmDiscard(true)
+      return
+    }
+    onClose()
+  }
+
+  useDialogFocus({
+    open,
+    dialogRef,
+    onEscape: requestClose,
+  })
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -359,7 +411,7 @@ export function MealLogModal({
   }
 
   function handleBackdropClick(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose()
+    if (e.target === e.currentTarget) requestClose()
   }
 
   if (!open) return null
@@ -370,16 +422,15 @@ export function MealLogModal({
     <div
       className="food-meallog-backdrop"
       onClick={handleBackdropClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
       role="presentation"
     >
       <div
         className="food-meallog-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Log meal"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        ref={dialogRef}
       >
         <input
           ref={cameraInputRef}
@@ -400,8 +451,8 @@ export function MealLogModal({
         {/* Header */}
         <div className="food-meallog-header">
           <div>
-            <h3>Log meal</h3>
-            <p>
+            <h3 id={titleId}>Log meal</h3>
+            <p id={descriptionId}>
               {plannedMeal
                 ? 'Log your planned meal'
                 : 'Take a photo or enter details manually'}
@@ -409,7 +460,7 @@ export function MealLogModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="food-meallog-close"
             aria-label="Close"
           >
@@ -788,6 +839,19 @@ export function MealLogModal({
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmDiscard}
+        message="Discard changes?"
+        detail="This meal log hasn't been saved yet."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        danger
+        onCancel={() => setConfirmDiscard(false)}
+        onConfirm={() => {
+          setConfirmDiscard(false)
+          onClose()
+        }}
+      />
     </div>,
     document.body,
   )

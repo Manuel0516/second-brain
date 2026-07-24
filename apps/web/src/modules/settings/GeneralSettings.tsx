@@ -276,10 +276,14 @@ export function GeneralSettings() {
           />
         </div>
         {profileError && (
-          <div style={{ fontSize: 12, color: '#D9573F' }}>{profileError}</div>
+          <div role="alert" style={{ fontSize: 12, color: '#D9573F' }}>
+            {profileError}
+          </div>
         )}
         {profileSaved && (
-          <div style={{ fontSize: 12, color: '#2E9E6E' }}>Saved ✓</div>
+          <div role="status" style={{ fontSize: 12, color: '#2E9E6E' }}>
+            Saved ✓
+          </div>
         )}
       </SettingsCard>
 
@@ -426,12 +430,12 @@ export function GeneralSettings() {
               />
             </div>
             {passwordError && (
-              <div style={{ fontSize: 12, color: '#D9573F' }}>
+              <div role="alert" style={{ fontSize: 12, color: '#D9573F' }}>
                 {passwordError}
               </div>
             )}
             {passwordSaved && (
-              <div style={{ fontSize: 12, color: '#2E9E6E' }}>
+              <div role="status" style={{ fontSize: 12, color: '#2E9E6E' }}>
                 Password updated ✓
               </div>
             )}

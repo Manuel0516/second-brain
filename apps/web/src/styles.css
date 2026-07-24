@@ -514,6 +514,55 @@ button:not(.calendar-event):active {
   opacity: 0.5;
 }
 
+.settings-number-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.settings-number-input input {
+  width: 100%;
+  padding-right: 44px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.settings-number-input input::-webkit-outer-spin-button,
+.settings-number-input input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.settings-number-suffix {
+  position: absolute;
+  right: 10px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: none;
+  letter-spacing: normal;
+  pointer-events: none;
+}
+
+.settings-subgroup-label {
+  margin-bottom: 6px;
+  color: var(--text-tertiary);
+  font: 600 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.settings-number-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px 12px;
+}
+
+@media (max-width: 640px) {
+  .settings-number-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-number-input input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
 /* Springy, staggered entrance for the settings header + cards on load. */
 .settings-content > div > * {
   animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -907,35 +956,122 @@ input[type='color'] {
   letter-spacing: 0.05em;
 }
 
+.cal-topbar {
+  flex-shrink: 0;
+  padding: 16px 24px 14px;
+  border-bottom: 1px solid var(--border);
+  animation: fadeDown 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.cal-toolbar {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+}
+.cal-toolbar-primary {
+  display: grid;
+  grid-template-columns: 26px 26px minmax(0, 1fr) 26px auto;
+  align-items: center;
+  gap: 8px;
+}
+.cal-toolbar-primary h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font: 700 17px/1.1 var(--font-ui);
+  letter-spacing: -0.01em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-toolbar-button,
+.cal-today-button,
+.cal-new-event-button {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cal-toolbar-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+.cal-toolbar-button:hover,
+.cal-today-button:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+.cal-today-button {
+  height: 26px;
+  padding: 0 15px;
+  font: 500 11.5px var(--font-ui);
+}
+.cal-toolbar-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.calendar-tabs {
+  width: 300px;
+  max-width: calc(100% - 42px);
+  flex: 0 1 300px;
+}
+.calendar-tabs .repeat-segmented button {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.cal-new-event-button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-border);
+  color: var(--accent);
+}
+.cal-new-event-button:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 @keyframes daySlideRight {
   from {
-    opacity: 0.35;
-    transform: translateX(26px);
+    transform: translateX(12px);
   }
   to {
-    opacity: 1;
     transform: translateX(0);
   }
 }
 @keyframes daySlideLeft {
   from {
-    opacity: 0.35;
-    transform: translateX(-26px);
+    transform: translateX(-12px);
   }
   to {
-    opacity: 1;
     transform: translateX(0);
   }
 }
 
 .week-scroll {
   --row-h: 48px;
+  --calendar-swipe-x: 0px;
   flex: 1;
   overflow: auto;
   overflow-x: hidden;
   background: var(--bg-base);
   overscroll-behavior-x: contain;
   touch-action: pan-y;
+}
+.week-scroll > .week-grid {
+  transform: translateX(var(--calendar-swipe-x));
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.week-scroll.is-swiping > .week-grid {
+  transition: none;
 }
 .week-grid {
   display: grid;
@@ -2684,14 +2820,20 @@ input[type='color'] {
     grid-template-columns: 1fr;
   }
 
-  /* Topbar compact padding only — layout is handled by component inline styles. */
   .cal-topbar {
-    padding: 12px 14px !important;
+    padding: 12px 14px;
   }
 }
 
 /* Mobile: detail panel becomes a bottom sheet (DESIGN_SYSTEM.md §6). */
 @media (max-width: 640px) {
+  .cal-toolbar-primary h2 {
+    font-size: 17px;
+  }
+  .cal-today-button {
+    padding: 0 10px;
+  }
+
   .calendar-backdrop {
     align-items: flex-end;
     justify-content: stretch;
@@ -2724,6 +2866,15 @@ input[type='color'] {
     to {
       transform: translateY(100%);
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-topbar.enter {
+    animation: none;
+  }
+  .week-scroll > .week-grid {
+    transition: none;
   }
 }
 

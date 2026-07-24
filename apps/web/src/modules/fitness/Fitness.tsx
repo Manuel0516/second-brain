@@ -227,6 +227,51 @@ export function Fitness() {
     Record<string, { name: string; category: string }>
   >({})
   const [dragGoalId, setDragGoalId] = useState<string | null>(null)
+  const [goalMoveAnnouncement, setGoalMoveAnnouncement] = useState('')
+  const [goalReorderMode, setGoalReorderMode] = useState(false)
+  const goalsSectionRef = useRef<HTMLDivElement>(null)
+  const goalLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const goalPressStart = useRef<{ x: number; y: number } | null>(null)
+
+  // Reorder buttons are hidden by default (long-press a goal or press the
+  // reorder toggle to reveal them) — dismiss on an outside click, same
+  // pattern as Popover's outside-pointerdown close.
+  useEffect(() => {
+    if (!goalReorderMode) return
+    function onPointerDownOutside(event: PointerEvent) {
+      if (goalsSectionRef.current?.contains(event.target as Node)) return
+      setGoalReorderMode(false)
+    }
+    window.addEventListener('pointerdown', onPointerDownOutside)
+    return () => window.removeEventListener('pointerdown', onPointerDownOutside)
+  }, [goalReorderMode])
+
+  function goalLabel(goal: Goal): string {
+    return goal.exercise_id
+      ? exerciseMap[goal.exercise_id]?.name || 'Exercise goal'
+      : (goal.metric_key ?? goal.target_type)
+  }
+
+  // Keyboard equivalent of the pointer drag below — swaps the goal with its
+  // neighbor and persists order_index the same way handleGoalPointerUp does.
+  function moveGoal(goalId: string, direction: -1 | 1) {
+    setGoals((prev) => {
+      const index = prev.findIndex((g) => g.id === goalId)
+      const target = index + direction
+      if (index === -1 || target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      ;[next[index], next[target]] = [next[target], next[index]]
+      next.forEach((g, i) => {
+        if (g.order_index !== i)
+          updateGoal(g.id, { order_index: i }).catch(() => {})
+      })
+      const reindexed = next.map((g, i) => ({ ...g, order_index: i }))
+      setGoalMoveAnnouncement(
+        `${goalLabel(reindexed[target])} moved to position ${target + 1} of ${reindexed.length}`,
+      )
+      return reindexed
+    })
+  }
 
   // ponytail: Pointer Events (not HTML5 drag-and-drop) so reordering works
   // with touch on phones, not just mouse.
@@ -237,10 +282,24 @@ export function Fitness() {
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     setDragGoalId(goalId)
+    goalPressStart.current = { x: e.clientX, y: e.clientY }
+    if (goalLongPressTimer.current) clearTimeout(goalLongPressTimer.current)
+    goalLongPressTimer.current = setTimeout(() => {
+      setGoalReorderMode(true)
+    }, 500)
   }
 
   function handleGoalPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragGoalId) return
+    if (goalPressStart.current && goalLongPressTimer.current) {
+      const dx = e.clientX - goalPressStart.current.x
+      const dy = e.clientY - goalPressStart.current.y
+      // Real movement means this is a drag, not a long-press-to-reveal.
+      if (Math.hypot(dx, dy) > 6) {
+        clearTimeout(goalLongPressTimer.current)
+        goalLongPressTimer.current = null
+      }
+    }
     const target = document
       .elementFromPoint(e.clientX, e.clientY)
       ?.closest('[data-goal-id]')
@@ -258,6 +317,11 @@ export function Fitness() {
   }
 
   function handleGoalPointerUp() {
+    if (goalLongPressTimer.current) {
+      clearTimeout(goalLongPressTimer.current)
+      goalLongPressTimer.current = null
+    }
+    goalPressStart.current = null
     if (!dragGoalId) return
     setDragGoalId(null)
     setGoals((current) => {
@@ -754,96 +818,179 @@ export function Fitness() {
             )}
 
             {/* Goals summary (read-only — managed in the Stats tab) */}
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '10px',
-                textTransform: 'uppercase',
-                letterSpacing: '.07em',
-                color: 'var(--text-tertiary)',
-                fontWeight: 600,
-                marginBottom: '10px',
-              }}
-            >
-              Goals
-            </div>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
-            >
-              {goals.length === 0 ? (
-                <>
-                  {/* Bench Press goal (fallback) */}
-                  <div
-                    style={{
-                      padding: '9px 10px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    <ProgressBar
-                      label="Bench Press"
-                      value={92}
-                      max={100}
-                      sublabel="92 kg / 100 kg"
-                    />
-                  </div>
-                  {/* Weekly volume goal (fallback) */}
-                  <div
-                    style={{
-                      padding: '9px 10px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    <ProgressBar
-                      label="Weekly volume"
-                      value={weeklySessions}
-                      max={5}
-                      sublabel={`${weeklySessions} / 5 sessions`}
-                    />
-                  </div>
-                </>
-              ) : (
-                goals.map((goal) => {
-                  const label = goal.exercise_id
-                    ? exerciseMap[goal.exercise_id]?.name || 'Exercise goal'
-                    : (goal.metric_key ?? goal.target_type)
-                  return (
+            <div ref={goalsSectionRef}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '10px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '.07em',
+                    color: 'var(--text-tertiary)',
+                    fontWeight: 600,
+                  }}
+                >
+                  Goals
+                </div>
+                {goals.length > 1 && (
+                  <IconButton
+                    icon={
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <circle cx="7" cy="5" r="1.4" />
+                        <circle cx="13" cy="5" r="1.4" />
+                        <circle cx="7" cy="10" r="1.4" />
+                        <circle cx="13" cy="10" r="1.4" />
+                        <circle cx="7" cy="15" r="1.4" />
+                        <circle cx="13" cy="15" r="1.4" />
+                      </svg>
+                    }
+                    label={
+                      goalReorderMode
+                        ? 'Hide reorder controls'
+                        : 'Reorder goals'
+                    }
+                    pressed={goalReorderMode}
+                    size="sm"
+                    onClick={() => setGoalReorderMode((v) => !v)}
+                  />
+                )}
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                {goals.length === 0 ? (
+                  <>
+                    {/* Bench Press goal (fallback) */}
                     <div
-                      key={goal.id}
-                      data-goal-id={goal.id}
-                      onPointerDown={(e) => handleGoalPointerDown(e, goal.id)}
-                      onPointerMove={handleGoalPointerMove}
-                      onPointerUp={handleGoalPointerUp}
-                      onPointerCancel={handleGoalPointerUp}
-                      aria-label={`Reorder ${label}`}
-                      className={`fit-goal-sidebar-card${dragGoalId === goal.id ? ' is-dragging' : ''}`}
                       style={{
                         padding: '9px 10px',
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border)',
                         borderRadius: '8px',
-                        position: 'relative',
-                        cursor: 'grab',
-                        touchAction: 'none',
-                        opacity: dragGoalId === goal.id ? 0.6 : 1,
                       }}
                     >
-                      <div style={{ minWidth: 0 }}>
-                        <ProgressBar
-                          label={label}
-                          value={goal.current_value ?? 0}
-                          max={goal.target_value}
-                          sublabel={`${goal.current_value ?? 0} / ${goal.target_value}`}
-                        />
-                      </div>
+                      <ProgressBar
+                        label="Bench Press"
+                        value={92}
+                        max={100}
+                        sublabel="92 kg / 100 kg"
+                      />
                     </div>
-                  )
-                })
-              )}
+                    {/* Weekly volume goal (fallback) */}
+                    <div
+                      style={{
+                        padding: '9px 10px',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <ProgressBar
+                        label="Weekly volume"
+                        value={weeklySessions}
+                        max={5}
+                        sublabel={`${weeklySessions} / 5 sessions`}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  goals.map((goal, index) => {
+                    const label = goalLabel(goal)
+                    return (
+                      <div
+                        key={goal.id}
+                        data-goal-id={goal.id}
+                        onPointerDown={(e) => handleGoalPointerDown(e, goal.id)}
+                        onPointerMove={handleGoalPointerMove}
+                        onPointerUp={handleGoalPointerUp}
+                        onPointerCancel={handleGoalPointerUp}
+                        aria-label={`Reorder ${label}`}
+                        className={`fit-goal-sidebar-card${dragGoalId === goal.id ? ' is-dragging' : ''}`}
+                        style={{
+                          padding: '9px 10px',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          position: 'relative',
+                          cursor: 'grab',
+                          touchAction: 'none',
+                          opacity: dragGoalId === goal.id ? 0.6 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <ProgressBar
+                            label={label}
+                            value={goal.current_value ?? 0}
+                            max={goal.target_value}
+                            sublabel={`${goal.current_value ?? 0} / ${goal.target_value}`}
+                          />
+                        </div>
+                        {goalReorderMode && (
+                          <div className="fit-goal-move-actions">
+                            <button
+                              type="button"
+                              className="fit-goal-move"
+                              aria-label={`Move ${label} up`}
+                              disabled={index === 0}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                moveGoal(goal.id, -1)
+                              }}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              className="fit-goal-move"
+                              aria-label={`Move ${label} down`}
+                              disabled={index === goals.length - 1}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                moveGoal(goal.id, 1)
+                              }}
+                            >
+                              ↓
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
+            <span
+              role="status"
+              aria-live="polite"
+              style={{
+                position: 'absolute',
+                opacity: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              {goalMoveAnnouncement}
+            </span>
 
             {lastMetric && (
               <BodyWeightCard

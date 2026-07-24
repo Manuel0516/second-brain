@@ -1,6 +1,8 @@
 # Second Brain UX audit
 
-Status: static audit complete; live browser validation pending
+Status: findings UX-001 through UX-010 implemented (static + unit-test verified); live browser
+validation still pending — see "Live completion checklist" for exactly what was and wasn't
+possible to verify in this session.
 
 Date: 2026-07-24
 
@@ -251,31 +253,72 @@ both visual styles.
 
 ## Prioritized backlog
 
-1. **P0 authentication:** implement `PLAN-auth-2fa-ux-fix.md`.
-2. **Session continuity:** implement `PLAN-auth-session-lifetime.md`.
-3. **Fitness history integrity:** implement `PLAN-fitness-history-editing-ux.md`.
-4. **Fitness logging hierarchy/touch:** implement
-   `PLAN-fitness-live-and-past-logging-ux.md`.
-5. **Dialog safety and accessibility:** implement
-   `PLAN-dialog-focus-and-dirty-dismissal.md`.
-6. **Shared controls, Settings number fields, and feedback:** implement
-   `PLAN-shared-controls-and-settings-feedback.md`.
-7. **Settings context lifecycle:** implement `PLAN-settings-state-lifecycle.md`.
-8. **Fitness goal keyboard reorder:** create a focused plan after the session batches.
-9. **Live completion pass:** validate all routes at `1440×900`, `768×1024`, and
-   `390×844` in Neon/Monochrome and Light/Dark; convert only reproducible remaining issues
-   into new bounded plans.
+1. **P0 authentication:** implemented — `PLAN-auth-2fa-ux-fix.md`,
+   `docs/history/0161-totp-login-password-retention-fix.md`.
+2. **Session continuity:** implemented in a prior session —
+   `docs/history/0160-day-long-auth-session-continuity.md`.
+3. **Fitness history integrity:** implemented — `PLAN-fitness-history-editing-ux.md`,
+   `docs/history/0162-fitness-history-autosave-and-delete-confirmation.md`.
+4. **Fitness logging hierarchy/touch:** implemented —
+   `PLAN-fitness-live-and-past-logging-ux.md`,
+   `docs/history/0163-fitness-live-and-past-logging-hierarchy.md`.
+5. **Dialog safety and accessibility:** implemented —
+   `PLAN-dialog-focus-and-dirty-dismissal.md`,
+   `docs/history/0164-dialog-focus-and-dirty-dismissal.md`.
+6. **Shared controls, Settings number fields, and feedback:** implemented —
+   `PLAN-shared-controls-and-settings-feedback.md`,
+   `docs/history/0165-shared-controls-and-settings-feedback.md`.
+7. **Settings context lifecycle:** was already implemented in the same prior session as item 2;
+   this session added the regression test coverage the plan required —
+   `PLAN-settings-state-lifecycle.md`, `docs/history/0166-settings-provider-lifecycle-test-coverage.md`.
+8. **Fitness goal keyboard reorder:** implemented — `PLAN-fitness-goal-keyboard-reorder.md`,
+   `docs/history/0167-fitness-goal-keyboard-reorder.md`.
+9. **Live completion pass:** attempted this session; see "Live completion checklist" below for
+   exactly what could and could not be verified without a browser.
 
 ## Live completion checklist
 
-The audit cannot move to `complete` until an in-app browser session is available and:
+**Attempted 2026-07-24.** No in-app browser session was available in this environment (the
+Claude in Chrome extension is not connected, and no other browser-automation tool was
+available) — the same limitation the original audit hit. Per the task's own instruction, the
+items below are reported honestly as unverified rather than marked complete.
 
-- Every coverage row is exercised at all three fixed viewports.
-- Both visual styles and explicit Light/Dark are checked after the style implementation
-  stabilizes.
-- Keyboard focus order, focus visibility, modal containment, and popover dismissal are
-  observed directly.
-- Touch behavior is tested on mobile/coarse pointer, including on-screen keyboard layout.
-- Empty, populated, loading, error, save, cancel, and delete states are observed with
-  representative local data.
-- Any new evidence is added here with reproduction and measurable acceptance criteria.
+What **was** verified this session (static/automated, not a substitute for the items below):
+- `npm run build` (`tsc -b && vite build`) succeeds with the full set of UX-001–UX-010 changes
+  applied, across every module touched.
+- The full Vitest suite (144 tests, 28 files) passes, including new focused tests for each
+  fixed item's specific acceptance criteria (TOTP retry, autosave/delete-confirm, live/past-log
+  field parity, dialog focus trap + dirty dismissal, `Segmented` keyboard nav, settings number
+  field commit/Escape/resync, single `SettingsProvider` lifecycle, goal keyboard reorder).
+- All CSS added or changed by this session's fixes uses only existing `var(--token)` values —
+  no new hardcoded colors were introduced (checked by diffing the changed CSS/inline-style
+  lines against the token pattern).
+- Breakpoint math for the three required viewports: `1440px` clears every breakpoint (desktop
+  layout everywhere); `390px` is below every breakpoint (mobile layout everywhere) — both are
+  internally consistent. `768px` sits **between** the app-shell breakpoint (`800px`, which
+  switches `AppRail` to a mobile drawer) and the Fitness/Food (`720px`) and Settings/Calendar/
+  Notes (`640px`) content breakpoints. At `768px` the app renders a mobile nav drawer alongside
+  still-desktop-density Fitness/Food/Settings content — a real, reproducible hybrid state
+  visible directly in the CSS, pre-existing (not introduced by any change in this session) and
+  not something any of the eight implemented plans touched. It is flagged here, not fixed, and
+  is the single most likely finding a live `768×1024` pass would confirm.
+
+What remains genuinely unverified — still required before this audit can move to `complete`:
+- Every coverage row exercised at all three fixed viewports, with a real browser rendering the
+  actual computed layout (not just the breakpoint math above).
+- Both visual styles (Neon/Monochrome) and explicit Light/Dark checked visually — the switching
+  mechanism was implemented and unit-tested in a prior session
+  (`docs/history/0159-neon-monochrome-visual-style.md`) but never visually confirmed across all
+  six areas.
+- Keyboard focus order, focus visibility, modal containment (including the new dialog focus
+  trap), and popover dismissal observed directly in a real browser/AT combination — the jsdom
+  tests added this session exercise the same code paths but jsdom's focus/tab-order model is
+  not a substitute for a real browser.
+- Touch behavior on an actual mobile/coarse pointer, including on-screen keyboard layout
+  interaction with the newly-44px touch targets.
+- Empty, populated, loading, error, save, cancel, and delete states observed with representative
+  local data (this environment has no seeded database or running backend to generate that
+  data).
+
+Any future session with browser access should start with the `768px` hybrid-layout finding
+above, then work through the coverage table.

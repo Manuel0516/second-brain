@@ -8,6 +8,8 @@ interface IconButtonProps {
   variant?: 'ghost' | 'raised'
   disabled?: boolean
   className?: string
+  /** Set for toggle buttons — renders `aria-pressed`. */
+  pressed?: boolean
 }
 
 const SIZE_MAP = { sm: 26, md: 30 } as const
@@ -27,12 +29,14 @@ export function IconButton({
   variant = 'ghost',
   disabled = false,
   className = '',
+  pressed,
 }: IconButtonProps) {
   const px = SIZE_MAP[size]
   return (
     <button
       type="button"
       aria-label={label}
+      aria-pressed={pressed}
       disabled={disabled}
       className={`${className}`}
       onClick={onClick}

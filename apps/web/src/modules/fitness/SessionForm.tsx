@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Dropdown } from '../../components/Dropdown'
 import type { SetEntry, WorkoutSession } from './api'
 import {
@@ -11,9 +12,7 @@ import {
   updateSession,
   updateSetEntry,
 } from './api'
-import { CategoryBadge, isCardioName } from './exerciseLibrary'
-
-const FEELING_LABELS = ['Dying', 'Rough', 'OK', 'Good', 'Great']
+import { CategoryBadge, FEELING_LABELS, isCardioName } from './exerciseLibrary'
 
 function noteText(notes: Record<string, unknown>): string {
   const content = Array.isArray(notes.content) ? notes.content : []
@@ -41,6 +40,16 @@ function noteDoc(text: string): Record<string, unknown> {
   }
 }
 
+function formatSessionDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+type SessionSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 export function SessionForm({
   editSessionId,
   onEditConsumed,
@@ -59,6 +68,14 @@ export function SessionForm({
   const [editType, setEditType] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [savedType, setSavedType] = useState('')
+  const [savedDate, setSavedDate] = useState('')
+  const [savedNote, setSavedNote] = useState('')
+  const [sessionSaveStatus, setSessionSaveStatus] =
+    useState<SessionSaveStatus>('idle')
+  const [confirmDelete, setConfirmDelete] = useState<WorkoutSession | null>(
+    null,
+  )
   const [editSets, setEditSets] = useState<SetEntry[]>([])
   const [exerciseNames, setExerciseNames] = useState<Record<string, string>>({})
   const [exerciseCategories, setExerciseCategories] = useState<
@@ -112,9 +129,16 @@ export function SessionForm({
 
   async function startEditing(session: WorkoutSession) {
     setEditingId(session.id)
-    setEditType(session.type)
-    setEditDate(new Date(session.date).toISOString().slice(0, 10))
-    setEditNote(noteText(session.notes))
+    const type = session.type
+    const date = new Date(session.date).toISOString().slice(0, 10)
+    const note = noteText(session.notes)
+    setEditType(type)
+    setEditDate(date)
+    setEditNote(note)
+    setSavedType(type)
+    setSavedDate(date)
+    setSavedNote(note)
+    setSessionSaveStatus('idle')
     setAddExerciseId('')
     setError(null)
     try {
@@ -139,21 +163,51 @@ export function SessionForm({
     }
   }
 
-  async function saveSession(sessionId: string) {
-    setBusy('session')
+  async function saveSessionField(
+    sessionId: string,
+    data: { date?: string; type?: string; notes?: Record<string, unknown> },
+  ): Promise<WorkoutSession | null> {
+    setSessionSaveStatus('saving')
     try {
-      await updateSession(sessionId, {
-        date: new Date(`${editDate}T12:00:00Z`).toISOString(),
-        type: editType.trim(),
-        notes: noteDoc(editNote),
-      })
-      setEditingId(null)
-      await reloadSessions()
+      const updated = await updateSession(sessionId, data)
+      setSessions((current) =>
+        current.map((s) => (s.id === sessionId ? updated : s)),
+      )
+      setSessionSaveStatus('saved')
+      return updated
     } catch {
       setError('Failed to save workout')
-    } finally {
-      setBusy(null)
+      setSessionSaveStatus('error')
+      return null
     }
+  }
+
+  async function handleDateBlur(session: WorkoutSession, value: string) {
+    if (!value || value === savedDate) return
+    const updated = await saveSessionField(session.id, {
+      date: new Date(`${value}T12:00:00Z`).toISOString(),
+    })
+    if (updated) setSavedDate(value)
+  }
+
+  async function handleTypeBlur(session: WorkoutSession, value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === savedType) return
+    const updated = await saveSessionField(session.id, { type: trimmed })
+    if (updated) setSavedType(trimmed)
+  }
+
+  async function handleNoteBlur(session: WorkoutSession, value: string) {
+    if (value === savedNote) return
+    const updated = await saveSessionField(session.id, {
+      notes: noteDoc(value),
+    })
+    if (updated) setSavedNote(value)
+  }
+
+  function closeEditor() {
+    if (sessionSaveStatus === 'saving' || sessionSaveStatus === 'error') return
+    setEditingId(null)
   }
 
   async function updateSet(
@@ -279,6 +333,9 @@ export function SessionForm({
                         type="date"
                         value={editDate}
                         onChange={(event) => setEditDate(event.target.value)}
+                        onBlur={(event) =>
+                          void handleDateBlur(session, event.target.value)
+                        }
                       />
                     </label>
                     <label className="cal-field">
@@ -286,6 +343,9 @@ export function SessionForm({
                       <input
                         value={editType}
                         onChange={(event) => setEditType(event.target.value)}
+                        onBlur={(event) =>
+                          void handleTypeBlur(session, event.target.value)
+                        }
                         placeholder="Workout type"
                       />
                     </label>
@@ -295,6 +355,9 @@ export function SessionForm({
                     <textarea
                       value={editNote}
                       onChange={(event) => setEditNote(event.target.value)}
+                      onBlur={(event) =>
+                        void handleNoteBlur(session, event.target.value)
+                      }
                       placeholder="How did the workout go?"
                       rows={2}
                     />
@@ -519,20 +582,27 @@ export function SessionForm({
                     </button>
                   </div>
                   <div className="fit-history-actions">
+                    <p
+                      className="fit-save-status"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {sessionSaveStatus === 'saving'
+                        ? 'Saving…'
+                        : sessionSaveStatus === 'saved'
+                          ? 'Saved'
+                          : ''}
+                    </p>
                     <button
                       className="fit-primary-button"
                       type="button"
-                      onClick={() => void saveSession(session.id)}
-                      disabled={!editType.trim() || busy === 'session'}
+                      onClick={closeEditor}
+                      disabled={
+                        sessionSaveStatus === 'saving' ||
+                        sessionSaveStatus === 'error'
+                      }
                     >
-                      {busy === 'session' ? 'Saving...' : 'Save workout'}
-                    </button>
-                    <button
-                      className="fit-secondary-button"
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
+                      Done
                     </button>
                   </div>
                 </div>
@@ -541,11 +611,7 @@ export function SessionForm({
                   <div>
                     <h4>{session.type}</h4>
                     <time dateTime={session.date}>
-                      {new Date(session.date).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+                      {formatSessionDate(session.date)}
                     </time>
                     {noteText(session.notes) && (
                       <p>{noteText(session.notes)}</p>
@@ -562,7 +628,7 @@ export function SessionForm({
                     <button
                       className="fit-remove-button text"
                       type="button"
-                      onClick={() => void removeSession(session.id)}
+                      onClick={() => setConfirmDelete(session)}
                       disabled={deleting === session.id}
                     >
                       {deleting === session.id ? 'Deleting...' : 'Delete'}
@@ -583,6 +649,23 @@ export function SessionForm({
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={confirmDelete != null}
+        message={`Delete "${confirmDelete?.type}"?`}
+        detail={
+          confirmDelete
+            ? `${formatSessionDate(confirmDelete.date)} — this permanently removes the workout and its sets.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          const session = confirmDelete
+          setConfirmDelete(null)
+          if (session) void removeSession(session.id)
+        }}
+      />
     </section>
   )
 }

@@ -205,6 +205,7 @@ export function TimeGrid({
   const scrollRef = useRef<HTMLDivElement>(null)
   const didInitialScroll = useRef(false)
   const horizontalWheel = useRef(0)
+  const wheelNavTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [resizingDay, setResizingDay] = useState<string | null>(null)
   const setCurrentGesture = (next: Gesture | null) => {
     gestureRef.current = next
@@ -250,6 +251,24 @@ export function TimeGrid({
 
   const touchStateRef = useRef<TouchState>({ phase: 'idle' })
 
+  const previewHorizontalNavigation = useCallback(
+    (pointerDelta: number, active = true) => {
+      const element = scrollRef.current
+      if (!element) return
+      const offset = Math.max(-32, Math.min(32, pointerDelta * 0.18))
+      element.classList.toggle('is-swiping', active)
+      element.style.setProperty('--calendar-swipe-x', `${offset}px`)
+    },
+    [],
+  )
+
+  const resetHorizontalPreview = useCallback(() => {
+    const element = scrollRef.current
+    if (!element) return
+    element.classList.remove('is-swiping')
+    element.style.setProperty('--calendar-swipe-x', '0px')
+  }, [])
+
   const clearLongPress = (state: TouchState) => {
     if (state.phase === 'pending' && state.timer) clearTimeout(state.timer)
   }
@@ -257,6 +276,7 @@ export function TimeGrid({
   const cancelTouch = () => {
     clearLongPress(touchStateRef.current)
     touchStateRef.current = { phase: 'idle' }
+    resetHorizontalPreview()
     setCurrentGesture(null)
     setResizingDay(null)
   }
@@ -385,6 +405,7 @@ export function TimeGrid({
       if (dx < THRESHOLD && dy < THRESHOLD) return
       clearLongPress(state)
       if (dx > dy) {
+        previewHorizontalNavigation(e.clientX - state.x)
         touchStateRef.current = {
           phase: 'swipe',
           startX: state.x,
@@ -405,6 +426,7 @@ export function TimeGrid({
     }
 
     if (state.phase === 'swipe' && e.pointerId === state.pointerId) {
+      previewHorizontalNavigation(e.clientX - state.startX)
       touchStateRef.current = {
         ...state,
         deltaX: e.clientX - state.startX,
@@ -498,8 +520,16 @@ export function TimeGrid({
 
     if (state.phase === 'swipe') {
       const COMMIT_THRESHOLD = 50
+      resetHorizontalPreview()
       if (Math.abs(state.deltaX) >= COMMIT_THRESHOLD) {
-        onHorizontalNavigate(state.deltaX < 0 ? 1 : -1)
+        const viewportWidth =
+          (scrollRef.current?.clientWidth || window.innerWidth) - TIME_COL
+        const dayWidth = Math.max(80, viewportWidth / days.length)
+        const distance = Math.max(
+          1,
+          Math.min(days.length, Math.round(Math.abs(state.deltaX) / dayWidth)),
+        )
+        onHorizontalNavigate(state.deltaX < 0 ? distance : -distance)
       }
       touchStateRef.current = { phase: 'idle' }
       return
@@ -573,14 +603,36 @@ export function TimeGrid({
       }
       event.preventDefault()
       horizontalWheel.current += event.deltaX
-      const days = Math.trunc(horizontalWheel.current / 80)
-      if (!days) return
-      horizontalWheel.current -= days * 80
-      onHorizontalNavigate(days)
+      previewHorizontalNavigation(-horizontalWheel.current)
+      if (wheelNavTimer.current) clearTimeout(wheelNavTimer.current)
+      wheelNavTimer.current = setTimeout(() => {
+        wheelNavTimer.current = null
+        const total = horizontalWheel.current
+        horizontalWheel.current = 0
+        resetHorizontalPreview()
+        const viewportWidth = element.clientWidth - TIME_COL
+        const dayWidth =
+          viewportWidth > 0
+            ? Math.max(80, Math.min(180, viewportWidth / days.length))
+            : 80
+        const distance = Math.trunc(total / dayWidth)
+        if (distance) onHorizontalNavigate(distance)
+      }, 100)
     }
     element.addEventListener('wheel', onWheel, { passive: false })
-    return () => element.removeEventListener('wheel', onWheel)
-  }, [rowHeight, onRowHeightChange, onHorizontalNavigate])
+    return () => {
+      element.removeEventListener('wheel', onWheel)
+      if (wheelNavTimer.current) clearTimeout(wheelNavTimer.current)
+      resetHorizontalPreview()
+    }
+  }, [
+    days.length,
+    onHorizontalNavigate,
+    onRowHeightChange,
+    previewHorizontalNavigation,
+    resetHorizontalPreview,
+    rowHeight,
+  ])
 
   useEffect(() => {
     const element = scrollRef.current
