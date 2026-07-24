@@ -41,14 +41,14 @@ interface DayPoint {
 }
 
 const tooltipStyle = {
-  background: '#1C1B17',
-  border: '1px solid rgba(255,240,200,0.12)',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-strong)',
   borderRadius: '8px',
   fontSize: '12px',
-  color: '#F0EDE5',
+  color: 'var(--text-primary)',
 }
 
-const axisTick = { fontSize: 10, fill: '#6B6761' }
+const axisTick = { fontSize: 10, fill: 'var(--text-tertiary)' }
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -164,7 +164,7 @@ export function Stats({ summary, onSaved }: StatsProps) {
               <LineChart data={days}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -206,7 +206,7 @@ export function Stats({ summary, onSaved }: StatsProps) {
               <LineChart data={days}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -249,7 +249,7 @@ export function Stats({ summary, onSaved }: StatsProps) {
               <LineChart data={days}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -292,7 +292,7 @@ export function Stats({ summary, onSaved }: StatsProps) {
               <LineChart data={days}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -335,7 +335,7 @@ export function Stats({ summary, onSaved }: StatsProps) {
               <LineChart data={weightSeries}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"

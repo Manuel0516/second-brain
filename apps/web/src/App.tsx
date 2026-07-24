@@ -3,6 +3,7 @@ import {
   Routes,
   Route,
   Navigate,
+  Outlet,
   useLocation,
 } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
@@ -66,71 +67,51 @@ function AppRoutes() {
   }
 
   return (
-    <PageTransition>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/calendar"
-          element={
-            <ProtectedRoute>
-              <SettingsProvider>
-                <Calendar />
-              </SettingsProvider>
-            </ProtectedRoute>
-          }
-        />
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <SettingsProvider>
+              <PageTransition>
+                <Outlet />
+              </PageTransition>
+            </SettingsProvider>
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/calendar" element={<Calendar />} />
         <Route
           path="/notes/:pageId?"
           element={
-            <ProtectedRoute>
-              <SettingsProvider>
-                <Suspense
-                  fallback={<main className="route-loading">Loading…</main>}
-                >
-                  <Notes />
-                </Suspense>
-              </SettingsProvider>
-            </ProtectedRoute>
+            <Suspense
+              fallback={<main className="route-loading">Loading…</main>}
+            >
+              <Notes />
+            </Suspense>
           }
         />
         <Route
           path="/fitness"
           element={
-            <ProtectedRoute>
-              <SettingsProvider>
-                <Suspense
-                  fallback={<main className="route-loading">Loading…</main>}
-                >
-                  <Fitness />
-                </Suspense>
-              </SettingsProvider>
-            </ProtectedRoute>
+            <Suspense
+              fallback={<main className="route-loading">Loading…</main>}
+            >
+              <Fitness />
+            </Suspense>
           }
         />
         <Route
           path="/food"
           element={
-            <ProtectedRoute>
-              <SettingsProvider>
-                <Suspense
-                  fallback={<main className="route-loading">Loading…</main>}
-                >
-                  <Food />
-                </Suspense>
-              </SettingsProvider>
-            </ProtectedRoute>
+            <Suspense
+              fallback={<main className="route-loading">Loading…</main>}
+            >
+              <Food />
+            </Suspense>
           }
         />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsProvider>
-                <SettingsLayout />
-              </SettingsProvider>
-            </ProtectedRoute>
-          }
-        >
+        <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="/settings/general" replace />} />
           <Route path="general" element={<GeneralSettings />} />
           <Route path="calendar" element={<CalendarSettings />} />
@@ -139,18 +120,18 @@ function AppRoutes() {
           <Route path="notes" element={<NotesSettings />} />
           <Route path="admin" element={<AdminSettings />} />
         </Route>
-        <Route
-          path="/"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/calendar" replace />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-      </Routes>
-    </PageTransition>
+      </Route>
+      <Route
+        path="/"
+        element={
+          isAuthenticated ? (
+            <Navigate to="/calendar" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+    </Routes>
   )
 }
 

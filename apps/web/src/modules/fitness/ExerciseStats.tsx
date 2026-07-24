@@ -71,7 +71,7 @@ interface Props {
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)',
-  border: '1px solid rgba(255,240,200,0.07)',
+  border: '1px solid var(--border)',
   borderRadius: '10px',
   padding: '12px 8px',
 }
@@ -89,7 +89,7 @@ const tileStyle: React.CSSProperties = {
   flex: 1,
   padding: '16px 18px',
   background: 'var(--bg-elevated)',
-  border: '1px solid rgba(255,240,200,0.07)',
+  border: '1px solid var(--border)',
   borderRadius: '12px',
   textAlign: 'center',
 }
@@ -121,13 +121,13 @@ function statsRangeLabel(days: number): string {
   return RANGE_LABELS[days] ?? `${days} days`
 }
 
-const axisTick = { fontSize: 10, fill: '#6B6761' }
+const axisTick = { fontSize: 10, fill: 'var(--text-tertiary)' }
 const tooltipStyle = {
-  background: '#1C1B17',
-  border: '1px solid rgba(255,240,200,0.12)',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-strong)',
   borderRadius: '8px',
   fontSize: '12px',
-  color: '#F0EDE5',
+  color: 'var(--text-primary)',
 }
 
 export function ExerciseStats({ exerciseId, onClose }: Props) {
@@ -347,7 +347,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   <LineChart data={stats.distance_over_time}>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,240,200,0.06)"
+                      stroke="var(--border-grid)"
                     />
                     <XAxis
                       dataKey="date"
@@ -360,9 +360,9 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     <Line
                       type="monotone"
                       dataKey="distance_km"
-                      stroke="#22D3EE"
+                      stroke="var(--accent)"
                       strokeWidth={2}
-                      dot={{ r: 3, fill: '#22D3EE' }}
+                      dot={{ r: 3, fill: 'var(--accent)' }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -379,7 +379,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   <LineChart data={stats.pace_over_time}>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,240,200,0.06)"
+                      stroke="var(--border-grid)"
                     />
                     <XAxis
                       dataKey="date"
@@ -397,9 +397,9 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     <Line
                       type="monotone"
                       dataKey="pace"
-                      stroke="#22D3EE"
+                      stroke="var(--accent)"
                       strokeWidth={2}
-                      dot={{ r: 3, fill: '#22D3EE' }}
+                      dot={{ r: 3, fill: 'var(--accent)' }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -416,7 +416,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   <BarChart data={stats.weekly}>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,240,200,0.06)"
+                      stroke="var(--border-grid)"
                     />
                     <XAxis
                       dataKey="week"
@@ -428,12 +428,12 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     <Tooltip contentStyle={tooltipStyle} />
                     <Bar
                       dataKey="distance_km"
-                      fill="#22D3EE"
+                      fill="var(--accent)"
                       radius={[4, 4, 0, 0]}
                     />
                     <Bar
                       dataKey="duration_min"
-                      fill="rgba(34,211,238,0.35)"
+                      fill="color-mix(in srgb, var(--accent) 35%, transparent)"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
@@ -515,7 +515,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
               <div
                 style={{
                   background: 'var(--bg-elevated)',
-                  border: '1px solid rgba(255,240,200,0.07)',
+                  border: '1px solid var(--border)',
                   borderRadius: '10px',
                   overflow: 'hidden',
                 }}
@@ -525,7 +525,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr 1fr',
                     padding: '8px 14px',
-                    borderBottom: '1px solid rgba(255,240,200,0.06)',
+                    borderBottom: '1px solid var(--border)',
                   }}
                 >
                   <span
@@ -625,7 +625,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,240,200,0.06)"
+                      stroke="var(--border-grid)"
                     />
                     <XAxis
                       dataKey="week"
@@ -636,11 +636,11 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     <YAxis tick={axisTick} axisLine={false} tickLine={false} />
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      cursor={{ fill: 'rgba(255, 240, 200, 0.04)' }}
+                      cursor={{ fill: 'var(--border-grid)' }}
                     />
                     <Bar
                       dataKey="total_volume"
-                      fill="#22D3EE"
+                      fill="var(--accent)"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
@@ -665,7 +665,7 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                   >
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(255,240,200,0.06)"
+                      stroke="var(--border-grid)"
                     />
                     <XAxis
                       dataKey="date"
@@ -678,9 +678,9 @@ export function ExerciseStats({ exerciseId, onClose }: Props) {
                     <Line
                       type="monotone"
                       dataKey="max_weight"
-                      stroke="#22D3EE"
+                      stroke="var(--accent)"
                       strokeWidth={2}
-                      dot={{ r: 3, fill: '#22D3EE' }}
+                      dot={{ r: 3, fill: 'var(--accent)' }}
                     />
                   </LineChart>
                 </ResponsiveContainer>

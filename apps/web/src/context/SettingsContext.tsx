@@ -7,9 +7,15 @@ import {
   type ReactNode,
 } from 'react'
 import { apiCall } from '../lib/api'
+import {
+  applyBackendAppearance,
+  applyTheme,
+  applyVisualStyle,
+} from '../lib/appearance'
 
 export interface UserSettings {
   theme: 'system' | 'light' | 'dark'
+  visual_style: 'neon' | 'monochrome'
   timezone: string
   week_start: 'monday' | 'sunday'
   default_view: 'day' | 'week' | 'month'
@@ -56,6 +62,7 @@ interface SettingsContextType {
 
 const DEFAULTS: UserSettings = {
   theme: 'system',
+  visual_style: 'neon',
   timezone: 'Europe/Stockholm',
   week_start: 'monday',
   default_view: 'week',
@@ -93,25 +100,6 @@ const SettingsContext = createContext<SettingsContextType | undefined>(
   undefined,
 )
 
-let themeTransitionTimer = 0
-
-function applyTheme(theme: string, animate = false) {
-  const root = document.documentElement
-  const next = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : ''
-  const current = root.dataset.theme ?? ''
-  // Briefly enable a global colour transition so the swap eases instead of snapping.
-  if (animate && next !== current) {
-    root.classList.add('theme-transition')
-    window.clearTimeout(themeTransitionTimer)
-    themeTransitionTimer = window.setTimeout(
-      () => root.classList.remove('theme-transition'),
-      400,
-    )
-  }
-  if (next) root.dataset.theme = next
-  else delete root.dataset.theme
-}
-
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<UserSettings>(DEFAULTS)
   const [loading, setLoading] = useState(true)
@@ -124,7 +112,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           const data = (await response.json()) as UserSettings
           if (!cancelled) {
             setSettings(data)
-            applyTheme(data.theme)
+            applyBackendAppearance(data.theme, data.visual_style)
           }
         }
       })
@@ -144,6 +132,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (partial.theme) {
       applyTheme(partial.theme, true)
     }
+    if (partial.visual_style) {
+      applyVisualStyle(partial.visual_style, true)
+    }
 
     const response = await apiCall('/api/settings', {
       method: 'PATCH',
@@ -154,14 +145,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (response.ok) {
       const data = (await response.json()) as UserSettings
       setSettings(data)
-      applyTheme(data.theme)
+      applyBackendAppearance(data.theme, data.visual_style)
     } else {
       // Revert on error — re-fetch
       const refresh = await apiCall('/api/settings')
       if (refresh.ok) {
         const data = (await refresh.json()) as UserSettings
         setSettings(data)
-        applyTheme(data.theme)
+        applyBackendAppearance(data.theme, data.visual_style)
       }
     }
   }, [])

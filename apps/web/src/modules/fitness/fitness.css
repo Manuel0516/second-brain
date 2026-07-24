@@ -13,12 +13,12 @@
   margin: 0 0 12px;
 }
 
-/* Fitness color tokens — cyan #22D3EE, matches app accent */
+/* Fitness color tokens — aliases the app accent so Neon/Monochrome both apply */
 .fitness-page {
-  --fit-accent: #22d3ee;
-  --fit-accent-tint: rgba(34, 211, 238, 0.14);
-  --fit-accent-border: rgba(34, 211, 238, 0.28);
-  --fit-accent-tint-deep: rgba(34, 211, 238, 0.18);
+  --fit-accent: var(--accent);
+  --fit-accent-tint: color-mix(in srgb, var(--accent) 14%, transparent);
+  --fit-accent-border: color-mix(in srgb, var(--accent) 28%, transparent);
+  --fit-accent-tint-deep: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* ── Tabs (Phase F3) ─────────────────────────────────────────────── */
@@ -1314,7 +1314,7 @@
   justify-content: center;
   gap: 6px;
   background: var(--bg-elevated);
-  border: 1px solid rgba(255, 240, 200, 0.09);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   color: var(--text-secondary);
   font-size: 12.5px;
@@ -1487,7 +1487,7 @@
 .fit-logpast-close {
   width: 28px;
   height: 28px;
-  background: rgba(255, 240, 200, 0.06);
+  background: var(--border);
   border: none;
   border-radius: 6px;
   color: var(--text-tertiary);
@@ -1524,9 +1524,9 @@
   border-radius: 99px;
   font-size: 11.5px;
   cursor: pointer;
-  background: rgba(255, 240, 200, 0.05);
+  background: var(--border-grid);
   color: var(--text-tertiary);
-  border: 1px solid rgba(255, 240, 200, 0.07);
+  border: 1px solid var(--border);
   font-weight: 400;
   transition:
     background 0.15s,

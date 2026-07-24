@@ -24,6 +24,7 @@ NumberedStyle = Literal["decimal", "lower-alpha", "upper-alpha", "lower-roman", 
 
 class SettingsResponse(BaseModel):
     theme: Literal["system", "light", "dark"]
+    visual_style: Literal["neon", "monochrome"]
     timezone: str
     week_start: Literal["monday", "sunday"]
     default_view: Literal["day", "week", "month"]
@@ -59,6 +60,7 @@ class SettingsResponse(BaseModel):
 
 class SettingsPatch(BaseModel):
     theme: Literal["system", "light", "dark"] | None = None
+    visual_style: Literal["neon", "monochrome"] | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=63)
     week_start: Literal["monday", "sunday"] | None = None
     default_view: Literal["day", "week", "month"] | None = None
@@ -161,6 +163,7 @@ async def _get_or_create_settings(
 def _settings_to_response(s: UserSettings) -> SettingsResponse:
     return SettingsResponse(
         theme=s.theme,
+        visual_style=s.visual_style,
         timezone=s.timezone,
         week_start=s.week_start,
         default_view=s.default_view,

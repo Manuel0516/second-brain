@@ -22,14 +22,14 @@ import { useSettings } from '../../context/SettingsContext'
 import { toDisplayWeight } from './units'
 
 const tooltipStyle = {
-  background: '#1C1B17',
-  border: '1px solid rgba(255,240,200,0.12)',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-strong)',
   borderRadius: '8px',
   fontSize: '12px',
-  color: '#F0EDE5',
+  color: 'var(--text-primary)',
 }
 
-const axisTick = { fontSize: 10, fill: '#6B6761' }
+const axisTick = { fontSize: 10, fill: 'var(--text-tertiary)' }
 
 const FEELING_LABELS = ['', 'Dying', 'Rough', 'OK', 'Good', 'Great']
 
@@ -303,7 +303,7 @@ export function Overview({
               <LineChart data={metricSeries}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -327,7 +327,7 @@ export function Overview({
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="#22D3EE"
+                  stroke="var(--accent)"
                   strokeWidth={1.8}
                   dot={false}
                 />
@@ -374,7 +374,7 @@ export function Overview({
               <LineChart data={exerciseSeries as { date: string }[]}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -405,7 +405,7 @@ export function Overview({
                 <Line
                   type="monotone"
                   dataKey={isCardio ? 'distance_km' : 'max_weight'}
-                  stroke="#22D3EE"
+                  stroke="var(--accent)"
                   strokeWidth={1.8}
                   dot={false}
                 />
@@ -432,7 +432,7 @@ export function Overview({
               <LineChart data={data.feeling_series}>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="rgba(255,240,200,0.06)"
+                  stroke="var(--border-grid)"
                 />
                 <XAxis
                   dataKey="date"
@@ -460,7 +460,7 @@ export function Overview({
                 <Line
                   type="monotone"
                   dataKey="feeling"
-                  stroke="#22D3EE"
+                  stroke="var(--accent)"
                   strokeWidth={1.8}
                   dot={false}
                 />

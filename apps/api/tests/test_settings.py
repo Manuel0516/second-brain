@@ -61,3 +61,38 @@ async def test_notes_list_styles_reject_unknown_values(
     assert response.status_code == 422
     response = await client.patch("/api/settings", json={"notes_numbered_style": "emoji"})
     assert response.status_code == 422
+
+
+async def test_visual_style_defaults_to_neon(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    await _login(client, test_db_session)
+
+    response = await client.get("/api/settings")
+    assert response.status_code == 200
+    assert response.json()["visual_style"] == "neon"
+
+
+async def test_visual_style_patch_persists(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    await _login(client, test_db_session)
+
+    response = await client.patch("/api/settings", json={"visual_style": "monochrome"})
+    assert response.status_code == 200
+    assert response.json()["visual_style"] == "monochrome"
+
+    response = await client.get("/api/settings")
+    assert response.json()["visual_style"] == "monochrome"
+
+
+async def test_visual_style_rejects_unknown_value(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    await _login(client, test_db_session)
+
+    response = await client.patch("/api/settings", json={"visual_style": "sepia"})
+    assert response.status_code == 422
+
+    response = await client.get("/api/settings")
+    assert response.json()["visual_style"] == "neon"

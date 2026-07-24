@@ -142,6 +142,7 @@ One row per user, created on first write (lazy creation).
 |--------|------|-------------|
 | user_id | UUID PK+FK | One-to-one with `users`. |
 | theme | String(10) | "dark", "light", or "system". |
+| visual_style | String(16) | "neon" (default) or "monochrome". Independent of `theme` — see `docs/design/STYLE_GUIDE.md`. |
 | timezone | String(63) | Default "Europe/Stockholm". |
 | week_start | String(8) | "monday" or "sunday". |
 | default_view | String(8) | "week", "month", "day". |
@@ -449,5 +450,6 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 025 | Account-to-account calendar/page sharing plus durable Yjs note collaboration updates |
 | 026 | Per-recipient visibility and color overrides for shared calendars |
 | 027 | Ordered multi-photo meal attachments; replaces `meal_logs.photo_file_id` |
+| 028 | `visual_style` (neon/monochrome) on user_settings |
 
 Always check `alembic current` before writing a new migration.

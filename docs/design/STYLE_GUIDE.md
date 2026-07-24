@@ -17,6 +17,26 @@ Source of truth: `apps/web/src/styles.css`
   active indicators. Never decorative.
 - Density without crowding. Compact enough to show information, never so tight it's stressful.
 
+### Visual style vs. color mode
+
+Appearance has two independent user preferences — never conflate them:
+
+- **Visual style** — `neon` (default) or `monochrome`. Set via `data-visual-style` on
+  `<html>`. Neon is everything described in this guide (warm dark palette, cyan accent).
+  Monochrome keeps the exact same layout, typography, spacing, radii, components, and
+  motion, but replaces the branded chrome (surfaces, borders, text, the single accent,
+  the logo glow) with soft-neutral black/white/gray. See §2 for the Monochrome token set.
+- **Color mode** — `system` / `light` / `dark`. Set via `data-theme` on `<html>`, exactly
+  as before. Orthogonal to visual style — all four combinations (Neon×Dark, Neon×Light,
+  Monochrome×Dark, Monochrome×Light) must render correctly.
+
+Monochrome never touches semantic/data colors — calendar and event colors, note
+text/highlight/block colors, multi-series chart palettes, workout feeling colors,
+success/warning/error/destructive colors, and user-uploaded or user-chosen content all
+stay exactly as authored. Only app chrome changes. Component code must always read the
+semantic CSS custom properties (`var(--accent)`, `var(--bg-elevated)`, etc.) — never
+branch on which visual style is active.
+
 ---
 
 ## 2. Color tokens
@@ -74,6 +94,48 @@ component code — always use the tokens and let the theme cascade.
 --accent-tint:        rgba(12, 138, 163, 0.1)
 --accent-tint-border: rgba(12, 138, 163, 0.2)
 ```
+
+### Monochrome visual style (all four token sets)
+Selected via `data-visual-style="monochrome"` on `<html>`, orthogonal to `data-theme`.
+Same token names, same shadow geometry, neutral black shadows in both modes. Semantic
+tokens (`--feeling-*`, danger, calendar/note/user colors) are never redefined here —
+only the app-chrome tokens below.
+
+```css
+/* Monochrome — dark */
+--bg-base:     #0b0b0b
+--bg-elevated: #141414
+--bg-raised:   #202020
+--border:        rgba(255, 255, 255, 0.08)
+--border-strong: rgba(255, 255, 255, 0.14)
+--border-grid:   rgba(255, 255, 255, 0.05)
+--text-primary:   #f5f5f5
+--text-secondary: #a3a3a3
+--text-tertiary:  #737373
+--accent:             #ffffff
+--accent-tint:        rgba(255, 255, 255, 0.10)
+--accent-tint-border: rgba(255, 255, 255, 0.18)
+
+/* Monochrome — light */
+--bg-base:     #f5f5f5
+--bg-elevated: #ffffff
+--bg-raised:   #eaeaea
+--border:        rgba(0, 0, 0, 0.08)
+--border-strong: rgba(0, 0, 0, 0.15)
+--border-grid:   rgba(0, 0, 0, 0.05)
+--text-primary:   #0a0a0a
+--text-secondary: #525252
+--text-tertiary:  #737373
+--accent:             #0a0a0a
+--accent-tint:        rgba(0, 0, 0, 0.07)
+--accent-tint-border: rgba(0, 0, 0, 0.14)
+```
+
+The brand logo also switches per style: Neon always uses `logo-neon-planet.png` with its
+cyan glow; Monochrome uses `Blanco_SinFondo.png` (white asset, unchanged in dark, forced
+to black in light via a `.brand-logo` CSS `filter: brightness(0)` rule — there is no
+separate light asset). The `glow` keyframe reads its color from `--logo-glow-rgb` rather
+than a hard-coded cyan value, so it never leaks Neon's color into Monochrome.
 
 ### Danger color (destructive actions only)
 ```css

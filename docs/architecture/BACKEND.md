@@ -50,9 +50,9 @@ apps/api/
 1. Frontend calls `fetch('/api/events', { credentials: 'include' })`.
 2. The request arrives at FastAPI in `main.py`.
 3. FastAPI matches the URL to a route function in one of the `routes/` files.
-4. The route function has a parameter `user: User = Depends(current_user)`. FastAPI
-   automatically calls `current_user()` from `dependencies.py`.
-5. `current_user()` reads the `sb_access` cookie, decodes the JWT, looks up the user in
+4. The route function has a parameter `user: User = Depends(get_current_user)`. FastAPI
+   automatically calls `get_current_user()` from `dependencies.py`.
+5. `get_current_user()` reads the `access_token` cookie, decodes the JWT, looks up the user in
    the database, and returns the `User` object. If anything fails, it raises HTTP 401.
 6. The route function runs its logic using `db: AsyncSession = Depends(get_db)` — an async
    database session injected automatically by FastAPI.
@@ -65,12 +65,14 @@ apps/api/
 
 **Cookies, not localStorage.** Two cookies are set at login:
 
-- `sb_access` — short-lived JWT (15 minutes). Contains the user ID. Used to authenticate
+- `access_token` — JWT valid for 24 hours. Contains the user ID. Used to authenticate
   every API request.
-- `sb_refresh` — long-lived opaque token (30 days). Used only to get a new access token
-  when it expires. The token hash is stored in the `refresh_tokens` table.
+- `refresh_token` — long-lived JWT (30 days). Used only to get a new access token when it
+  expires. Its hash is stored in the `refresh_tokens` table and the token is rotated on use.
 
 Both cookies are `httpOnly` (JavaScript cannot read them) and `Secure` in production.
+The frontend retries startup authentication and logout once after a successful refresh, and
+deduplicates simultaneous refresh attempts.
 
 **TOTP (two-factor auth)** is implemented but the settings UI is not yet wired up. The
 backend stores an encrypted TOTP secret in `users.totp_secret`.

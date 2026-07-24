@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # JWT and Auth
     jwt_secret_key: str = "your-secret-key-change-in-production"
-    jwt_access_token_expire_minutes: int = 15
+    jwt_access_token_expire_minutes: int = 1440
     jwt_refresh_token_expire_days: int = 30
 
     # Initial user (seeded on first run)

@@ -443,6 +443,29 @@ export function GeneralSettings() {
       <SettingsCard title="Appearance">
         <div className="settings-field-row" style={{ display: 'grid', gap: 6 }}>
           <span
+            id="settings-style-label"
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              color: 'var(--text-tertiary)',
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Style
+          </span>
+          <div role="group" aria-labelledby="settings-style-label">
+            <SegmentControl
+              value={settings.visual_style}
+              options={['neon', 'monochrome']}
+              labels={{ neon: 'Neon', monochrome: 'Monochrome' }}
+              onChange={(v) => patch({ visual_style: v })}
+            />
+          </div>
+        </div>
+        <div className="settings-field-row" style={{ display: 'grid', gap: 6 }}>
+          <span
             id="settings-theme-label"
             style={{
               fontSize: 10,
@@ -453,7 +476,7 @@ export function GeneralSettings() {
               letterSpacing: '0.05em',
             }}
           >
-            Theme
+            Color mode
           </span>
           <div role="group" aria-labelledby="settings-theme-label">
             <SegmentControl

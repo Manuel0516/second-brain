@@ -5,7 +5,7 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { apiCall } from '../lib/api'
+import { apiCall, refreshAccessToken } from '../lib/api'
 
 interface User {
   id: string
@@ -37,7 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await apiCall('/api/auth/me')
+        let response = await apiCall('/api/auth/me')
+        if (response.status === 401 && (await refreshAccessToken())) {
+          response = await apiCall('/api/auth/me')
+        }
+
         if (response.ok) {
           const data = await response.json()
           setUser({
@@ -63,30 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkAuth()
   }, [])
-
-  // Auto-refresh token 1 minute before expiry (15 min token = refresh at 14 min)
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    const refreshInterval = setInterval(
-      async () => {
-        try {
-          const response = await apiCall('/api/auth/refresh', {
-            method: 'POST',
-          })
-          if (!response.ok) {
-            setIsAuthenticated(false)
-            setUser(null)
-          }
-        } catch {
-          // Silent fail - token will be refreshed on next request
-        }
-      },
-      14 * 60 * 1000,
-    ) // 14 minutes
-
-    return () => clearInterval(refreshInterval)
-  }, [isAuthenticated])
 
   const login = async (
     email: string,
@@ -125,7 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await apiCall('/api/auth/logout', { method: 'POST' })
+      const response = await apiCall('/api/auth/logout', { method: 'POST' })
+      if (response.status === 401 && (await refreshAccessToken())) {
+        await apiCall('/api/auth/logout', { method: 'POST' })
+      }
     } catch {
       // Logout best-effort
     }
@@ -133,16 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
-  const refreshToken = async (): Promise<boolean> => {
-    try {
-      const response = await apiCall('/api/auth/refresh', {
-        method: 'POST',
-      })
-      return response.ok
-    } catch {
-      return false
-    }
-  }
+  const refreshToken = refreshAccessToken
 
   return (
     <AuthContext.Provider

@@ -99,8 +99,8 @@ export function RestTimer({ restCount, restTotal, onSkip }: Props) {
           style={{
             height: '28px',
             padding: '0 12px',
-            background: 'rgba(255,240,200,0.07)',
-            border: '1px solid rgba(255,240,200,0.09)',
+            background: 'var(--border)',
+            border: '1px solid var(--border-strong)',
             borderRadius: 'var(--r-md)',
             color: 'var(--text-secondary)',
             fontSize: '12px',

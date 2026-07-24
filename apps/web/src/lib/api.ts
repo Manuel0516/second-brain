@@ -5,16 +5,22 @@
  * - Redirects to /login on refresh failure
  */
 
-async function refresh(): Promise<boolean> {
-  try {
-    const response = await fetch('/api/auth/refresh', {
+let refreshPromise: Promise<boolean> | null = null
+
+export function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch('/api/auth/refresh', {
       method: 'POST',
       credentials: 'include',
     })
-    return response.ok
-  } catch {
-    return false
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null
+      })
   }
+
+  return refreshPromise
 }
 
 /** Extract a human-readable message from a FastAPI error response. */
@@ -42,7 +48,7 @@ export async function apiCall(
   const isAuthEndpoint = endpoint.startsWith('/api/auth/')
 
   if (response.status === 401 && !isAuthEndpoint) {
-    const refreshed = await refresh()
+    const refreshed = await refreshAccessToken()
     if (refreshed) {
       response = await fetch(endpoint, {
         ...options,

@@ -34,7 +34,7 @@ export function BodyWeightCard({
         marginTop: '14px',
         padding: '8px 10px',
         background: 'var(--bg-elevated)',
-        border: '1px solid rgba(255,240,200,0.07)',
+        border: '1px solid var(--border)',
         borderRadius: '8px',
         cursor: 'pointer',
       }}
@@ -70,7 +70,7 @@ export function BodyWeightCard({
               <Line
                 type="monotone"
                 dataKey="weight"
-                stroke="#22D3EE"
+                stroke="var(--accent)"
                 strokeWidth={1.5}
                 dot={false}
               />

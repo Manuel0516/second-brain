@@ -707,10 +707,10 @@ export function Fitness() {
                       background: hasSession
                         ? 'var(--fit-accent-tint)'
                         : day.isToday
-                          ? 'rgba(34,211,238,0.12)'
-                          : 'rgba(255,240,200,0.06)',
+                          ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
+                          : 'var(--border-grid)',
                       border: day.isToday
-                        ? '1px solid rgba(34,211,238,0.3)'
+                        ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)'
                         : 'none',
                       borderRadius: '5px',
                       display: 'flex',
@@ -740,7 +740,7 @@ export function Fitness() {
                   padding: '9px 10px',
                   marginBottom: '18px',
                   background: 'var(--bg-elevated)',
-                  border: '1px solid rgba(255,240,200,0.07)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
                 }}
               >
@@ -777,7 +777,7 @@ export function Fitness() {
                     style={{
                       padding: '9px 10px',
                       background: 'var(--bg-elevated)',
-                      border: '1px solid rgba(255,240,200,0.07)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                     }}
                   >
@@ -793,7 +793,7 @@ export function Fitness() {
                     style={{
                       padding: '9px 10px',
                       background: 'var(--bg-elevated)',
-                      border: '1px solid rgba(255,240,200,0.07)',
+                      border: '1px solid var(--border)',
                       borderRadius: '8px',
                     }}
                   >
@@ -823,7 +823,7 @@ export function Fitness() {
                       style={{
                         padding: '9px 10px',
                         background: 'var(--bg-elevated)',
-                        border: '1px solid rgba(255,240,200,0.07)',
+                        border: '1px solid var(--border)',
                         borderRadius: '8px',
                         position: 'relative',
                         cursor: 'grab',

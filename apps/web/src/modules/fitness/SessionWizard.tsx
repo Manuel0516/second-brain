@@ -254,7 +254,7 @@ export function SessionWizard({
     width: '22px',
     height: '3px',
     borderRadius: '99px',
-    background: active ? 'var(--accent)' : 'rgba(255,240,200,0.07)',
+    background: active ? 'var(--accent)' : 'var(--border)',
     transition: 'background .3s',
   })
 
@@ -263,7 +263,7 @@ export function SessionWizard({
     return {
       padding: '16px 10px',
       borderRadius: '10px',
-      border: `1px solid ${selected ? 'var(--fit-accent-border)' : 'rgba(255,240,200,0.07)'}`,
+      border: `1px solid ${selected ? 'var(--fit-accent-border)' : 'var(--border)'}`,
       background: selected ? 'var(--fit-accent-tint)' : 'var(--bg-elevated)',
       cursor: 'pointer',
       textAlign: 'left' as const,
@@ -328,7 +328,7 @@ export function SessionWizard({
               marginLeft: 'auto',
               width: '26px',
               height: '26px',
-              background: 'rgba(255,240,200,0.06)',
+              background: 'var(--border)',
               border: 'none',
               borderRadius: '6px',
               color: 'var(--text-tertiary)',
@@ -409,8 +409,8 @@ export function SessionWizard({
                   height: '42px',
                   background: canProceed
                     ? 'var(--accent-tint)'
-                    : 'rgba(255,240,200,0.04)',
-                  border: `1px solid ${canProceed ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
+                    : 'var(--border-grid)',
+                  border: `1px solid ${canProceed ? 'var(--accent-tint-border)' : 'var(--border)'}`,
                   borderRadius: '9px',
                   color: canProceed ? 'var(--accent)' : 'var(--text-tertiary)',
                   fontSize: '13px',
@@ -494,7 +494,7 @@ export function SessionWizard({
                   width: '100%',
                   padding: '9px 12px',
                   background: 'var(--bg-raised)',
-                  border: '1px solid rgba(255,240,200,0.09)',
+                  border: '1px solid var(--border-strong)',
                   borderRadius: '8px',
                   color: 'var(--text-primary)',
                   fontSize: '13px',
@@ -602,8 +602,8 @@ export function SessionWizard({
                     style={{
                       flex: 1,
                       height: '42px',
-                      background: 'rgba(255,240,200,0.07)',
-                      border: '1px solid rgba(255,240,200,0.09)',
+                      background: 'var(--border)',
+                      border: '1px solid var(--border-strong)',
                       borderRadius: '9px',
                       color: 'var(--text-secondary)',
                       fontSize: '13px',
@@ -622,8 +622,8 @@ export function SessionWizard({
                       height: '42px',
                       background: canStart
                         ? 'var(--accent-tint)'
-                        : 'rgba(255,240,200,0.04)',
-                      border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
+                        : 'var(--border-grid)',
+                      border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'var(--border)'}`,
                       borderRadius: '9px',
                       color: canStart
                         ? 'var(--accent)'
@@ -646,8 +646,8 @@ export function SessionWizard({
                     height: '42px',
                     background: canStart
                       ? 'var(--accent-tint)'
-                      : 'rgba(255,240,200,0.04)',
-                    border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'rgba(255,240,200,0.07)'}`,
+                      : 'var(--border-grid)',
+                    border: `1px solid ${canStart ? 'var(--accent-tint-border)' : 'var(--border)'}`,
                     borderRadius: '9px',
                     color: canStart ? 'var(--accent)' : 'var(--text-tertiary)',
                     fontSize: '13px',

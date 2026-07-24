@@ -14,11 +14,14 @@ the URL. Treat it accordingly.
   encrypted secret, enabled from a settings page.
 
 ## 2. Session Handling
-- **JWT access token**, short-lived (~15 min), stored in an `httpOnly`, `Secure`,
+- **JWT access token**, valid for 24 hours, stored in an `httpOnly`, `Secure`,
   `SameSite=Strict` cookie — never in `localStorage` (XSS-exposed).
 - **Refresh token**, longer-lived (~30 days), rotated on each use, also `httpOnly` cookie.
   "Remember this device" just extends refresh lifetime rather than introducing a separate
   mechanism.
+- On startup, an expired access token is refreshed once before the current-user request is
+  retried. Concurrent 401 responses share that refresh request so token rotation cannot race
+  itself.
 - Logout invalidates the refresh token server-side (a `revoked_at` column), not just
   client-side cookie deletion.
 

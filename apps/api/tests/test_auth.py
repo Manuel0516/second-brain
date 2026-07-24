@@ -4,7 +4,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models import Calendar, User
+from app.routes import auth as auth_routes
 
 pytestmark = pytest.mark.anyio
 
@@ -32,8 +34,12 @@ async def test_user_with_calendars(test_db_session: AsyncSession, test_user: Use
     return test_user
 
 
-async def test_login_success(client: AsyncClient, test_user: User) -> None:
+async def test_login_success(
+    client: AsyncClient, test_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test successful login."""
+    settings = get_settings().model_copy(update={"jwt_access_token_expire_minutes": 1440})
+    monkeypatch.setattr(auth_routes, "get_settings", lambda: settings)
     response = await client.post(
         "/api/auth/login",
         json={
@@ -48,6 +54,15 @@ async def test_login_success(client: AsyncClient, test_user: User) -> None:
     assert data["is_active"] is True
     assert "access_token" in response.cookies
     assert "refresh_token" in response.cookies
+    cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        header.startswith("access_token=") and "Max-Age=86400" in header
+        for header in cookie_headers
+    )
+    assert any(
+        header.startswith("refresh_token=") and "Max-Age=2592000" in header
+        for header in cookie_headers
+    )
 
 
 async def test_login_invalid_credentials(client: AsyncClient, test_user: User) -> None:
@@ -136,8 +151,12 @@ async def test_logout(client: AsyncClient, test_user: User) -> None:
     assert response.json()["message"] == "Logged out"
 
 
-async def test_refresh_token(client: AsyncClient, test_user: User) -> None:
+async def test_refresh_token(
+    client: AsyncClient, test_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test refresh token endpoint."""
+    settings = get_settings().model_copy(update={"jwt_access_token_expire_minutes": 1440})
+    monkeypatch.setattr(auth_routes, "get_settings", lambda: settings)
     # First login
     login_response = await client.post(
         "/api/auth/login",
@@ -156,6 +175,11 @@ async def test_refresh_token(client: AsyncClient, test_user: User) -> None:
     assert response.status_code == 200
     assert "access_token" in response.cookies
     assert "refresh_token" in response.cookies
+    cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        header.startswith("access_token=") and "Max-Age=86400" in header
+        for header in cookie_headers
+    )
 
 
 async def test_rate_limit(client: AsyncClient) -> None:

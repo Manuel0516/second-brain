@@ -35,24 +35,24 @@ export function WeekStrip({ weekDays }: Props) {
         if (isDone) {
           bg = 'var(--fit-accent-tint)'
           border = isToday
-            ? '2px solid rgba(34,211,238,0.40)'
+            ? '2px solid color-mix(in srgb, var(--accent) 40%, transparent)'
             : '1px solid var(--fit-accent-border)'
           dayColor = 'var(--fit-accent)'
           typeColor = 'var(--fit-accent)'
         } else if (hasPlanned) {
-          bg = 'rgba(34,211,238,0.06)'
+          bg = 'color-mix(in srgb, var(--accent) 6%, transparent)'
           border = isToday
-            ? '2px solid rgba(34,211,238,0.35)'
-            : '1px solid rgba(34,211,238,0.18)'
-          dayColor = isToday ? '#22D3EE' : 'var(--text-secondary)'
-          typeColor = isToday ? '#22D3EE' : 'var(--text-secondary)'
+            ? '2px solid color-mix(in srgb, var(--accent) 35%, transparent)'
+            : '1px solid color-mix(in srgb, var(--accent) 18%, transparent)'
+          dayColor = isToday ? 'var(--accent)' : 'var(--text-secondary)'
+          typeColor = isToday ? 'var(--accent)' : 'var(--text-secondary)'
           opacity = isToday ? 1 : 0.7
         } else {
-          bg = 'rgba(255,240,200,0.04)'
+          bg = 'var(--border-grid)'
           border = isToday
-            ? '2px solid rgba(34,211,238,0.28)'
-            : '1px solid rgba(255,240,200,0.07)'
-          dayColor = isToday ? '#22D3EE' : 'var(--text-tertiary)'
+            ? '2px solid color-mix(in srgb, var(--accent) 28%, transparent)'
+            : '1px solid var(--border)'
+          dayColor = isToday ? 'var(--accent)' : 'var(--text-tertiary)'
           typeColor = 'var(--text-tertiary)'
           opacity = isToday ? 1 : 0.45
         }
@@ -108,7 +108,7 @@ export function WeekStrip({ weekDays }: Props) {
                   height="14"
                   viewBox="0 0 20 20"
                   fill="none"
-                  stroke="#22D3EE"
+                  stroke="var(--accent)"
                   strokeWidth="1.8"
                   strokeLinecap="round"
                 >

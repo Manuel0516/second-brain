@@ -41,7 +41,7 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
   const inputStyle: React.CSSProperties = {
     width: '100%',
     minHeight: '34px',
-    border: '1px solid rgba(255,240,200,0.09)',
+    border: '1px solid var(--border-strong)',
     borderRadius: 'var(--r-sm)',
     background: 'var(--bg-raised)',
     color: 'var(--text-primary)',
@@ -59,7 +59,7 @@ export function BodyMetricForm({ onSaved }: BodyMetricFormProps) {
       <div
         style={{
           background: 'var(--bg-elevated)',
-          border: '1px solid rgba(255,240,200,0.07)',
+          border: '1px solid var(--border)',
           borderRadius: 'var(--r-lg)',
           padding: '14px',
         }}

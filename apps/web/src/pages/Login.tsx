@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { logoAssetFor, readCachedVisualStyle } from '../lib/appearance'
 
 export function Login() {
   const navigate = useNavigate()
   const { login, isAuthenticated } = useAuth()
+  const [logoSrc] = useState(() => logoAssetFor(readCachedVisualStyle()))
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,10 +45,10 @@ export function Login() {
     display: 'block',
     width: '100%',
     padding: '10px 13px',
-    background: '#252420',
-    border: '1px solid rgba(255,240,200,0.09)',
+    background: 'var(--bg-raised)',
+    border: '1px solid var(--border-strong)',
     borderRadius: 8,
-    color: '#F0EDE5',
+    color: 'var(--text-primary)',
     fontSize: 13.5,
     outline: 'none',
     transition: 'border-color .2s',
@@ -62,15 +64,15 @@ export function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#131210',
+        background: 'var(--bg-base)',
         animation: 'fadeUp .35s ease both',
       }}
     >
       <div
         style={{
           width: 352,
-          background: '#1C1B17',
-          border: '1px solid rgba(255,240,200,0.11)',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-strong)',
           borderRadius: 14,
           padding: '42px 32px',
           textAlign: 'center',
@@ -87,7 +89,8 @@ export function Login() {
           }}
         >
           <img
-            src="/logo-neon-planet.png"
+            src={logoSrc}
+            className="brand-logo"
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             alt=""
           />
@@ -99,7 +102,7 @@ export function Login() {
             fontWeight: 700,
             letterSpacing: '-0.015em',
             marginBottom: 5,
-            color: '#F0EDE5',
+            color: 'var(--text-primary)',
           }}
         >
           Second Brain
@@ -108,7 +111,7 @@ export function Login() {
           style={{
             fontFamily: 'JetBrains Mono, monospace',
             fontSize: 10.5,
-            color: '#6B6761',
+            color: 'var(--text-tertiary)',
             letterSpacing: '.07em',
             textTransform: 'uppercase',
             marginBottom: 30,
@@ -156,9 +159,11 @@ export function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={inputStyle}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#22D3EE')}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = 'var(--accent)')
+                }
                 onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = 'rgba(255,240,200,0.09)')
+                  (e.currentTarget.style.borderColor = 'var(--border-strong)')
                 }
               />
               <label
@@ -180,9 +185,11 @@ export function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={{ ...inputStyle, marginBottom: 16 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#22D3EE')}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = 'var(--accent)')
+                }
                 onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = 'rgba(255,240,200,0.09)')
+                  (e.currentTarget.style.borderColor = 'var(--border-strong)')
                 }
               />
             </>
@@ -193,7 +200,7 @@ export function Login() {
               <p
                 style={{
                   fontSize: 12.5,
-                  color: '#A8A49A',
+                  color: 'var(--text-secondary)',
                   marginBottom: 12,
                   textAlign: 'left',
                 }}
@@ -227,9 +234,11 @@ export function Login() {
                   fontFamily: 'JetBrains Mono, monospace',
                   marginBottom: 16,
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#22D3EE')}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = 'var(--accent)')
+                }
                 onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = 'rgba(255,240,200,0.09)')
+                  (e.currentTarget.style.borderColor = 'var(--border-strong)')
                 }
               />
             </>
@@ -244,9 +253,9 @@ export function Login() {
               background: success
                 ? '#43C58A'
                 : loading
-                  ? 'rgba(240,237,229,0.5)'
-                  : '#F0EDE5',
-              color: success ? '#fff' : '#131210',
+                  ? 'color-mix(in srgb, var(--text-primary) 50%, transparent)'
+                  : 'var(--text-primary)',
+              color: success ? '#fff' : 'var(--bg-base)',
               border: 'none',
               borderRadius: 8,
               fontSize: 13.5,
@@ -271,7 +280,7 @@ export function Login() {
                   width: 14,
                   height: 14,
                   border: '2px solid rgba(0,0,0,.2)',
-                  borderTopColor: '#131210',
+                  borderTopColor: 'var(--bg-base)',
                   borderRadius: '50%',
                   animation: 'spin .5s linear infinite',
                 }}
@@ -299,7 +308,7 @@ export function Login() {
           <p
             style={{
               fontSize: 11,
-              color: '#6B6761',
+              color: 'var(--text-tertiary)',
               marginTop: 14,
             }}
           >

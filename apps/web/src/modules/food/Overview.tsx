@@ -182,7 +182,7 @@ export function Overview({
                         cy="10"
                         r="9"
                         fill="none"
-                        stroke="rgba(255,240,200,0.06)"
+                        stroke="var(--border-grid)"
                         strokeWidth="2"
                       />
                     )}

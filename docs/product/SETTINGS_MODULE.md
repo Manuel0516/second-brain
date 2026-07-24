@@ -43,7 +43,15 @@ Straightforward UI over what's already specced in `AUTH_AND_SECURITY.md`:
 - **Home currency & default timezone** — the settings already required by Finance (§7/§8)
   and Calendar (timezone handling) live here as the single place they're configured, rather
   than being buried in each module.
-- **Theme** — light/dark toggle, per `docs/design/STYLE_GUIDE.md` (dark default, as decided).
+- **Appearance** — two independent controls in the General Settings Appearance card, per
+  `docs/design/STYLE_GUIDE.md`:
+  - **Style** — `neon` (default) or `monochrome`. Restyles app chrome only; calendar/note/
+    data colors are untouched.
+  - **Color mode** — `system` / `light` / `dark` (system default, as decided).
+  Both apply immediately and persist through `PATCH /api/settings`. The frontend caches
+  the visual style in `localStorage` (`sb_visual_style`) purely so the pre-authentication
+  login screen and first paint don't flash the wrong branding — the backend value is
+  always authoritative and overwrites that cache on every settings load.
 - **Google Calendar connection** — status, reconnect, disconnect.
 - **AI provider configuration** — `AISettings` from `AI_ASSISTANT_MODULE.md` §2 lives here:
   pick provider, enter API key or local endpoint, set autonomy level.

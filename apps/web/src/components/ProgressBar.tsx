@@ -36,7 +36,7 @@ export function ProgressBar({
       <div
         style={{
           height: `${height}px`,
-          background: 'rgba(255,240,200,0.07)',
+          background: 'var(--border)',
           borderRadius: '99px',
           overflow: 'hidden',
         }}

@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                 | Title                                                                                           | Date       | Status                     |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------- | -------------------------- |
+| [0160](0160-day-long-auth-session-continuity.md)                  | Day-long auth session continuity                                                                | 2026-07-24 | accepted                   |
+| [0159](0159-neon-monochrome-visual-style.md)                      | Selectable Neon and Monochrome visual styles, independent of color mode                         | 2026-07-24 | accepted                   |
 | [0158](0158-fitness-set-feeling-persistence.md)                   | Fix: fitness history dropped the saved feeling for each set                                     | 2026-07-22 | accepted                   |
 | [0157](0157-iphone-photo-upload-nginx-limit.md)                   | Fix: iPhone photo uploads rejected by nginx body-size limit                                     | 2026-07-22 | accepted                   |
 | [0156](0156-retire-completed-work-plans.md)                       | Retire completed work plans into permanent history                                             | 2026-07-22 | accepted                   |

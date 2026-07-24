@@ -394,10 +394,10 @@ export function Food() {
                     className="food-week-bar"
                     style={{
                       background: isToday
-                        ? 'rgba(34,211,238,0.12)'
-                        : 'rgba(255,240,200,0.06)',
+                        ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
+                        : 'var(--border-grid)',
                       border: isToday
-                        ? '1px solid rgba(34,211,238,0.3)'
+                        ? '1px solid color-mix(in srgb, var(--accent) 30%, transparent)'
                         : 'none',
                     }}
                   >
@@ -444,7 +444,7 @@ export function Food() {
                         cy="45"
                         r={ringRadius}
                         fill="none"
-                        stroke="rgba(255,240,200,0.07)"
+                        stroke="var(--border)"
                         strokeWidth="5"
                       />
                       <circle

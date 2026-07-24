@@ -114,7 +114,7 @@ export function BodyMetricLog() {
                 padding: '7px',
                 marginTop: '6px',
                 background: 'transparent',
-                border: '1px dashed rgba(255,240,200,0.09)',
+                border: '1px dashed var(--border-strong)',
                 borderRadius: '7px',
                 color: 'var(--text-tertiary)',
                 fontSize: '12px',

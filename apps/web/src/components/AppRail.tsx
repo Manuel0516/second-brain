@@ -1,3 +1,6 @@
+import { useSettings } from '../context/SettingsContext'
+import { logoAssetFor } from '../lib/appearance'
+
 export type ActiveRail = 'calendar' | 'notes' | 'fitness' | 'food' | 'settings'
 
 const IconCalendar = () => (
@@ -160,6 +163,8 @@ interface Props {
 
 export function AppRail({ active, onNavigate }: Props) {
   const nav = (route: string) => onNavigate?.(route)
+  const { settings } = useSettings()
+  const logoSrc = logoAssetFor(settings.visual_style)
 
   return (
     <div
@@ -188,7 +193,8 @@ export function AppRail({ active, onNavigate }: Props) {
         }}
       >
         <img
-          src="/logo-neon-planet.png"
+          src={logoSrc}
+          className="brand-logo"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           alt="Second Brain"
         />

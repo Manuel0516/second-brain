@@ -215,6 +215,9 @@ class UserSettings(Base):
     week_start: Mapped[str] = mapped_column(String(8), default="monday", nullable=False)
     default_view: Mapped[str] = mapped_column(String(8), default="week", nullable=False)
     time_format: Mapped[str] = mapped_column(String(3), default="24h", nullable=False)
+    visual_style: Mapped[str] = mapped_column(
+        String(16), default="neon", nullable=False, server_default="neon"
+    )
     # Calendar
     favorite_emojis: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     favorite_colors: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
