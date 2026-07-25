@@ -160,8 +160,9 @@ Dark-mode-default Zero-Five system (Neon Planet mark, simplified line icons, lig
 daytime use), responsive down to mobile, motion system for interactions.
 
 **Phase 3 — Finances** ← *up next*
-Transaction tracking, income sources/jobs as entities, document attachment, category/tax
-tagging, export view for tax season.
+The implementation blueprint is `docs/work/plans/second-brain-finance-module/`: a dedicated
+`/finance` module with transaction capture as a projection over immutable imports/events,
+evidence, investment subledgers, reconciliation, Sweden/Spain tax profiles and exports.
 
 **Phase 4 — Fitness & Food** ✅ *spec'd — see `FITNESS_MODULE.md` and `FOOD_MODULE.md`*
 Logs linked to calendar, progress-bar goals, statistics (PRs, volume, progression charts),

@@ -2,10 +2,10 @@
   "mcpServers": {
     "context-mode": {
       "command": "node",
-      "args": ["./start.mjs"],
-      "cwd": "/Users/manuel/.claude/plugins/marketplaces/context-mode",
+      "args": ["/Users/manuel/.claude/plugins/marketplaces/context-mode/start.mjs"],
       "env": {
-        "CONTEXT_MODE_PLATFORM": "codex"
+        "CONTEXT_MODE_PLATFORM": "codex",
+        "CONTEXT_MODE_PROJECT_DIR": "/Users/manuel/Desktop/second-brain"
       },
       "default_tools_approval_mode": "approve"
     }

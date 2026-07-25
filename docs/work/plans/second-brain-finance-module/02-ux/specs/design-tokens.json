@@ -1,0 +1,40 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "sourceOfTruth": "apps/web/src/styles.css",
+  "tokens": {
+    "surface": {
+      "app": "var(--bg-base)",
+      "card": "var(--bg-elevated)",
+      "selected": "var(--bg-raised)"
+    },
+    "border": {
+      "default": "var(--border)",
+      "strong": "var(--border-strong)",
+      "grid": "var(--border-grid)"
+    },
+    "text": {
+      "primary": "var(--text-primary)",
+      "secondary": "var(--text-secondary)",
+      "muted": "var(--text-tertiary)"
+    },
+    "accent": "var(--accent)",
+    "radius": {
+      "small": "var(--r-sm)",
+      "control": "var(--r-md)",
+      "card": "var(--r-lg)",
+      "largeCard": "var(--r-xl)",
+      "pill": "999px"
+    },
+    "font": {
+      "ui": "var(--font-ui)",
+      "mono": "var(--font-mono)"
+    }
+  },
+  "semanticStatus": {
+    "confirmed": "define centrally before implementation",
+    "review": "define centrally before implementation",
+    "blocking": "use existing danger pattern unless a token is approved",
+    "suggested": "use accent tint/label, never color alone",
+    "informational": "use existing tertiary text"
+  }
+}

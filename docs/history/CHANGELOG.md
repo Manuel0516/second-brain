@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0204](0204-codex-mcp-startup-fix.md)                                    | Fix Codex MCP startup paths                                                                               | 2026-07-25 | accepted                   |
 | [0203](0203-notes-topbar-scroll-chaining-fix.md)                        | Contain notes canvas scroll to stop topbar bounce                                                      | 2026-07-25 | pending confirmation       |
 | [0202](0202-prevent-mobile-input-zoom.md)                               | Prevent mobile auto-zoom on form focus                                                                 | 2026-07-25 | accepted                   |
 | [0201](0201-live-session-done-set-opaque-background.md)                 | Fix transparent background and scroll flicker on live-session set rows                                 | 2026-07-25 | accepted                   |

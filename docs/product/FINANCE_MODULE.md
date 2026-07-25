@@ -1,5 +1,13 @@
 # Finance Module — Deep Dive
 
+> Implementation note: the original lightweight transaction/income-source design below is the
+> Phase 3 product baseline. The expanded implementation blueprint in
+> `docs/work/plans/second-brain-finance-module/` supersedes its storage model for imports,
+> investment events, evidence, revisions, postings, reconciliation, Sweden/Spain tax profiles
+> and report snapshots. Manual income/expense entry and the summary/ledger views described here
+> remain supported as projections of that canonical finance event model; do not build a parallel
+> `Transaction` table that bypasses lineage.
+
 ## 1. Core Entities
 
 ```
@@ -49,9 +57,10 @@ module (§2 of `CALENDAR_MODULE.md`) rather than inventing a second system:
 
 - A **master transaction template** stores the `rrule` (e.g. monthly rent, monthly salary,
   annual software subscription).
-- On the date it's due, the backend job (same scheduler that handles other recurring
-  background work) **materializes an actual `Transaction` row** — so your ledger always
-  reflects reality, not just a projection.
+- On the date it's due, a finance maintenance operation may **materialize an actual canonical
+  event revision** — so the ledger reflects reality, not just a projection. The first slice may
+  expose due items synchronously; recurring background materialization must be idempotent and is
+  added only when the repository has a measured need for a worker/scheduler.
 - Materializing a due bill **also creates a `CalendarEvent`** on the "Finance Deadlines"
   calendar (`created_by: system:finance`, per §7 of the Calendar doc) — this is exactly the
   "Invoice due — Studio X" event you already saw in the mockup, generated automatically
@@ -89,10 +98,12 @@ GET /finance/tax-report?year=2026
 This is the single feature that turns "I have receipts scattered across emails and photos"
 into "here's the folder for my accountant."
 
-## 5. Views (using the Notes module's Database system, not a separate UI)
+## 5. Views (Finance module UI with reusable Database patterns)
 
-The Finance "page" is a `Database` (per `NOTES_MODULE.md` §2) with properties mapped onto the
-`Transaction` fields above. You get, for free, without extra engineering:
+The expanded Finance page is a dedicated module UI. It may reuse the Notes Database table/board
+interaction patterns for a simple ledger projection, but canonical events, review groups,
+evidence, reconciliation and reports require Finance-specific screens. The following views remain
+useful without making the Notes Database the source of truth:
 - **Table view** — the full ledger, filterable/sortable.
 - **Board view** — grouped by `status` (handy for tracking outstanding invoices: Draft → Sent
   → Paid).
