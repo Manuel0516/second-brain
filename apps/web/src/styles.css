@@ -228,6 +228,19 @@ textarea {
   font: inherit;
 }
 
+/* iOS Safari auto-zooms on focus when a form control's computed font-size is
+   under 16px. `pointer: coarse` targets touch devices specifically, so
+   desktop sizing (many of which are intentionally smaller) is untouched.
+   !important overrides the many per-component font-size rules across
+   modules — the single override point instead of patching each one. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* Low-specificity accessibility fallback. Component focus styles override it
    without producing a second ring. */
 :where(button, input, select, textarea):focus-visible {

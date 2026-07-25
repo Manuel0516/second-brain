@@ -319,7 +319,7 @@ async def _node_details(
         )
         if meal is None:
             return None
-        when = meal.logged_at or meal.date
+        when = meal.date or meal.logged_at
         title = (
             f"{meal.meal_type.capitalize()} · {when.date()}"
             if when

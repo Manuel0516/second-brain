@@ -438,6 +438,7 @@
   flex: 1;
   min-width: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 .notes-page {
   position: relative;

@@ -7,6 +7,10 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0203](0203-notes-topbar-scroll-chaining-fix.md)                        | Contain notes canvas scroll to stop topbar bounce                                                      | 2026-07-25 | pending confirmation       |
+| [0202](0202-prevent-mobile-input-zoom.md)                               | Prevent mobile auto-zoom on form focus                                                                 | 2026-07-25 | accepted                   |
+| [0201](0201-live-session-done-set-opaque-background.md)                 | Fix transparent background and scroll flicker on live-session set rows                                 | 2026-07-25 | accepted                   |
+| [0200](0200-past-logged-meal-calendar-link.md)                          | Past logged meals stay linked to calendar occurrences                                                  | 2026-07-25 | accepted                   |
 | [0199](0199-all-day-event-date-range.md)                                | All-day event date range                                                                                | 2026-07-24 | accepted                   |
 | [0198](0198-calendar-today-all-day-spacing.md)                          | Calendar today all-day spacing                                                                         | 2026-07-24 | accepted                   |
 | [0197](0197-production-favicon-fallback.md)                             | Add a reliable production favicon fallback                                                             | 2026-07-24 | pending approval           |

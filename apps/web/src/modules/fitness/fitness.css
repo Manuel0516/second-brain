@@ -754,6 +754,7 @@
 .fit-live-row-shell {
   position: relative;
   overflow: hidden;
+  contain: paint;
   border-radius: var(--r-lg);
   background: var(--bg-raised);
 }
@@ -857,7 +858,7 @@
 
 .fit-live-row.done {
   border-color: var(--fit-accent-border);
-  background: var(--fit-accent-tint);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-raised));
 }
 
 .fit-live-num {

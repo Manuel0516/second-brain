@@ -571,3 +571,20 @@ async def test_event_links_scoped_to_occurrence_date(
     meals = [x for x in scoped.json() if x["target_type"] == "meal_log"]
     assert len(meals) == 1
     assert day in meals[0]["title"]
+
+    # Logging later records the action time in `logged_at`, but the meal must
+    # remain attached to the calendar occurrence represented by `date`.
+    logged = await authenticated_client.patch(
+        f"/api/food/logs/{meals[0]['target_id']}",
+        json={"status": "logged"},
+    )
+    assert logged.status_code == 200
+    assert logged.json()["logged_at"] is not None
+
+    scoped_after_logging = await authenticated_client.get(
+        f"/api/events/{event_id}/links", params={"on": day}
+    )
+    logged_meals = [x for x in scoped_after_logging.json() if x["target_type"] == "meal_log"]
+    assert len(logged_meals) == 1
+    assert logged_meals[0]["target_id"] == meals[0]["target_id"]
+    assert day in logged_meals[0]["title"]
