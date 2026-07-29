@@ -13,7 +13,7 @@ import {
   startOfDay,
   startOfWeekMonday,
 } from '../modules/calendar/time'
-import { useSettings } from '../context/SettingsContext'
+import { useSettings } from '../context/settings'
 import type { CalendarData, CalendarEvent } from '../modules/calendar/types'
 import { occurrenceKey } from '../modules/calendar/types'
 import { orderCalendars } from '../modules/calendar/order'

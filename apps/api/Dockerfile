@@ -11,6 +11,19 @@ WORKDIR /app
 
 RUN useradd --create-home --uid 10001 app
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        clamav \
+        clamav-freshclam \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-spa \
+        tesseract-ocr-swe \
+    && rm -rf /var/lib/apt/lists/* \
+    && freshclam --quiet \
+    && chown -R app:app /var/lib/clamav /var/log/clamav
+
 COPY --from=uv /uv /uvx /bin/
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 RUN uv sync --locked --no-dev

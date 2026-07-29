@@ -14,7 +14,9 @@ _ENV_FILE = next(
 
 
 class Settings(BaseSettings):
-    environment: Literal["dev", "prod"] = "dev"
+    environment: Literal["dev", "prod"] = Field(
+        default="dev", validation_alias=AliasChoices("environment", "app_environment")
+    )
     database_url: str = "postgresql+psycopg://secondbrain:secondbrain@localhost:5432/secondbrain"
 
     # JWT and Auth
@@ -39,6 +41,14 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
     google_token_encryption_key: str = ""
+    # Finance-only Fernet key for external account references and future
+    # read-only connector credential references.
+    finance_encryption_key: str = ""
+    # Finance uploads fail closed through ClamAV in production. OCR and official-guidance
+    # downloads use short, bounded subprocess/network budgets.
+    finance_scan_timeout_seconds: int = Field(default=30, ge=1, le=60)
+    finance_ocr_timeout_seconds: int = Field(default=30, ge=1, le=60)
+    finance_guidance_fetch_timeout_seconds: int = Field(default=10, ge=1, le=30)
     # Where the OAuth callback redirects the browser back to (frontend origin).
     frontend_url: str = "http://localhost:5173"
     # Background sync cadence for Google/ICS calendars.
@@ -49,11 +59,11 @@ class Settings(BaseSettings):
     # values drives both the server and the client.
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = Field(
-        "secondbrain",
+        default="secondbrain",
         validation_alias=AliasChoices("minio_access_key", "minio_root_user"),
     )
     minio_secret_key: str = Field(
-        "secondbrain",
+        default="secondbrain",
         validation_alias=AliasChoices("minio_secret_key", "minio_root_password"),
     )
     minio_bucket: str = "secondbrain"

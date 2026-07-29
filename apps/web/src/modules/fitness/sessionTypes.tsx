@@ -1,17 +1,3 @@
-// Canonical workout session types, shared by the calendar EventEditor and
-// the fitness module (SessionWizard/LogPastModal import their own copies
-// today — Phase 8 of the fitness plan unifies them onto this constant).
-export const SESSION_TYPES = [
-  'Push',
-  'Pull',
-  'Legs',
-  'Upper',
-  'Cardio',
-  'Custom',
-] as const
-
-export type SessionType = (typeof SESSION_TYPES)[number]
-
 /** Line icon for a workout session type. Shared by the calendar event editor
  * and the fitness module so the two surfaces stay visually in sync. Renders
  * a real SVG — never rely on Nerd Font glyphs (they show up as CJK tofu on

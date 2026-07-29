@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createBodyMetric } from './api'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { fromDisplayWeight } from './units'
 
 interface BodyMetricFormProps {

@@ -7,6 +7,10 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0208](0208-finance-risk-hardening.md)                                  | Close Finance scanner, source-snapshot, schema-drift, and web-warning risks                            | 2026-07-29 | accepted                   |
+| [0207](0207-finance-frontend-live-wiring.md)                            | Finance frontend: live import, assistant, and reports wiring                                           | 2026-07-29 | accepted                   |
+| [0206](0206-finance-backend-domain.md)                                  | Finance backend, ledger, tax, reports, and AI foundations                                              | 2026-07-29 | accepted                   |
+| [0205](0205-finance-module-ux.md)                                       | Finance module UX (Overview, Activity, Review, Reports)                                                | 2026-07-26 | accepted                   |
 | [0204](0204-codex-mcp-startup-fix.md)                                    | Fix Codex MCP startup paths                                                                               | 2026-07-25 | accepted                   |
 | [0203](0203-notes-topbar-scroll-chaining-fix.md)                        | Contain notes canvas scroll to stop topbar bounce                                                      | 2026-07-25 | pending confirmation       |
 | [0202](0202-prevent-mobile-input-zoom.md)                               | Prevent mobile auto-zoom on form focus                                                                 | 2026-07-25 | accepted                   |

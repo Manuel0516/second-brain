@@ -1,31 +1,6 @@
-import {
-  ReactNode,
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { apiCall, refreshAccessToken } from '../lib/api'
-
-interface User {
-  id: string
-  username: string
-  email: string
-  role?: string
-  is_test_account?: boolean
-}
-
-interface AuthContextType {
-  isAuthenticated: boolean
-  user: User | null
-  totpEnabled: boolean
-  loading: boolean
-  login: (email: string, password: string, totp?: string) => Promise<string>
-  logout: () => Promise<void>
-  refreshToken: () => Promise<boolean>
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+import { AuthContext, type User } from './auth'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -133,12 +108,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
 }

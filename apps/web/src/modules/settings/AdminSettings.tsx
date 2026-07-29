@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiCall } from '../../lib/api'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../context/auth'
 import { SettingsCard } from '../../components/SettingsCard'
 
 interface AdminUser {

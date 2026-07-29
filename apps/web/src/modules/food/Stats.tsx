@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { BodyMetricForm } from '../fitness/BodyMetricForm'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { toDisplayWeight } from '../fitness/units'
 import { fetchBodyWeightStats, type BodyWeightStats } from '../fitness/api'
 import { fetchSummary, type FoodSummary } from './api'

@@ -3,7 +3,8 @@ import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import { expect, test, vi } from 'vitest'
-import { BlockEditor, deleteBlock, duplicateBlock } from './BlockEditor'
+import { BlockEditor } from './BlockEditor'
+import { deleteBlock, duplicateBlock } from './blockCommands'
 import { BlockColor, setSelectedBlockColor } from './ColorExtensions'
 import {
   collapsedHeadingRange,
@@ -15,7 +16,7 @@ import { EditableInlineMath, insertEditableInlineMath } from './MathExtensions'
 import { EditableTaskItem } from './TaskItemExtension'
 import { LinkPopover } from './LinkPopover'
 
-vi.mock('../../../context/SettingsContext', () => ({
+vi.mock('../../../context/settings', () => ({
   useSettings: () => ({
     settings: {
       favorite_text_colors: [],

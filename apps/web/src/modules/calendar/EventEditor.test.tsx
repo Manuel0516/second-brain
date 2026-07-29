@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { EventEditor } from './EventEditor'
 
-vi.mock('../../context/SettingsContext', () => ({
+vi.mock('../../context/settings', () => ({
   useSettings: () => ({
     settings: {
       favorite_emojis: ['📅', '💼', '☕', '🏃', '🍽️', '📝', '🎧', '🎯'],

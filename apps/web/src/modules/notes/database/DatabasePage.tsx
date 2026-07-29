@@ -83,7 +83,7 @@ export function DatabasePage({
 
   const view =
     views.find((item) => item.id === activeViewId) ?? views[0] ?? DEFAULT_VIEW
-  const config: ViewConfig = view.config ?? {}
+  const config = useMemo<ViewConfig>(() => view.config ?? {}, [view.config])
 
   const visibleRecords = useMemo(
     () => applySort(applyFilters(records, config), config, properties),

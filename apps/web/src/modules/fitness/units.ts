@@ -1,4 +1,4 @@
-import type { UserSettings } from '../../context/SettingsContext'
+import type { UserSettings } from '../../context/settings'
 
 const KG_PER_LB = 0.45359237
 

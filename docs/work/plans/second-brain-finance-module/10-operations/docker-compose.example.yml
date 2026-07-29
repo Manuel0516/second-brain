@@ -1,8 +1,0 @@
-# Finance does not have a standalone Compose stack.
-#
-# Use the repository root `compose.yaml`, which already provides the web/API, PostgreSQL,
-# MinIO, Traefik and private-network topology. Finance adds no services in the first slice.
-#
-# If a later measured workload requires asynchronous parsing/reporting, add an approved overlay
-# to the root Compose configuration and update DEPLOYMENT_OPERATIONS.md with its retry,
-# idempotency, health and backup behavior.

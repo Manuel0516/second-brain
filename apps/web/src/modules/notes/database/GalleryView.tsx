@@ -1,4 +1,4 @@
-import { coverClass } from '../CoverPicker'
+import { coverClass } from '../covers'
 import type { Page } from '../types'
 
 interface GalleryViewProps {

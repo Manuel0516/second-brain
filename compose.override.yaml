@@ -1,0 +1,16 @@
+services:
+  db:
+    ports:
+      - "5432:5432"
+    # ponytail: Colima cannot publish a port from an internal-only network.
+    networks:
+      - internal
+      - egress
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    # ponytail: host-launched API and browser need Colima port forwarding.
+    networks:
+      - internal
+      - egress

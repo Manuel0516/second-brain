@@ -298,6 +298,55 @@ select(Link).where(
 
 ---
 
+### Finance ledger and source tables
+
+Finance uses one canonical, owner-scoped ledger. PostgreSQL `NUMERIC` columns hold quantities,
+rates and money; API values are decimal strings and Python calculations use `Decimal`.
+
+| Tables | Purpose |
+|--------|---------|
+| `finance_accounts`, `finance_assets` | Owned account and asset inventories. Sensitive external account references are Fernet-encrypted. |
+| `finance_source_connections` | Read-only provider/source metadata and encrypted credential references. |
+| `finance_evidence_documents` | Immutable MinIO-backed source/evidence metadata, content SHA-256 and extraction state. |
+| `finance_imports`, `finance_raw_records` | Parser/mapping snapshots, rejected rows and file/row/provider/semantic deduplication lineage. |
+| `finance_events`, `finance_event_revisions` | Stable canonical event identity plus append-only proposed/confirmed/superseded revisions. |
+| `finance_revision_raw_records`, `finance_revision_valuations` | Many-to-many immutable source and valuation lineage for every event revision. |
+| `finance_event_components`, `finance_postings` | Factual event legs and balanced double-entry postings. Confirmed current revisions must balance by asset and fiat currency. |
+| `finance_valuations` | Immutable rate/value observations with provider, policy, tax year and jurisdiction provenance. |
+
+### Finance review, reconciliation and audit tables
+
+| Tables | Purpose |
+|--------|---------|
+| `finance_review_groups`, `finance_review_group_members` | Daily/materiality grouping with retained split/supersession history. |
+| `finance_review_policies` | Versioned reusable confirmation policies. |
+| `finance_transfer_matches` | Scored outgoing/incoming transfer candidates and decisions. |
+| `finance_reconciliations` | Frozen opening + current-confirmed movements = closing runs and blockers. |
+| `finance_audit_heads`, `finance_audit_entries` | Per-owner serialized, hash-chained mutation audit log. |
+| `finance_idempotency_keys` | Owner/workflow-scoped mutation replay responses and request hashes. |
+
+### Finance investment, tax, report and AI tables
+
+| Tables | Purpose |
+|--------|---------|
+| `finance_lots`, `finance_lot_disposals` | Average-cost acquisition pools and immutable disposal allocations for funds, ETFs, gold and crypto. |
+| `finance_positions`, `finance_position_revisions` | Stable derivative positions and append-only futures/funding/fee/liquidation revisions. |
+| `finance_bot_equity_snapshots` | Frozen bot-equity movement reconciliations and source hashes. |
+| `finance_tax_profiles`, `finance_residency_facts` | Sweden/Spain year workspaces and factual, evidence-linked residency observations. |
+| `finance_tax_treatments`, `finance_tax_treatment_revisions` | Stable treatment identity plus versioned candidate/confirmed jurisdiction-specific treatment. |
+| `finance_open_questions` | Material missing facts, evidence and adviser questions that block or warn reports. |
+| `finance_report_runs`, `finance_report_inputs`, `finance_report_items` | Immutable report snapshots, per-input hashes, schedules, manifests and exported file lineage. |
+| `finance_guidance_sources`, `finance_tool_audits`, `finance_assistant_proposals` | Official-source research snapshots, immutable typed-tool audits and confirmation-gated proposals. Guidance rows retain a non-empty successful HTTP response's exact bytes, final retrieved URL, media type, status and byte count; `content_hash` is the SHA-256 of those bytes. |
+
+The generic `links` table connects Finance evidence, events and reports to Notes/pages without
+adding cross-module foreign keys. Finance evidence and frozen report files cannot be removed
+through the shared file deletion endpoint. Migrations 034–038 enforce append-only history,
+owner-consistent lineage, current-revision identity, posting balance, tax/report file state and
+investment/reconciliation constraints at the PostgreSQL boundary. Migration 038 requires the
+pre-deployment guidance table to be empty rather than inventing snapshots for historical rows.
+
+---
+
 ### `exercises`
 Exercise definitions. One row per exercise the user has defined. Created by the user through the fitness UI or imported from a wearable.
 
@@ -451,5 +500,15 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 026 | Per-recipient visibility and color overrides for shared calendars |
 | 027 | Ordered multi-photo meal attachments; replaces `meal_logs.photo_file_id` |
 | 028 | `visual_style` (neon/monochrome) on user_settings |
+| 029 | Finance accounts/assets, sources, evidence, imports/raw rows, audit and idempotency |
+| 030 | Canonical Finance revisions/components/postings, valuations, review, transfers and reconciliation |
+| 031 | Finance lots/disposals, derivative position revisions and bot-equity snapshots |
+| 032 | Sweden/Spain tax workspaces, residency, treatments, open questions and frozen reports |
+| 033 | Finance official guidance sources, typed tool audits and assistant proposals |
+| 034 | PostgreSQL append-only guards for Finance source, ledger, tax, report and AI history |
+| 035 | Revision/valuation lineage, retained review splits, owner/current-revision and posting-balance constraints |
+| 036 | Transfer, reconciliation and investment subledger checks and owner-lineage constraints |
+| 037 | Tax treatment, frozen report input/item and assistant audit lineage constraints |
+| 038 | Immutable official-guidance HTTP response snapshots and byte/status integrity constraints |
 
 Always check `alembic current` before writing a new migration.

@@ -3,11 +3,12 @@ import { Segmented } from '../../components/Segmented'
 import {
   EXERCISE_LIBRARY,
   PREV_PERFORMANCE,
-  CategoryBadge,
   type ActiveSession,
-} from './exerciseLibrary'
-import { newSet } from './LiveSession'
-import { SESSION_TYPES, SessionTypeIcon } from './sessionTypes'
+  newSet,
+} from './exerciseData'
+import { CategoryBadge } from './exerciseLibrary'
+import { SESSION_TYPES } from './sessionTypeData'
+import { SessionTypeIcon } from './sessionTypes'
 import {
   fetchExercises,
   updateSession,

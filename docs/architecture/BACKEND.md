@@ -39,8 +39,17 @@ apps/api/
       notes.py         — CRUD for /pages, plus /links and /search
       files.py         — image upload/serve/delete (MinIO) + GET /embed
                          (SSRF-guarded page-metadata fetch for bookmark cards)
+      finance.py       — Finance summary, activity, accounts, assets, event lineage
+      finance_ingestion.py — source connections, immutable evidence, import preview/commit
+      finance_review.py — review groups, confirmation, split/defer, reconciliation
+      finance_tax_reports.py — tax workspaces, treatments, frozen reports/downloads
+      finance_assistant.py — typed read/research/proposal tools and confirmation gates
       settings.py      — GET + PATCH /settings
       admin.py         — internal admin endpoints
+
+    services/
+      finance_*.py     — deterministic Decimal-safe import, ledger, investment,
+                         reconciliation, tax, reporting and AI domain logic
 ```
 
 ---
@@ -103,6 +112,7 @@ commits/rolls back automatically. Never manually manage transactions in route fu
 `config.py` uses Pydantic Settings to read environment variables. In production, it asserts:
 - `JWT_SECRET_KEY` is non-default and ≥ 32 characters.
 - `INITIAL_USER_PASSWORD` is not `"changeme"`.
+- `FINANCE_ENCRYPTION_KEY` is present for encrypted external account/credential references.
 - The database URL is not pointing at localhost defaults.
 
 If any of these fail, the app refuses to start. This prevents accidentally running prod with
@@ -113,6 +123,21 @@ client strips the scheme and derives TLS from it), plus credentials read from
 `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` **or** the `MINIO_ROOT_USER`/
 `MINIO_ROOT_PASSWORD` names Compose already requires — one pair in `.env`
 drives both the server and the client (see history 0032).
+
+**Finance:** all Finance endpoints depend on the authenticated user and scope every referenced
+account, asset, import, event, report and proposal to that owner. Monetary and quantity JSON
+values are decimal strings; PostgreSQL stores them as `NUMERIC`, and domain services use Python
+`Decimal`. Source files, raw records, revision lineage, postings, frozen report inputs and audit
+entries are append-only. Mutation routes require an `Idempotency-Key`, append a hash-chained audit
+entry and never expose encrypted connector references.
+
+Finance evidence is validated and scanned before MinIO storage. The production API image contains
+ClamAV plus Tesseract/Poppler with English, Spanish and Swedish OCR data; production startup
+refreshes signatures, verifies the tools and languages, and runs clean-file and EICAR scanner
+self-tests before serving requests. PDF/image extraction is bounded by time, page, pixel, raster
+and text-output limits, and its parser/tool provenance is stored with immutable evidence metadata.
+Official tax research accepts only allowlisted HTTPS government sources, revalidates DNS and every
+redirect, and stores the exact successful response bytes whose SHA-256 is returned in citations.
 
 ---
 

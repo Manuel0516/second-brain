@@ -61,6 +61,12 @@ INITIAL_USER_USERNAME=manuel
 INITIAL_USER_EMAIL=<your-email>
 INITIAL_USER_PASSWORD=<unique-initial-password>
 TOTP_ENCRYPTION_KEY=<fernet-key>
+FINANCE_ENCRYPTION_KEY=<separate-fernet-key>
+# Optional bounded Finance processing timeouts (defaults shown).
+FINANCE_SCAN_TIMEOUT_SECONDS=30
+FINANCE_OCR_TIMEOUT_SECONDS=30
+FINANCE_GUIDANCE_FETCH_TIMEOUT_SECONDS=10
+FINANCE_CLAMAV_UPDATE_TIMEOUT_SECONDS=60
 ```
 
 Generate the random values locally or on the VPS:
@@ -74,6 +80,12 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 values, so the localhost value in `.env.example` is not used by the production
 API container. Keep `.env` out of Git and include it in the VPS secret-backup
 procedure.
+
+The API image includes ClamAV, Poppler and Tesseract language data for English,
+Spanish and Swedish. Its build seeds the official ClamAV signature database;
+each production startup refreshes that database and refuses to start if the
+refresh, scanner self-test or OCR dependency check fails. The API therefore
+needs outbound HTTPS during image build and startup.
 
 ## 3. Validate and deploy
 

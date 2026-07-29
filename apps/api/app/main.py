@@ -20,6 +20,11 @@ from app.routes import (
     calendar,
     databases,
     files,
+    finance,
+    finance_assistant,
+    finance_ingestion,
+    finance_review,
+    finance_tax_reports,
     fitness,
     food,
     integrations,
@@ -28,6 +33,7 @@ from app.routes import (
 )
 from app.security import hash_password
 from app.services import google_sync, ics_sync
+from app.services.finance_evidence import finance_runtime_dependency_issues
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +62,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         if settings.initial_user_password == "changeme":
             issues.append("initial_user_password is still the default ('changeme')")
+
+        if not settings.finance_encryption_key:
+            issues.append("finance_encryption_key is required in production")
+        else:
+            from cryptography.fernet import Fernet
+
+            try:
+                Fernet(settings.finance_encryption_key.encode())
+            except ValueError:
+                issues.append("finance_encryption_key must be a valid Fernet key")
+
+        issues.extend(finance_runtime_dependency_issues())
 
         db = settings.database_url
         if "localhost" in db or "127.0.0.1" in db:
@@ -87,6 +105,11 @@ app.include_router(settings.router)
 app.include_router(files.router)
 app.include_router(fitness.router)
 app.include_router(food.router)
+app.include_router(finance.router)
+app.include_router(finance_ingestion.router)
+app.include_router(finance_review.router)
+app.include_router(finance_tax_reports.router)
+app.include_router(finance_assistant.router)
 app.include_router(admin.router)
 app.include_router(integrations.router)
 

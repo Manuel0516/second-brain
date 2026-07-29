@@ -26,6 +26,9 @@ from app.models import (
     CalendarEvent,
     DatabaseProperty,
     DatabaseView,
+    FinanceEvent,
+    FinanceEvidenceDocument,
+    FinanceReportRun,
     Link,
     MealLog,
     NoteCollaborationUpdate,
@@ -35,9 +38,19 @@ from app.models import (
     WorkoutSession,
 )
 from app.routes.calendar import owned_event
+from app.services.finance_core import append_audit_entry
 
 router = APIRouter(prefix="/api", tags=["notes"])
-NodeType = Literal["page", "event", "meal_log", "workout_session"]
+NodeType = Literal[
+    "page",
+    "event",
+    "meal_log",
+    "workout_session",
+    "finance_event",
+    "finance_evidence",
+    "finance_report",
+]
+FINANCE_NODE_TYPES = frozenset({"finance_event", "finance_evidence", "finance_report"})
 
 
 class PageCreate(BaseModel):
@@ -326,6 +339,37 @@ async def _node_details(
             else meal.meal_type.capitalize()
         )
         return (title, None, None, None, when.date() if when else None)
+    if node_type == "finance_event":
+        event_id = await session.scalar(
+            select(FinanceEvent.id).where(
+                FinanceEvent.id == node_id, FinanceEvent.user_id == user.id
+            )
+        )
+        return ("Finance event", None, None, None, None) if event_id else None
+    if node_type == "finance_evidence":
+        evidence_name = await session.scalar(
+            select(FinanceEvidenceDocument.original_name).where(
+                FinanceEvidenceDocument.id == node_id,
+                FinanceEvidenceDocument.user_id == user.id,
+            )
+        )
+        return (evidence_name, None, None, None, None) if evidence_name else None
+    if node_type == "finance_report":
+        report = (
+            await session.execute(
+                select(FinanceReportRun.jurisdiction, FinanceReportRun.tax_year).where(
+                    FinanceReportRun.id == node_id, FinanceReportRun.user_id == user.id
+                )
+            )
+        ).one_or_none()
+        if report is not None:
+            return (
+                f"{report.jurisdiction} {report.tax_year} finance report",
+                None,
+                None,
+                None,
+                None,
+            )
     return None
 
 
@@ -817,7 +861,7 @@ async def get_backlinks(
     result: list[BacklinkResponse] = []
     for link in links:
         details = await _node_details(link.source_type, link.source_id, user, session)
-        if details and link.source_type in {"page", "event"}:
+        if details and link.source_type in {"page", "event", *FINANCE_NODE_TYPES}:
             result.append(
                 BacklinkResponse(
                     id=link.id,
@@ -963,7 +1007,13 @@ async def get_event_links(
         if on is not None and node_type in {"workout_session", "meal_log"}:
             if details is None or details[4] != on:
                 continue
-        if details and node_type in {"page", "event", "workout_session", "meal_log"}:
+        if details and node_type in {
+            "page",
+            "event",
+            "workout_session",
+            "meal_log",
+            *FINANCE_NODE_TYPES,
+        }:
             result.append(
                 LinkedNodeResponse(
                     id=link.id,
@@ -997,6 +1047,18 @@ async def create_link(
     link = Link(**data.model_dump())
     session.add(link)
     try:
+        await session.flush()
+        if data.source_type in FINANCE_NODE_TYPES or data.target_type in FINANCE_NODE_TYPES:
+            await append_audit_entry(
+                session,
+                user_id=user.id,
+                actor_id=user.id,
+                action="link.created",
+                entity_type="finance_link",
+                entity_id=link.id,
+                request=data.model_dump(),
+                reason="Finance graph link created",
+            )
         await session.commit()
     except IntegrityError as error:
         await session.rollback()
@@ -1034,6 +1096,23 @@ async def delete_link(
         raise HTTPException(status_code=404, detail="Link not found")
     await _require_node(link.source_type, link.source_id, user, session, include_deleted=True)
     await _require_node(link.target_type, link.target_id, user, session, include_deleted=True)
+    if link.source_type in FINANCE_NODE_TYPES or link.target_type in FINANCE_NODE_TYPES:
+        await append_audit_entry(
+            session,
+            user_id=user.id,
+            actor_id=user.id,
+            action="link.deleted",
+            entity_type="finance_link",
+            entity_id=link.id,
+            request={
+                "source_type": link.source_type,
+                "source_id": link.source_id,
+                "target_type": link.target_type,
+                "target_id": link.target_id,
+                "relation": link.relation,
+            },
+            reason="Finance graph link deleted",
+        )
     await session.delete(link)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

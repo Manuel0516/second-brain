@@ -17,7 +17,7 @@ import { FoodSettings } from './modules/settings/FoodSettings'
 import { NotesSettings } from './modules/settings/NotesSettings'
 import { AdminSettings } from './modules/settings/AdminSettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './context/auth'
 import { SettingsProvider } from './context/SettingsContext'
 
 const Notes = lazy(() =>
@@ -33,6 +33,12 @@ const Fitness = lazy(() =>
 const Food = lazy(() =>
   import('./modules/food/Food').then((module) => ({
     default: module.Food,
+  })),
+)
+
+const Finance = lazy(() =>
+  import('./modules/finance/Finance').then((module) => ({
+    default: module.Finance,
   })),
 )
 
@@ -108,6 +114,16 @@ function AppRoutes() {
               fallback={<main className="route-loading">Loading…</main>}
             >
               <Food />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/finance"
+          element={
+            <Suspense
+              fallback={<main className="route-loading">Loading…</main>}
+            >
+              <Finance />
             </Suspense>
           }
         />

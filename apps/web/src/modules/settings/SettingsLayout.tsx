@@ -3,8 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { IconButton } from '../../components/IconButton'
 import { SidebarShell } from '../../components/SidebarShell'
-import { useAuth } from '../../context/AuthContext'
-import { useSettings } from '../../context/SettingsContext'
+import { useAuth } from '../../context/auth'
+import { useSettings } from '../../context/settings'
 
 function SettingsSkeleton() {
   return (

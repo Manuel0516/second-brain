@@ -1,0 +1,25 @@
+timestamp,external_id,event_type,asset,quantity,price_eur,description
+2026-07-01T00:00:00+02:00,reward-00,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T01:00:00+02:00,reward-01,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T02:00:00+02:00,reward-02,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T03:00:00+02:00,reward-03,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T04:00:00+02:00,reward-04,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T05:00:00+02:00,reward-05,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T06:00:00+02:00,reward-06,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T07:00:00+02:00,reward-07,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T08:00:00+02:00,reward-08,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T09:00:00+02:00,reward-09,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T10:00:00+02:00,reward-10,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T11:00:00+02:00,reward-11,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T12:00:00+02:00,reward-12,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T13:00:00+02:00,reward-13,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T14:00:00+02:00,reward-14,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T15:00:00+02:00,reward-15,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T16:00:00+02:00,reward-16,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T17:00:00+02:00,reward-17,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T18:00:00+02:00,reward-18,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T19:00:00+02:00,reward-19,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T20:00:00+02:00,reward-20,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T21:00:00+02:00,reward-21,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T22:00:00+02:00,reward-22,staking_reward,ETH,0.000125,2400.00,Hourly staking reward
+2026-07-01T23:00:00+02:00,reward-23,staking_reward,ETH,0.000125,2400.00,Hourly staking reward

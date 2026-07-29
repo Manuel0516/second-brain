@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AppRail } from '../../components/AppRail'
 import { SidebarShell } from '../../components/SidebarShell'
@@ -16,14 +16,11 @@ import { WeekStrip, type WeekDay } from './WeekStrip'
 import { BodyMetricLog } from './BodyMetricLog'
 import { BodyMetricForm } from './BodyMetricForm'
 import { BodyWeightCard } from '../../components/BodyWeightCard'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { toDisplayWeight, fromDisplayWeight } from './units'
-import type { ActiveSession } from './exerciseLibrary'
-import {
-  PREV_PERFORMANCE,
-  isCardioName,
-  CategoryBadge,
-} from './exerciseLibrary'
+import type { ActiveSession } from './exerciseData'
+import { PREV_PERFORMANCE, isCardioName } from './exerciseData'
+import { CategoryBadge } from './exerciseLibrary'
 import {
   createExercise,
   createSession,
@@ -157,17 +154,20 @@ export function Fitness() {
     ? (tabParam as FitnessTab)
     : 'overview'
 
-  function setTab(next: FitnessTab) {
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev)
-        if (next === 'overview') params.delete('tab')
-        else params.set('tab', next)
-        return params
-      },
-      { replace: true },
-    )
-  }
+  const setTab = useCallback(
+    (next: FitnessTab) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          if (next === 'overview') params.delete('tab')
+          else params.set('tab', next)
+          return params
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 640,
@@ -688,9 +688,8 @@ export function Fitness() {
     if (!sessionParam || sessionParam === handledEditSessionRef.current) return
     handledEditSessionRef.current = sessionParam
     if (tab !== 'history') setTab('history')
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditSessionId(sessionParam)
-  }) // intentional: no deps — reads fresh searchParams on every render, ref prevents re-processing
+  }, [searchParams, setTab, tab])
 
   // Deep link: ?session=<id> — jump to overview and highlight/open that session.
   const handledSessionRef = useRef<string | null>(null)
@@ -699,9 +698,8 @@ export function Fitness() {
     if (!sessionParam || sessionParam === handledSessionRef.current) return
     handledSessionRef.current = sessionParam
     if (tab !== 'overview') setTab('overview')
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHighlightSessionId(sessionParam)
-  }) // intentional: no deps
+  }, [searchParams, setTab, tab])
 
   return (
     <div

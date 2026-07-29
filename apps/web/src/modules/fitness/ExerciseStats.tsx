@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import { deleteExercise } from './api'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { toDisplayWeight } from './units'
 
 interface PR {

@@ -4,8 +4,8 @@ import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { FavoriteEmojiEditor } from '../../components/FavoritesEditor'
 import { ToggleRow } from '../../components/ToggleRow'
-import { useAuth } from '../../context/AuthContext'
-import { useSettings } from '../../context/SettingsContext'
+import { useAuth } from '../../context/auth'
+import { useSettings } from '../../context/settings'
 import { apiCall } from '../../lib/api'
 
 const COMMON_TZ = [

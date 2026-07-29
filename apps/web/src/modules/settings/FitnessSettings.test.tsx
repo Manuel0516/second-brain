@@ -4,7 +4,7 @@ import { FitnessSettings } from './FitnessSettings'
 
 const patch = vi.fn()
 
-vi.mock('../../context/SettingsContext', () => ({
+vi.mock('../../context/settings', () => ({
   useSettings: () => ({
     settings: {
       fitness_rest_seconds: 90,

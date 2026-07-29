@@ -1,7 +1,7 @@
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
 import { ToggleRow } from '../../components/ToggleRow'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { SettingsNumberField } from './SettingsNumberField'
 
 export function FitnessSettings() {

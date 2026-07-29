@@ -8,3 +8,6 @@ args = ["/Users/manuel/.claude/plugins/marketplaces/context-mode/start.mjs"]
 
 [mcp_servers.context-mode.env]
 CONTEXT_MODE_PLATFORM = "codex"
+
+[mcp_servers.context-mode.tools.ctx_execute_file]
+approval_mode = "approve"

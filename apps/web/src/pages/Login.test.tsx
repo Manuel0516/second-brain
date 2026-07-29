@@ -6,7 +6,7 @@ import { Login } from './Login'
 
 const login = vi.fn()
 
-vi.mock('../context/AuthContext', () => ({
+vi.mock('../context/auth', () => ({
   useAuth: () => ({ login, isAuthenticated: false }),
 }))
 

@@ -9,7 +9,7 @@ vi.mock('../../lib/api', () => ({
   apiCall: (...args: unknown[]) => apiCall(...args),
 }))
 
-vi.mock('../../context/AuthContext', () => ({
+vi.mock('../../context/auth', () => ({
   useAuth: () => ({
     user: {
       id: 'u1',

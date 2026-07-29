@@ -30,7 +30,8 @@ import {
   insertEditableInlineMath,
 } from './MathExtensions'
 import { EditableTaskItem } from './TaskItemExtension'
-import { LinkPopover, normalizeHref } from './LinkPopover'
+import { LinkPopover } from './LinkPopover'
+import { normalizeHref } from './links'
 import { LocationNode, insertLocation } from './LocationNode'
 import { CalloutNode } from './CalloutNode'
 import {
@@ -57,7 +58,8 @@ import {
 } from './ColumnNodes'
 import { TableToolbar } from './TableToolbar'
 import { TextAlign, TEXT_ALIGNMENTS } from './TextAlignExtension'
-import { useSettings } from '../../../context/SettingsContext'
+import { useSettings } from '../../../context/settings'
+import { deleteBlock, duplicateBlock } from './blockCommands'
 // left-start: the rail anchors to the block's TOP edge, so tall blocks (a
 // list item with nested children, a wrapped paragraph) keep the handle beside
 // their first line instead of floating at the subtree's vertical middle.
@@ -107,47 +109,6 @@ interface BlockEditorProps {
    *  written into the document. Unknown values fall back to the defaults. */
   bulletStyle?: string
   numberedStyle?: string
-}
-
-/** Depth of the block the cursor is in. Inside a list this is the list
- *  LINE (listItem/taskItem) — acting on depth 1 there would hit the whole
- *  list and wipe every sibling item. Otherwise: top-level or a column's
- *  child. */
-function blockDepth(editor: Editor): number | null {
-  const { $from } = editor.state.selection
-  for (let depth = $from.depth; depth >= 1; depth -= 1) {
-    const name = $from.node(depth).type.name
-    if (name === 'listItem' || name === 'taskItem') return depth
-  }
-  for (let depth = 1; depth <= $from.depth; depth += 1) {
-    const name = $from.node(depth).type.name
-    if (name !== 'columnList' && name !== 'column') return depth
-  }
-  return null
-}
-
-/** Duplicate the block at the cursor (no-op at doc level). */
-export function duplicateBlock(editor: Editor): void {
-  const depth = blockDepth(editor)
-  if (depth === null) return
-  const { $from } = editor.state.selection
-  editor
-    .chain()
-    .focus()
-    .insertContentAt($from.after(depth), $from.node(depth).toJSON())
-    .run()
-}
-
-/** Delete the block at the cursor (no-op at doc level). */
-export function deleteBlock(editor: Editor): void {
-  const depth = blockDepth(editor)
-  if (depth === null) return
-  const { $from } = editor.state.selection
-  editor
-    .chain()
-    .focus()
-    .deleteRange({ from: $from.before(depth), to: $from.after(depth) })
-    .run()
 }
 
 const slashItems = [
@@ -854,36 +815,42 @@ export function BlockEditor({
     [slash],
   )
 
-  const chooseSlash = (index: number) => {
-    if (!editor || !slash) return
-    editor
-      .chain()
-      .focus()
-      .deleteRange({ from: slash.from, to: editor.state.selection.from })
-      .run()
-    filteredSlash[index]?.run(editor)
-    setSlash(null)
-  }
+  const chooseSlash = useCallback(
+    (index: number) => {
+      if (!editor || !slash) return
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: slash.from, to: editor.state.selection.from })
+        .run()
+      filteredSlash[index]?.run(editor)
+      setSlash(null)
+    },
+    [editor, filteredSlash, slash],
+  )
 
-  const chooseMention = (index: number) => {
-    const item = mentionItems[index]
-    if (!editor || !mention || !item) return
-    editor
-      .chain()
-      .focus()
-      .insertContentAt(
-        { from: mention.from, to: editor.state.selection.from },
-        [
-          {
-            type: 'mention',
-            attrs: { id: item.id, label: item.title, type: item.type },
-          },
-          { type: 'text', text: ' ' },
-        ],
-      )
-      .run()
-    setMention(null)
-  }
+  const chooseMention = useCallback(
+    (index: number) => {
+      const item = mentionItems[index]
+      if (!editor || !mention || !item) return
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(
+          { from: mention.from, to: editor.state.selection.from },
+          [
+            {
+              type: 'mention',
+              attrs: { id: item.id, label: item.title, type: item.type },
+            },
+            { type: 'text', text: ' ' },
+          ],
+        )
+        .run()
+      setMention(null)
+    },
+    [editor, mention, mentionItems],
+  )
 
   // ponytail: ref syncs must follow declarations to avoid hoisting lint errors.
   useEffect(() => {

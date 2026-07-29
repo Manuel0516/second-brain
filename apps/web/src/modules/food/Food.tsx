@@ -7,7 +7,7 @@ import { IconButton } from '../../components/IconButton'
 import { Segmented } from '../../components/Segmented'
 import { BodyWeightCard } from '../../components/BodyWeightCard'
 import { BodyMetricForm } from '../fitness/BodyMetricForm'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { toDisplayWeight } from '../fitness/units'
 import {
   fetchMealLogs,

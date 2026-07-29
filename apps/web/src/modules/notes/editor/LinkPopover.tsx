@@ -1,30 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { normalizeHref } from './links'
 
 interface LinkPopoverProps {
   initialHref: string
   onApply: (href: string) => void
   onRemove?: () => void
   onCancel: () => void
-}
-
-export function normalizeHref(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  const href =
-    /^[a-z][a-z\d+.-]*:/i.test(trimmed) ||
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('#')
-      ? trimmed
-      : `https://${trimmed}`
-  try {
-    const protocol = new URL(href, window.location.origin).protocol
-    return ['http:', 'https:', 'mailto:', 'tel:'].includes(protocol) ||
-      href.startsWith('#')
-      ? href
-      : null
-  } catch {
-    return null
-  }
 }
 
 export function LinkPopover({

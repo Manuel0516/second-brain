@@ -19,7 +19,7 @@ from app.access import shared_ids
 from app.database import get_async_session
 from app.dependencies import get_current_user
 from app.models import File as FileModel
-from app.models import Page, User
+from app.models import FinanceEvidenceDocument, FinanceReportRun, Page, User
 from app.storage import allowed_content_type, download, max_file_size, remove, upload
 
 router = APIRouter(prefix="/api", tags=["files"])
@@ -291,6 +291,29 @@ async def delete_file(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="File not found")
+
+    immutable_evidence = await session.scalar(
+        select(FinanceEvidenceDocument.id).where(
+            FinanceEvidenceDocument.file_id == file_id,
+            FinanceEvidenceDocument.user_id == user.id,
+        )
+    )
+    if immutable_evidence is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Immutable Finance evidence cannot be deleted",
+        )
+    immutable_report = await session.scalar(
+        select(FinanceReportRun.id).where(
+            FinanceReportRun.file_id == file_id,
+            FinanceReportRun.user_id == user.id,
+        )
+    )
+    if immutable_report is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Frozen Finance report files cannot be deleted",
+        )
 
     try:
         remove(user.id, file_id)

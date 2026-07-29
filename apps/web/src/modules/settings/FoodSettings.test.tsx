@@ -4,7 +4,7 @@ import { FoodSettings } from './FoodSettings'
 
 const patch = vi.fn()
 
-vi.mock('../../context/SettingsContext', () => ({
+vi.mock('../../context/settings', () => ({
   useSettings: () => ({
     settings: {
       food_daily_meal_goal: 5,

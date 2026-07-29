@@ -2,7 +2,8 @@ import { useId, useRef, useState, useEffect } from 'react'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Segmented } from '../../components/Segmented'
 import { useDialogFocus } from '../../components/useDialogFocus'
-import { CategoryBadge, FEELING_LABELS, isCardioName } from './exerciseLibrary'
+import { FEELING_LABELS, isCardioName } from './exerciseData'
+import { CategoryBadge } from './exerciseLibrary'
 import {
   createSession,
   fetchExercises,
@@ -10,8 +11,8 @@ import {
   createSetEntry,
   type Exercise,
 } from './api'
-import { SESSION_TYPES } from './sessionTypes'
-import { useSettings } from '../../context/SettingsContext'
+import { SESSION_TYPES } from './sessionTypeData'
+import { useSettings } from '../../context/settings'
 import { fromDisplayWeight } from './units'
 
 interface SetDraft {

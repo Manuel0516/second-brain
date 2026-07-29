@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LiveSession } from './LiveSession'
-import type { ActiveSession } from './exerciseLibrary'
+import type { ActiveSession } from './exerciseData'
 import { SettingsProvider } from '../../context/SettingsContext'
 
 const session: ActiveSession = {

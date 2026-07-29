@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { Sidebar } from './Sidebar'
 
-vi.mock('../../context/SettingsContext', () => ({
+vi.mock('../../context/settings', () => ({
   useSettings: () => ({
     settings: {
       favorite_colors: ['#3B6FE0', '#2E9E6E', '#D6932B', '#8B5CF6', '#D9573F'],
@@ -21,7 +21,7 @@ vi.mock('../../context/SettingsContext', () => ({
   }),
 }))
 
-vi.mock('../../context/AuthContext', () => ({
+vi.mock('../../context/auth', () => ({
   useAuth: () => ({
     user: { id: 'user-1', username: 'tester', email: 'tester@example.com' },
   }),

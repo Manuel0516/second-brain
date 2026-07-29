@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Dropdown } from '../../components/Dropdown'
 import type { SetEntry, WorkoutSession } from './api'
@@ -12,7 +12,8 @@ import {
   updateSession,
   updateSetEntry,
 } from './api'
-import { CategoryBadge, FEELING_LABELS, isCardioName } from './exerciseLibrary'
+import { FEELING_LABELS, isCardioName } from './exerciseData'
+import { CategoryBadge } from './exerciseLibrary'
 
 function noteText(notes: Record<string, unknown>): string {
   const content = Array.isArray(notes.content) ? notes.content : []
@@ -103,31 +104,7 @@ export function SessionForm({
       .finally(() => setLoading(false))
   }, [])
 
-  // Auto-open edit for a session from deep link — force "show all" so the
-  // row renders even if the session is hidden behind the top-3 collapse.
-  useEffect(() => {
-    if (!editSessionId || sessions.length === 0) return
-    const session = sessions.find((s) => s.id === editSessionId)
-    if (!session) return
-    startEditing(session)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowAll(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSessionId, sessions])
-
-  // Scroll to the session row once "show all" has rendered it into the DOM.
-  useEffect(() => {
-    if (!editSessionId) return
-    const session = sessions.find((s) => s.id === editSessionId)
-    if (!session) return
-    const el = document.getElementById(`session-row-${session.id}`)
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    onEditConsumed?.()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSessionId, sessions, showAll])
-
-  async function startEditing(session: WorkoutSession) {
+  const startEditing = useCallback(async (session: WorkoutSession) => {
     setEditingId(session.id)
     const type = session.type
     const date = new Date(session.date).toISOString().slice(0, 10)
@@ -161,7 +138,31 @@ export function SessionForm({
       setEditSets([])
       setError('Failed to load workout details')
     }
-  }
+  }, [])
+
+  // Auto-open edit for a session from deep link — force "show all" so the
+  // row renders even if the session is hidden behind the top-3 collapse.
+  useEffect(() => {
+    if (!editSessionId || sessions.length === 0) return
+    const session = sessions.find((s) => s.id === editSessionId)
+    if (!session) return
+    const frame = window.requestAnimationFrame(() => {
+      void startEditing(session)
+      setShowAll(true)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [editSessionId, sessions, startEditing])
+
+  // Scroll to the session row once "show all" has rendered it into the DOM.
+  useEffect(() => {
+    if (!editSessionId) return
+    const session = sessions.find((s) => s.id === editSessionId)
+    if (!session) return
+    const el = document.getElementById(`session-row-${session.id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    onEditConsumed?.()
+  }, [editSessionId, onEditConsumed, sessions, showAll])
 
   async function saveSessionField(
     sessionId: string,

@@ -18,7 +18,7 @@ import {
   type BodyWeightStats,
   type WorkoutSession,
 } from './api'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import { toDisplayWeight } from './units'
 
 const tooltipStyle = {

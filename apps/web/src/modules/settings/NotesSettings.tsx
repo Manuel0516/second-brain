@@ -6,7 +6,7 @@ import {
   FavoriteColorEditor,
   FavoriteCoverEditor,
 } from '../../components/FavoritesEditor'
-import { useSettings, type UserSettings } from '../../context/SettingsContext'
+import { type UserSettings, useSettings } from '../../context/settings'
 import '../notes/listMarkers.css'
 
 const BULLET_STYLES: UserSettings['notes_bullet_style'][] = [

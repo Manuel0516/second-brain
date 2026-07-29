@@ -1,18 +1,15 @@
 import { useRef, useState } from 'react'
 import { RestTimer } from './RestTimer'
 import { Segmented } from '../../components/Segmented'
-import { useSettings } from '../../context/SettingsContext'
+import { useSettings } from '../../context/settings'
 import {
   PREV_PERFORMANCE,
   FEELING_LABELS,
   isCardioName,
-  CategoryBadge,
-} from './exerciseLibrary'
-import type {
-  ActiveExercise,
-  ActiveSession,
-  ActiveSet,
-} from './exerciseLibrary'
+  newSet,
+} from './exerciseData'
+import { CategoryBadge } from './exerciseLibrary'
+import type { ActiveExercise, ActiveSession, ActiveSet } from './exerciseData'
 
 interface Props {
   session: ActiveSession
@@ -25,12 +22,6 @@ interface Props {
 }
 
 const SET_DELETE_REVEAL = 48
-
-export function newSet(category: ActiveExercise['category']): ActiveSet {
-  return category === 'cardio'
-    ? { w: '', r: '', done: false, distance_km: '', duration_min: '' }
-    : { w: '', r: '', done: false }
-}
 
 export function LiveSession({
   session,

@@ -91,3 +91,30 @@ def decrypt_google_token(encrypted: str) -> str:
         return fernet.decrypt(encrypted.encode()).decode()
     except (InvalidToken, ValueError):
         return ""
+
+
+def encrypt_finance_value(value: str) -> str:
+    """Encrypt a Finance identifier without reusing another integration's key."""
+    from cryptography.fernet import Fernet
+
+    settings = get_settings()
+    if not settings.finance_encryption_key:
+        raise RuntimeError("FINANCE_ENCRYPTION_KEY is not configured")
+    try:
+        fernet = Fernet(settings.finance_encryption_key.encode())
+    except ValueError as exc:
+        raise RuntimeError("FINANCE_ENCRYPTION_KEY is invalid") from exc
+    return fernet.encrypt(value.encode()).decode()
+
+
+def decrypt_finance_value(encrypted: str) -> str:
+    """Decrypt a Finance identifier, returning an empty string on invalid input."""
+    from cryptography.fernet import Fernet, InvalidToken
+
+    settings = get_settings()
+    if not settings.finance_encryption_key:
+        return ""
+    try:
+        return Fernet(settings.finance_encryption_key.encode()).decrypt(encrypted.encode()).decode()
+    except (InvalidToken, ValueError):
+        return ""
