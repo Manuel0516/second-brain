@@ -489,9 +489,10 @@ export function SessionForm({
                                         <span>Weight</span>
                                         <input
                                           type="number"
+                                          inputMode="decimal"
                                           defaultValue={set.weight ?? ''}
                                           min={0}
-                                          step="0.5"
+                                          step="0.1"
                                           placeholder="-"
                                           onBlur={(event) => {
                                             const value = event.target.value

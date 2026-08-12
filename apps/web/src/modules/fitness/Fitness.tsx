@@ -602,7 +602,9 @@ export function Fitness() {
             s.w.trim() !== '' ||
             s.r.trim() !== '' ||
             !!s.distance_km ||
-            !!s.duration_min,
+            !!s.duration_min ||
+            s.feeling != null ||
+            !!s.note?.trim(),
         )
         if (filledSets.length === 0) continue
 

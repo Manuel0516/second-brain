@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Segmented } from '../../components/Segmented'
 import {
-  EXERCISE_LIBRARY,
+  mergeExerciseCandidates,
   PREV_PERFORMANCE,
   CategoryBadge,
   type ActiveSession,
@@ -83,30 +83,7 @@ export function SessionWizard({
 
   if (!open) return null
 
-  const library = sessionType ? EXERCISE_LIBRARY[sessionType] || [] : []
-
-  // Merge DB exercises + library suggestions, deduped by name (case-insensitive).
-  // DB exercises take priority for category info.
-  const allCandidates = (() => {
-    const seen = new Set<string>()
-    const result: { name: string; category: string }[] = []
-    for (const ex of dbExercises) {
-      const key = ex.name.toLowerCase()
-      if (!seen.has(key)) {
-        seen.add(key)
-        result.push({ name: ex.name, category: ex.category })
-      }
-    }
-    const libCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
-    for (const name of library) {
-      const key = name.toLowerCase()
-      if (!seen.has(key)) {
-        seen.add(key)
-        result.push({ name, category: libCategory })
-      }
-    }
-    return result
-  })()
+  const allCandidates = mergeExerciseCandidates(dbExercises, sessionType)
 
   const searchTerm = exerciseSearch.trim().toLowerCase()
   const filteredCandidates = searchTerm

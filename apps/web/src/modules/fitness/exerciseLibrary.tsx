@@ -1,3 +1,5 @@
+import type { Exercise } from './api'
+
 // Session types → default exercise list. Keys match SESSION_TYPES
 // (sessionTypes.ts) exactly — Custom has no defaults, exercises are typed in.
 export const EXERCISE_LIBRARY: Record<string, string[]> = {
@@ -39,6 +41,36 @@ export const EXERCISE_LIBRARY: Record<string, string[]> = {
   ],
   Cardio: ['Running', 'Swimming', 'Cycling', 'Hiking', 'Rowing', 'Jump Rope'],
   Custom: [],
+}
+
+export interface ExerciseCandidate {
+  name: string
+  category: string
+}
+
+/** Keep the plan picker and live-session picker on the same exercise source. */
+export function mergeExerciseCandidates(
+  dbExercises: Exercise[],
+  sessionType: string,
+): ExerciseCandidate[] {
+  const seen = new Set<string>()
+  const result: ExerciseCandidate[] = []
+  for (const exercise of dbExercises) {
+    const key = exercise.name.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push({ name: exercise.name, category: exercise.category })
+    }
+  }
+  const libraryCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
+  for (const name of EXERCISE_LIBRARY[sessionType] || []) {
+    const key = name.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push({ name, category: libraryCategory })
+    }
+  }
+  return result
 }
 
 // ponytail: PREV_PERFORMANCE hints are fake data, but SessionWizard.tsx still

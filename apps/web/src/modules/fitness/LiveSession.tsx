@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RestTimer } from './RestTimer'
 import { Segmented } from '../../components/Segmented'
 import { useSettings } from '../../context/SettingsContext'
@@ -7,12 +7,14 @@ import {
   FEELING_LABELS,
   isCardioName,
   CategoryBadge,
+  mergeExerciseCandidates,
 } from './exerciseLibrary'
 import type {
   ActiveExercise,
   ActiveSession,
   ActiveSet,
 } from './exerciseLibrary'
+import { fetchExercises, type Exercise } from './api'
 
 interface Props {
   session: ActiveSession
@@ -45,11 +47,14 @@ export function LiveSession({
   const [openNotes, setOpenNotes] = useState<Set<string>>(new Set())
   const [addingExercise, setAddingExercise] = useState(false)
   const [exerciseName, setExerciseName] = useState('')
+  const [exerciseSearch, setExerciseSearch] = useState('')
+  const [dbExercises, setDbExercises] = useState<Exercise[]>([])
   const [revealedSet, setRevealedSet] = useState<string | null>(null)
   const [newExerciseCategory, setNewExerciseCategory] = useState<
     'strength' | 'cardio' | 'mobility'
   >('strength')
   const restInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const restEndsAt = useRef<number | null>(null)
   const setSwipeRef = useRef<{
     key: string
     pointerId: number
@@ -61,20 +66,45 @@ export function LiveSession({
   } | null>(null)
   const suppressSetClickRef = useRef<string | null>(null)
 
+  function refreshRest() {
+    if (!restEndsAt.current) return
+    const remaining = Math.max(
+      0,
+      Math.ceil((restEndsAt.current - Date.now()) / 1000),
+    )
+    setRestCount(remaining)
+    if (remaining === 0) {
+      restEndsAt.current = null
+      if (restInterval.current) clearInterval(restInterval.current)
+      restInterval.current = null
+    }
+  }
+
   function startRest() {
     if (restInterval.current) clearInterval(restInterval.current)
-    setRestCount(settings.fitness_rest_seconds)
+    restEndsAt.current = Date.now() + settings.fitness_rest_seconds * 1000
     setRestTotal(settings.fitness_rest_seconds)
-    restInterval.current = setInterval(() => {
-      setRestCount((count) => {
-        if (count <= 1) {
-          if (restInterval.current) clearInterval(restInterval.current)
-          return 0
-        }
-        return count - 1
-      })
-    }, 1000)
+    refreshRest()
+    restInterval.current = setInterval(refreshRest, 250)
   }
+
+  useEffect(() => {
+    if (!addingExercise) return
+    fetchExercises()
+      .then(setDbExercises)
+      .catch(() => setDbExercises([]))
+  }, [addingExercise])
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (!document.hidden) refreshRest()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (restInterval.current) clearInterval(restInterval.current)
+    }
+  }, [])
 
   function updateExercise(exerciseIndex: number, update: ActiveExercise) {
     onUpdate({
@@ -159,6 +189,8 @@ export function LiveSession({
     if (!swipe.swiping) {
       if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return
       if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+        event.currentTarget.style.transform = 'translateX(0)'
+        setRevealedSet(null)
         setSwipeRef.current = null
         return
       }
@@ -246,12 +278,15 @@ export function LiveSession({
       ],
     })
     setExerciseName('')
+    setExerciseSearch('')
     setNewExerciseCategory('strength')
     setAddingExercise(false)
   }
 
   function finish() {
+    restEndsAt.current = null
     if (restInterval.current) clearInterval(restInterval.current)
+    restInterval.current = null
     onFinish()
   }
 
@@ -273,6 +308,8 @@ export function LiveSession({
           restTotal={restTotal}
           onSkip={() => {
             if (restInterval.current) clearInterval(restInterval.current)
+            restEndsAt.current = null
+            restInterval.current = null
             setRestCount(0)
           }}
         />
@@ -415,6 +452,7 @@ export function LiveSession({
                                 <input
                                   type="number"
                                   inputMode="decimal"
+                                  step="0.01"
                                   value={set.w}
                                   placeholder="-"
                                   aria-label={`${exercise.name} set ${setIndex + 1} weight`}
@@ -553,11 +591,12 @@ export function LiveSession({
         >
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <label className="cal-field">
-              <span>Exercise name</span>
+              <span>Search exercises</span>
               <input
-                value={exerciseName}
+                value={exerciseSearch}
                 onChange={(event) => {
                   const val = event.target.value
+                  setExerciseSearch(val)
                   setExerciseName(val)
                   // Smart-default: if typed name matches cardio library, switch picker
                   if (isCardioName(val.trim())) {
@@ -582,6 +621,44 @@ export function LiveSession({
               Cancel
             </button>
           </div>
+          <div className="fit-ex-grid" style={{ margin: '12px 0 16px' }}>
+            {mergeExerciseCandidates(dbExercises, session.type)
+              .filter((candidate) =>
+                candidate.name
+                  .toLowerCase()
+                  .includes(exerciseSearch.trim().toLowerCase()),
+              )
+              .map((candidate) => (
+                <button
+                  key={candidate.name}
+                  type="button"
+                  className={`fit-ex-card${exerciseName === candidate.name ? ' selected' : ''}`}
+                  onClick={() => {
+                    setExerciseName(candidate.name)
+                    setNewExerciseCategory(
+                      candidate.category as 'strength' | 'cardio' | 'mobility',
+                    )
+                  }}
+                >
+                  <span className="fit-ex-card-name">{candidate.name}</span>
+                  <CategoryBadge category={candidate.category} />
+                </button>
+              ))}
+          </div>
+          {exerciseSearch.trim() &&
+            !mergeExerciseCandidates(dbExercises, session.type).some(
+              (candidate) =>
+                candidate.name.toLowerCase() ===
+                exerciseSearch.trim().toLowerCase(),
+            ) && (
+              <button
+                type="button"
+                className="fit-ex-create"
+                onClick={() => setExerciseName(exerciseSearch.trim())}
+              >
+                + Create “{exerciseSearch.trim()}”
+              </button>
+            )}
           <div
             className="fit-category-picker"
             style={{ alignSelf: 'flex-start', maxWidth: '280px' }}

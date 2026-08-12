@@ -15,5 +15,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
+    // ProseMirror schedules DOM work beyond React cleanup; serial files keep
+    // that browser-global lifecycle from racing another JSDOM environment.
+    fileParallelism: false,
   },
 })

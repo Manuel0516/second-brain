@@ -155,4 +155,36 @@ describe('LiveSession', () => {
       }),
     )
   })
+
+  it('does not reveal deletion while the row is being scrolled vertically', () => {
+    const { container } = render(
+      <SettingsProvider>
+        <LiveSession session={session} onUpdate={vi.fn()} onFinish={vi.fn()} />
+      </SettingsProvider>,
+    )
+    const row = container.querySelector<HTMLElement>(
+      '.fit-live-row-shell > .fit-live-row',
+    )!
+
+    fireEvent.pointerDown(row, {
+      clientX: 120,
+      clientY: 20,
+      pointerId: 1,
+      pointerType: 'touch',
+    })
+    fireEvent.pointerMove(row, {
+      clientX: 122,
+      clientY: 60,
+      pointerId: 1,
+      pointerType: 'touch',
+    })
+    fireEvent.pointerUp(row, {
+      clientX: 122,
+      clientY: 60,
+      pointerId: 1,
+      pointerType: 'touch',
+    })
+
+    expect(row).toHaveStyle({ transform: 'translateX(0)' })
+  })
 })
