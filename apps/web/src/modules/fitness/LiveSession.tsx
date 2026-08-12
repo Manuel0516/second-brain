@@ -158,6 +158,15 @@ export function LiveSession({
     })
   }
 
+  function removeExercise(exerciseIndex: number) {
+    onUpdate({
+      ...session,
+      exercises: session.exercises.filter(
+        (_, index) => index !== exerciseIndex,
+      ),
+    })
+  }
+
   function startSetSwipe(
     event: React.PointerEvent<HTMLDivElement>,
     key: string,
@@ -259,17 +268,16 @@ export function LiveSession({
     })
   }
 
-  function addExercise() {
-    const name = exerciseName.trim()
-    if (!name) return
-    const category = newExerciseCategory
+  function addExercise(name: string, category: ActiveExercise['category']) {
+    const trimmed = name.trim()
+    if (!trimmed) return
     onUpdate({
       ...session,
       exercises: [
         ...session.exercises,
         {
-          name,
-          prev: PREV_PERFORMANCE[name] || '-',
+          name: trimmed,
+          prev: PREV_PERFORMANCE[trimmed] || '-',
           category,
           sets: Array.from({ length: category === 'cardio' ? 1 : 3 }, () =>
             newSet(category),
@@ -345,13 +353,23 @@ export function LiveSession({
                   <p>Previous: {exercise.prev}</p>
                   <p>Feel: Low → High</p>
                 </div>
-                <button
-                  className="fit-secondary-button"
-                  type="button"
-                  onClick={() => addSet(exerciseIndex)}
-                >
-                  + Set
-                </button>
+                <div className="fit-live-exercise-actions">
+                  <button
+                    className="fit-remove-button"
+                    type="button"
+                    aria-label={`Remove ${exercise.name} from session`}
+                    onClick={() => removeExercise(exerciseIndex)}
+                  >
+                    ×
+                  </button>
+                  <button
+                    className="fit-secondary-button"
+                    type="button"
+                    onClick={() => addSet(exerciseIndex)}
+                  >
+                    + Set
+                  </button>
+                </div>
               </header>
 
               {exercise.sets.length === 0 ? (
@@ -586,10 +604,10 @@ export function LiveSession({
           className="fit-add-exercise"
           onSubmit={(event) => {
             event.preventDefault()
-            addExercise()
+            addExercise(exerciseName, newExerciseCategory)
           }}
         >
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="fit-add-exercise-row">
             <label className="cal-field">
               <span>Search exercises</span>
               <input
@@ -606,6 +624,23 @@ export function LiveSession({
                 placeholder="e.g. Incline bench press"
               />
             </label>
+          </div>
+          <div className="fit-category-picker">
+            <Segmented
+              value={newExerciseCategory}
+              options={['strength', 'cardio', 'mobility']}
+              onChange={(v) =>
+                setNewExerciseCategory(v as 'strength' | 'cardio' | 'mobility')
+              }
+              labels={{
+                strength: 'Strength',
+                cardio: 'Cardio',
+                mobility: 'Mobility',
+              }}
+              ariaLabel="Exercise category"
+            />
+          </div>
+          <div className="fit-add-exercise-row">
             <button
               className="fit-primary-button"
               type="submit"
@@ -621,7 +656,7 @@ export function LiveSession({
               Cancel
             </button>
           </div>
-          <div className="fit-ex-grid" style={{ margin: '12px 0 16px' }}>
+          <div className="fit-ex-grid">
             {mergeExerciseCandidates(dbExercises, session.type)
               .filter((candidate) =>
                 candidate.name
@@ -632,50 +667,18 @@ export function LiveSession({
                 <button
                   key={candidate.name}
                   type="button"
-                  className={`fit-ex-card${exerciseName === candidate.name ? ' selected' : ''}`}
-                  onClick={() => {
-                    setExerciseName(candidate.name)
-                    setNewExerciseCategory(
+                  className="fit-ex-card"
+                  onClick={() =>
+                    addExercise(
+                      candidate.name,
                       candidate.category as 'strength' | 'cardio' | 'mobility',
                     )
-                  }}
+                  }
                 >
                   <span className="fit-ex-card-name">{candidate.name}</span>
                   <CategoryBadge category={candidate.category} />
                 </button>
               ))}
-          </div>
-          {exerciseSearch.trim() &&
-            !mergeExerciseCandidates(dbExercises, session.type).some(
-              (candidate) =>
-                candidate.name.toLowerCase() ===
-                exerciseSearch.trim().toLowerCase(),
-            ) && (
-              <button
-                type="button"
-                className="fit-ex-create"
-                onClick={() => setExerciseName(exerciseSearch.trim())}
-              >
-                + Create “{exerciseSearch.trim()}”
-              </button>
-            )}
-          <div
-            className="fit-category-picker"
-            style={{ alignSelf: 'flex-start', maxWidth: '280px' }}
-          >
-            <Segmented
-              value={newExerciseCategory}
-              options={['strength', 'cardio', 'mobility']}
-              onChange={(v) =>
-                setNewExerciseCategory(v as 'strength' | 'cardio' | 'mobility')
-              }
-              labels={{
-                strength: 'Strength',
-                cardio: 'Cardio',
-                mobility: 'Mobility',
-              }}
-              ariaLabel="Exercise category"
-            />
           </div>
         </form>
       ) : (

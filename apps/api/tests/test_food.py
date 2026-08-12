@@ -143,6 +143,31 @@ async def test_meal_log_photo_order_and_replacement(
     assert await test_db_session.scalar(select(File).where(File.id == files[1].id)) is None
 
 
+async def test_list_meal_logs_without_range_returns_older_history(
+    client: AsyncClient, test_db_session: AsyncSession, test_user: User
+) -> None:
+    old_log = MealLog(
+        user_id=test_user.id,
+        date=datetime.now(UTC) - timedelta(days=30),
+        meal_type="lunch",
+        status="logged",
+    )
+    test_db_session.add(old_log)
+    await test_db_session.commit()
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": test_user.email, "password": "testpassword123"},
+    )
+    response = await client.get(
+        "/api/food/logs",
+        cookies={"access_token": login.cookies["access_token"]},
+    )
+
+    assert response.status_code == 200
+    assert old_log.id in {meal["id"] for meal in response.json()}
+
+
 async def test_meal_log_rejects_invalid_photo_collections(
     client: AsyncClient, test_db_session: AsyncSession, test_user: User
 ) -> None:

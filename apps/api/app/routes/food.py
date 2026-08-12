@@ -255,12 +255,10 @@ async def list_meal_logs(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> list[MealLogResponse]:
-    """List meal logs. Defaults to the trailing 7 days."""
+    """List meal logs. An omitted range means the complete history."""
     query = select(MealLog).where(MealLog.user_id == user.id)
     if from_date is not None:
         query = query.where(MealLog.date >= from_date)
-    else:
-        query = query.where(MealLog.date >= datetime.now(UTC) - timedelta(days=7))
     if to_date is not None:
         query = query.where(MealLog.date <= to_date)
     result = await session.scalars(query.order_by(MealLog.date.desc()))

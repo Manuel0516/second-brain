@@ -48,29 +48,37 @@ export interface ExerciseCandidate {
   category: string
 }
 
-/** Keep the plan picker and live-session picker on the same exercise source. */
+/**
+ * Keep the plan picker and live-session picker on the same exercise source.
+ * Ordered so exercises relevant to `sessionType` (its usual category, plus
+ * its curated defaults) come first, and every other known exercise — any
+ * category, any session type — follows below rather than being hidden.
+ */
 export function mergeExerciseCandidates(
   dbExercises: Exercise[],
   sessionType: string,
 ): ExerciseCandidate[] {
   const seen = new Set<string>()
-  const result: ExerciseCandidate[] = []
+  const primary: ExerciseCandidate[] = []
+  const rest: ExerciseCandidate[] = []
+  const libraryCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
+
   for (const exercise of dbExercises) {
     const key = exercise.name.toLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      result.push({ name: exercise.name, category: exercise.category })
-    }
+    if (seen.has(key)) continue
+    seen.add(key)
+    ;(exercise.category === libraryCategory ? primary : rest).push({
+      name: exercise.name,
+      category: exercise.category,
+    })
   }
-  const libraryCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
   for (const name of EXERCISE_LIBRARY[sessionType] || []) {
     const key = name.toLowerCase()
-    if (!seen.has(key)) {
-      seen.add(key)
-      result.push({ name, category: libraryCategory })
-    }
+    if (seen.has(key)) continue
+    seen.add(key)
+    primary.push({ name, category: libraryCategory })
   }
-  return result
+  return [...primary, ...rest]
 }
 
 // ponytail: PREV_PERFORMANCE hints are fake data, but SessionWizard.tsx still

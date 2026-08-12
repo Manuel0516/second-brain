@@ -412,8 +412,32 @@
 .fit-live-exercise > header,
 .fit-history-exercise > header,
 .fit-history-actions,
-.fit-history-add,
+.fit-history-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fit-live-exercise-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* The add-exercise panel stacks its own sections (search row, candidate
+   grid, category picker) — it is not a single flex row like the others. */
 .fit-add-exercise {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elevated);
+  animation: popIn 120ms ease-out both;
+}
+
+.fit-add-exercise-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1256,13 +1280,26 @@
   }
 
   .fit-history-summary,
-  .fit-live-header,
-  .fit-add-exercise {
+  .fit-live-header {
     align-items: stretch;
   }
 
   .fit-history-summary .fit-history-actions {
     align-self: flex-end;
+  }
+
+  .fit-add-exercise-row {
+    flex-wrap: wrap;
+  }
+
+  .fit-add-exercise-row .cal-field {
+    flex-basis: 100%;
+  }
+
+  .fit-add-exercise-row .fit-primary-button,
+  .fit-add-exercise-row .fit-secondary-button {
+    flex: 1;
+    min-height: 44px;
   }
 
   .fit-history-session {
@@ -1319,7 +1356,8 @@
   .fit-history-session,
   .fit-live-exercise,
   .fit-live,
-  .fit-live-status > span {
+  .fit-live-status > span,
+  .fit-add-exercise {
     animation: none;
   }
 

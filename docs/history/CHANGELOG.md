@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0208](0208-live-session-add-exercise-ux.md)                             | Live-session add-exercise UX, per-exercise remove, and exercise picker ordering                      | 2026-08-12 | accepted                   |
+| [0207](0207-food-history-range-fix.md)                                   | Restore complete Food history                                                                        | 2026-08-12 | accepted                   |
 | [0206](0206-block-editor-test-teardown.md)                              | Stabilize BlockEditor test teardown                                                                   | 2026-08-12 | accepted                   |
 | [0205](0205-fitness-session-input-fixes.md)                             | Fitness live-session persistence, picker, decimal input, swipe, and timer fixes                       | 2026-08-12 | accepted                   |
 | [0204](0204-codex-mcp-startup-fix.md)                                    | Fix Codex MCP startup paths                                                                               | 2026-07-25 | accepted                   |
