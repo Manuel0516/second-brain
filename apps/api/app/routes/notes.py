@@ -524,6 +524,51 @@ async def list_trash(
     )
 
 
+@router.get("/pages/search", response_model=list[SearchResultResponse])
+@router.get("/search", response_model=list[SearchResultResponse])
+async def search_nodes(
+    q: str = Query(min_length=1, max_length=255),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> list[SearchResultResponse]:
+    needle = q.casefold().strip()
+    shared_page_ids = await shared_ids("page", user.id, session)
+    pages = list(
+        await session.scalars(
+            select(Page).where(
+                (Page.user_id == user.id) | Page.id.in_(shared_page_ids),
+                Page.deleted_at.is_(None),
+            )
+        )
+    )
+    titles_by_id = {page.id: page.title for page in pages}
+    results = [
+        SearchResultResponse(
+            type="page",
+            id=page.id,
+            title=page.title,
+            icon=page.icon,
+            page_type=page.type,
+            parent_title=titles_by_id.get(page.parent_page_id) if page.parent_page_id else None,
+        )
+        for page in pages
+        if needle in f"{page.title} {_plain_text(page.content)}".casefold()
+    ]
+    shared_calendar_ids = await shared_ids("calendar", user.id, session)
+    events = await session.scalars(
+        select(CalendarEvent)
+        .join(Calendar)
+        .where((Calendar.user_id == user.id) | Calendar.id.in_(shared_calendar_ids))
+    )
+    results.extend(
+        SearchResultResponse(type="event", id=event.id, title=event.title, icon=event.icon)
+        for event in events
+        if needle in event.title.casefold()
+    )
+    # ponytail: in-memory ILIKE equivalent; add indexed search when the corpus grows.
+    return results[:50]
+
+
 @router.get("/pages/{page_id}", response_model=PageResponse)
 async def get_page(
     page_id: str,
@@ -833,48 +878,6 @@ async def get_backlinks(
     return result
 
 
-@router.get("/search", response_model=list[SearchResultResponse])
-async def search_nodes(
-    q: str = Query(min_length=1, max_length=255),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session),
-) -> list[SearchResultResponse]:
-    needle = q.casefold().strip()
-    shared_page_ids = await shared_ids("page", user.id, session)
-    pages = list(
-        await session.scalars(
-            select(Page).where(
-                (Page.user_id == user.id) | Page.id.in_(shared_page_ids),
-                Page.deleted_at.is_(None),
-            )
-        )
-    )
-    titles_by_id = {page.id: page.title for page in pages}
-    results = [
-        SearchResultResponse(
-            type="page",
-            id=page.id,
-            title=page.title,
-            icon=page.icon,
-            page_type=page.type,
-            parent_title=titles_by_id.get(page.parent_page_id) if page.parent_page_id else None,
-        )
-        for page in pages
-        if needle in f"{page.title} {_plain_text(page.content)}".casefold()
-    ]
-    shared_calendar_ids = await shared_ids("calendar", user.id, session)
-    events = await session.scalars(
-        select(CalendarEvent)
-        .join(Calendar)
-        .where((Calendar.user_id == user.id) | Calendar.id.in_(shared_calendar_ids))
-    )
-    results.extend(
-        SearchResultResponse(type="event", id=event.id, title=event.title, icon=event.icon)
-        for event in events
-        if needle in event.title.casefold()
-    )
-    # ponytail: in-memory ILIKE equivalent; add indexed search when the corpus grows.
-    return results[:50]
 
 
 @router.post("/events/{event_id}/note", response_model=PageResponse, status_code=201)

@@ -443,6 +443,141 @@ async def delete_goal(
 # ── Statistics ──────────────────────────────────────────────────────────
 
 
+@router.get("/fitness/stats/overview", response_model=OverviewStats)
+async def overview_stats(
+    days: int = Query(default=90, ge=7, le=365),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> OverviewStats:
+    """Highlight graphs for the Overview landing tab (Phase F3).
+
+    One call feeds every landing graph so the tab renders with a single
+    round-trip: body-weight series, top-exercise progression, feeling trend.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # ── Body weight series ──
+    metrics = (
+        await session.scalars(
+            select(BodyMetric)
+            .where(
+                BodyMetric.user_id == user.id,
+                BodyMetric.date >= cutoff,
+                BodyMetric.weight.is_not(None),
+            )
+            .order_by(BodyMetric.date.asc())
+        )
+    ).all()
+    weight_series: list[dict[str, object]] = [
+        {"date": m.date.isoformat()[:10], "weight": m.weight} for m in metrics
+    ]
+
+    # ── Top exercise (most sets logged in window) + its progression ──
+    top_row = (
+        await session.execute(
+            select(SetEntry.exercise_id, func.count(SetEntry.id).label("n"))
+            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+            .where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= cutoff,
+            )
+            .group_by(SetEntry.exercise_id)
+            .order_by(func.count(SetEntry.id).desc())
+            .limit(1)
+        )
+    ).first()
+
+    top_exercise: dict[str, object] | None = None
+    if top_row is not None:
+        exercise = await session.get(Exercise, top_row.exercise_id)
+        if exercise is not None:
+            prog_rows = (
+                await session.execute(
+                    select(
+                        WorkoutSession.date,
+                        func.max(SetEntry.weight).label("max_weight"),
+                        func.max(SetEntry.reps).label("max_reps"),
+                    )
+                    .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+                    .where(
+                        WorkoutSession.user_id == user.id,
+                        WorkoutSession.status == "completed",
+                        WorkoutSession.date >= cutoff,
+                        SetEntry.exercise_id == exercise.id,
+                    )
+                    .group_by(WorkoutSession.date)
+                    .order_by(WorkoutSession.date.asc())
+                )
+            ).all()
+            top_exercise = {
+                "exercise": ExerciseResponse.model_validate(exercise).model_dump(),
+                "progression": [
+                    {
+                        "date": row.date.isoformat()[:10],
+                        "max_weight": row.max_weight,
+                        "max_reps": row.max_reps,
+                    }
+                    for row in prog_rows
+                ],
+            }
+
+    # ── Feeling trend (avg per session date) ──
+    feeling_rows = (
+        await session.execute(
+            select(WorkoutSession.date, func.avg(SetEntry.feeling).label("feeling"))
+            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
+            .where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= cutoff,
+                SetEntry.feeling.is_not(None),
+            )
+            .group_by(WorkoutSession.date)
+            .order_by(WorkoutSession.date.asc())
+        )
+    ).all()
+    feeling_series: list[dict[str, object]] = [
+        {"date": row.date.isoformat()[:10], "feeling": round(float(row.feeling), 2)}
+        for row in feeling_rows
+    ]
+
+    # ── Session count (fixed 30-day window, independent of `days`) ──
+    month_cutoff = datetime.now(UTC) - timedelta(days=30)
+    session_count = (
+        await session.scalar(
+            select(func.count(WorkoutSession.id)).where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= month_cutoff,
+            )
+        )
+    ) or 0
+
+    # ── Session count for the current ISO week (Monday start) ──
+    now = datetime.now(UTC)
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    sessions_this_week = (
+        await session.scalar(
+            select(func.count(WorkoutSession.id)).where(
+                WorkoutSession.user_id == user.id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.date >= week_start,
+            )
+        )
+    ) or 0
+
+    return OverviewStats(
+        weight_series=weight_series,
+        top_exercise=top_exercise,
+        feeling_series=feeling_series,
+        sessions_last_30_days=session_count,
+        sessions_this_week=sessions_this_week,
+    )
+
+
 @router.get("/fitness/stats/exercise/{exercise_id}", response_model=ExerciseStats)
 async def exercise_stats(
     exercise_id: str,
@@ -637,139 +772,6 @@ async def body_weight_stats(
     return BodyWeightStats(metrics=metric_list, trend=trend)
 
 
-@router.get("/fitness/stats/overview", response_model=OverviewStats)
-async def overview_stats(
-    days: int = Query(default=90, ge=7, le=365),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session),
-) -> OverviewStats:
-    """Highlight graphs for the Overview landing tab (Phase F3).
-
-    One call feeds every landing graph so the tab renders with a single
-    round-trip: body-weight series, top-exercise progression, feeling trend.
-    """
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-
-    # ── Body weight series ──
-    metrics = (
-        await session.scalars(
-            select(BodyMetric)
-            .where(
-                BodyMetric.user_id == user.id,
-                BodyMetric.date >= cutoff,
-                BodyMetric.weight.is_not(None),
-            )
-            .order_by(BodyMetric.date.asc())
-        )
-    ).all()
-    weight_series: list[dict[str, object]] = [
-        {"date": m.date.isoformat()[:10], "weight": m.weight} for m in metrics
-    ]
-
-    # ── Top exercise (most sets logged in window) + its progression ──
-    top_row = (
-        await session.execute(
-            select(SetEntry.exercise_id, func.count(SetEntry.id).label("n"))
-            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
-            .where(
-                WorkoutSession.user_id == user.id,
-                WorkoutSession.status == "completed",
-                WorkoutSession.date >= cutoff,
-            )
-            .group_by(SetEntry.exercise_id)
-            .order_by(func.count(SetEntry.id).desc())
-            .limit(1)
-        )
-    ).first()
-
-    top_exercise: dict[str, object] | None = None
-    if top_row is not None:
-        exercise = await session.get(Exercise, top_row.exercise_id)
-        if exercise is not None:
-            prog_rows = (
-                await session.execute(
-                    select(
-                        WorkoutSession.date,
-                        func.max(SetEntry.weight).label("max_weight"),
-                        func.max(SetEntry.reps).label("max_reps"),
-                    )
-                    .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
-                    .where(
-                        WorkoutSession.user_id == user.id,
-                        WorkoutSession.status == "completed",
-                        WorkoutSession.date >= cutoff,
-                        SetEntry.exercise_id == exercise.id,
-                    )
-                    .group_by(WorkoutSession.date)
-                    .order_by(WorkoutSession.date.asc())
-                )
-            ).all()
-            top_exercise = {
-                "exercise": ExerciseResponse.model_validate(exercise).model_dump(),
-                "progression": [
-                    {
-                        "date": row.date.isoformat()[:10],
-                        "max_weight": row.max_weight,
-                        "max_reps": row.max_reps,
-                    }
-                    for row in prog_rows
-                ],
-            }
-
-    # ── Feeling trend (avg per session date) ──
-    feeling_rows = (
-        await session.execute(
-            select(WorkoutSession.date, func.avg(SetEntry.feeling).label("feeling"))
-            .join(WorkoutSession, WorkoutSession.id == SetEntry.workout_session_id)
-            .where(
-                WorkoutSession.user_id == user.id,
-                WorkoutSession.status == "completed",
-                WorkoutSession.date >= cutoff,
-                SetEntry.feeling.is_not(None),
-            )
-            .group_by(WorkoutSession.date)
-            .order_by(WorkoutSession.date.asc())
-        )
-    ).all()
-    feeling_series: list[dict[str, object]] = [
-        {"date": row.date.isoformat()[:10], "feeling": round(float(row.feeling), 2)}
-        for row in feeling_rows
-    ]
-
-    # ── Session count (fixed 30-day window, independent of `days`) ──
-    month_cutoff = datetime.now(UTC) - timedelta(days=30)
-    session_count = (
-        await session.scalar(
-            select(func.count(WorkoutSession.id)).where(
-                WorkoutSession.user_id == user.id,
-                WorkoutSession.status == "completed",
-                WorkoutSession.date >= month_cutoff,
-            )
-        )
-    ) or 0
-
-    # ── Session count for the current ISO week (Monday start) ──
-    now = datetime.now(UTC)
-    week_start = (now - timedelta(days=now.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    sessions_this_week = (
-        await session.scalar(
-            select(func.count(WorkoutSession.id)).where(
-                WorkoutSession.user_id == user.id,
-                WorkoutSession.status == "completed",
-                WorkoutSession.date >= week_start,
-            )
-        )
-    ) or 0
-
-    return OverviewStats(
-        weight_series=weight_series,
-        top_exercise=top_exercise,
-        feeling_series=feeling_series,
-        sessions_last_30_days=session_count,
-        sessions_this_week=sessions_this_week,
-    )
 
 
 # ── Exercise Endpoints ──────────────────────────────────────────────────

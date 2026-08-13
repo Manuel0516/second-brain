@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0209](0209-embedded-ai-agent-backend.md)                               | Embedded AI agent backend                                                                              | 2026-08-13 | accepted                   |
 | [0208](0208-live-session-add-exercise-ux.md)                             | Live-session add-exercise UX, per-exercise remove, and exercise picker ordering                      | 2026-08-12 | accepted                   |
 | [0207](0207-food-history-range-fix.md)                                   | Restore complete Food history                                                                        | 2026-08-12 | accepted                   |
 | [0206](0206-block-editor-test-teardown.md)                              | Stabilize BlockEditor test teardown                                                                   | 2026-08-12 | accepted                   |

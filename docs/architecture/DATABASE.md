@@ -426,6 +426,18 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 
 ---
 
+### Embedded AI agent tables
+
+- `ai_conversations` and `ai_messages` persist user-scoped chat history, assistant tool calls,
+  matching tool results, and confirmation status.
+- `ai_settings` is a user-keyed singleton for provider, model, endpoint, and autonomy settings.
+- `ai_memories` stores durable facts injected into every later conversation.
+- `ai_skills` stores user-scoped named markdown procedures; names are unique per user.
+- `ai_actions` records gated writes, original tool-call context, affected entity, undo pre-image,
+  and pending/executed/rejected/undone status.
+
+---
+
 ## Migration history
 
 | Number | What it added |
@@ -451,5 +463,6 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 026 | Per-recipient visibility and color overrides for shared calendars |
 | 027 | Ordered multi-photo meal attachments; replaces `meal_logs.photo_file_id` |
 | 028 | `visual_style` (neon/monochrome) on user_settings |
+| c3b8d4b570e2 | Embedded AI conversations, messages, settings, memories, skills, and actions |
 
 Always check `alembic current` before writing a new migration.

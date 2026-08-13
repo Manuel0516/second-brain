@@ -16,6 +16,7 @@ from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
 from app.routes import (
     admin,
+    ai,
     auth,
     calendar,
     databases,
@@ -79,6 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Second Brain API", version="0.1.0", lifespan=lifespan)
 
 # Include routers
+app.include_router(ai.router)
 app.include_router(auth.router)
 app.include_router(calendar.router)
 app.include_router(notes.router)

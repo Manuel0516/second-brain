@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     # OpenRouter AI (food photo analysis)
     openrouter_api_key: str = ""
     openrouter_model: str = "google/gemini-2.5-flash"
+    ai_internal_api_url: str = "http://127.0.0.1:8000"
 
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
