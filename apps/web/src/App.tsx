@@ -19,6 +19,7 @@ import { AdminSettings } from './modules/settings/AdminSettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
+import { AssistantPanel } from './modules/assistant/AssistantPanel'
 
 const Notes = lazy(() =>
   import('./modules/notes/Notes').then((module) => ({ default: module.Notes })),
@@ -76,6 +77,7 @@ function AppRoutes() {
               <PageTransition>
                 <Outlet />
               </PageTransition>
+              <AssistantPanel />
             </SettingsProvider>
           </ProtectedRoute>
         }
