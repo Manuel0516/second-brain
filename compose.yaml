@@ -117,6 +117,27 @@ services:
       hub.icon: "🧠"
       hub.visibility: "admin"
 
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      SECOND_BRAIN_API_URL: http://api:8000
+      SB_LOGIN_EMAIL: ${INITIAL_USER_EMAIL}
+      SB_LOGIN_PASSWORD: ${INITIAL_USER_PASSWORD}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-1110963147}
+      SB_BOT_STATE_FILE: /data/state.json
+    volumes:
+      - bot-data:/data
+    networks:
+      - internal
+      - egress
+    depends_on:
+      api:
+        condition: service_healthy
+
 networks:
   internal:
     internal: true
@@ -130,3 +151,4 @@ networks:
 volumes:
   postgres-data:
   minio-data:
+  bot-data:
