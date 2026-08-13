@@ -230,14 +230,90 @@ errors. `apps/web/src/modules/assistant/AssistantPanel.test.tsx` basic mount tes
 5. **Frontend** — AssistantPanel + useAssistantChat + ConfirmCard. Gate: browser end-to-end.
 6. **Polish** (later, not now) — local provider, autonomy levels, slash commands, skill
    suggestions UI.
+7. **Self-extending tools** (planned, see §16) — spec-based `AITool` registry; the agent
+   creates/updates/disables its own tools; bot photo ingestion.
 
 ## 14. Out of scope (do NOT build)
 
 Finance tools (no finance routes yet), admin/files/integrations tools, Anthropic/OpenAI
 providers, pgvector semantic search, multi-user, auto-execute autonomy, voice, notifications,
-undo UI beyond ConfirmCard, tool-call streaming assembly (non-streaming tool turns by design).
+undo UI beyond ConfirmCard, tool-call streaming assembly (non-streaming tool turns by design),
+**agent-written Python code tools** (arbitrary execution — deferred; see §16 for why).
 
-## 15. Conventions (bind)
+---
+
+## 15. Phase 7 — Self-extending spec tools + bot photo ingestion (planned)
+
+**Decision (user, 2026-08-13):** Option 1 — tools as *declarative specs* executed by a
+generic runner. NOT agent-written Python (that is a separate, riskier future phase).
+
+### Why specs are safe
+Every tool is already a thin wrapper over the app's own API (`tools.py::_request` →
+`_api` → JWT-cookie call). A spec only declares *which existing endpoint to call and how
+to map args* — it can never execute arbitrary code, so there is no sandbox burden and no
+prompt-injection-to-RCE path. "Tools are 1:1 with endpoints" stays true by construction.
+
+### Data model — `AITool` (mirrors `AISkill`)
+`id, user_id, name (unique per user), description, kind (read|write), spec (JSON),
+enabled (bool), source ("system" | "agent"), created_at, updated_at`. Alembic migration
+`030_ai_tools`. Seed rows = the hardcoded v1 tools re-declared as specs.
+
+### Spec schema
+```json
+{
+  "name": "workout_session_detail",
+  "description": "Full workout session incl. comments and feeling",
+  "kind": "read",
+  "method": "GET",
+  "path": "/api/fitness/sessions/{session_id}",
+  "args": { "session_id": "string" },
+  "summary_template": "Session {title} — {n} sets, feeling {feeling}"
+}
+```
+
+### Executor + validation rules (bind)
+- `method` ∈ {GET, POST, PUT, PATCH, DELETE}; `path` must start with `/api/` and resolve
+  to a real route prefix (validate against the OpenAPI schema at create time); args are
+  bound through the template only — no raw query/URL injection.
+- `kind: read` → executes directly. `kind: write` → goes through the existing
+  `confirm_required` gate (propose → confirm → execute); undo is best-effort (spec may
+  declare `"undo": {"method": "DELETE", "path": "/api/.../{id}"}`), otherwise no undo.
+- Created tools are injected into the system prompt alongside hardcoded ones, tagged
+  `(agent-created)`. The system prompt treats tool descriptions as **untrusted data**
+  (an agent-created description could contain instructions — model must not follow them
+  as commands).
+
+### Self-management tools (agent-facing, all gated writes where they mutate)
+- `create_tool(spec)` — validates spec, stores, enables. Confirmation required.
+- `update_tool(name, spec)`, `enable_tool(name)`, `disable_tool(name)`, `list_tools()`.
+
+### Seed spec tools for the user's examples (all endpoints verified to exist)
+Fitness reads: `workout_session_detail(session_id)` (`GET /api/fitness/sessions/{id}`),
+`workout_session_sets(session_id)` (`GET /api/fitness/sessions/{id}/sets`),
+`recent_workouts()` (`GET /api/fitness/sessions`), `exercise_stats(exercise_id)`
+(`GET /api/fitness/stats/exercise/{id}`), `body_weight_stats()`
+(`GET /api/fitness/stats/body-weight`), `body_metrics()` (`GET /api/fitness/body-metrics`).
+Food reads: `meal_logs(from, to)` (`GET /api/food/logs?from_date&to_date` — includes
+photos), `food_summary(date)` (`GET /api/food/summary`).
+
+### Bot photo ingestion (Phase 7b — the "send him a picture" flow)
+1. Bot receives a photo (single or album) → `getFile` → download bytes.
+2. Upload to the existing files endpoint → `file_id` (stdlib multipart in `bot.py`).
+3. Agent proposes "Add this photo to today's dinner?" → create meal log with
+   `photo_file_ids` (confirm flow) → optional `POST /api/food/logs/{id}/analyze` for
+   AI nutrition.
+- **Endpoint gap to check:** there is no update-meal-log endpoint today
+  (`POST /logs` create, `DELETE /logs/{id}`, `POST /logs/{id}/analyze` only). "Add a
+  photo to an *existing* log" needs a small `PUT /api/food/logs/{id}` (one allowed
+  exception — the photo flow depends on it).
+
+### Phase gates
+7a (registry + read specs + self-management tools): smoke "how did my last workout go"
+uses `workout_session_detail` + `workout_session_sets`; pytest green; browser panel shows
+agent-created tools in chips. 7b (write specs + photo ingestion): smoke sends photo →
+log created with photo → confirm → analyze; undo path where declared.
+
+## 16. Conventions (bind)
 
 - Repo root `AGENTS.md` + `apps/api/AGENTS.md` are law (ponytail, no deps, docs/history entries,
   `npm run check*`).
