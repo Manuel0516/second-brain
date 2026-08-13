@@ -52,7 +52,7 @@ jobs:
           git fetch --quiet origin "$deploy_sha"
           git checkout --detach "$deploy_sha"
           docker compose config --quiet
-          docker compose build api web
+          docker compose build api web bot
           docker compose up -d --remove-orphans
           docker compose ps
           readiness_ok=false
