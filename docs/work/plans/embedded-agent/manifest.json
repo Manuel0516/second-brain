@@ -1,0 +1,29 @@
+{
+  "id": "embedded-agent",
+  "name": "Embedded Agent (Mini-Hermes)",
+  "description": "AI agent embedded in the Second Brain backend: ReAct loop over the app's own REST API as tools, write-confirmation safety, Hermes-style memory + self-improving skills, SSE chat streaming, floating chat UI.",
+  "status": "accepted",
+  "date": "2026-08-13",
+  "source_spec": "docs/product/AI_ASSISTANT_MODULE.md",
+  "stack": {
+    "backend": "FastAPI + SQLAlchemy 2 async + PostgreSQL + Alembic (uv)",
+    "frontend": "React + TypeScript + Vite",
+    "model": "deepseek/deepseek-v4-flash via OpenRouter (httpx, zero new deps)"
+  },
+  "agents": {
+    "backend": "gpt-5.6-sol (openai-codex OAuth)",
+    "frontend": "claude-sonnet-4-6 (anthropic OAuth)"
+  },
+  "phases": [
+    {"id": 1, "name": "Foundation", "detail": "models + migration + routes/ai.py CRUD + settings"},
+    {"id": 2, "name": "Agent core", "detail": "providers, prompts, loop, meta tools, CLI smoke"},
+    {"id": 3, "name": "Read tools + memory/skills", "detail": "all read tools, remember/recall, skills CRUD"},
+    {"id": 4, "name": "Writes + safety", "detail": "write tools, confirm/reject/undo, created_by tagging"},
+    {"id": 5, "name": "Frontend", "detail": "AssistantPanel, SSE hook, ConfirmCard"},
+    {"id": 6, "name": "Polish", "detail": "local provider, autonomy levels, slash commands (later)"}
+  ],
+  "deployment": {
+    "dev": "dev db+minio containers + host uvicorn/vite, 127.0.0.1 only",
+    "prod": "unchanged compose.yaml; promoted on user approval"
+  }
+}
