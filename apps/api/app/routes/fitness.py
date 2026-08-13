@@ -772,8 +772,6 @@ async def body_weight_stats(
     return BodyWeightStats(metrics=metric_list, trend=trend)
 
 
-
-
 # ── Exercise Endpoints ──────────────────────────────────────────────────
 
 

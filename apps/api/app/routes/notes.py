@@ -878,8 +878,6 @@ async def get_backlinks(
     return result
 
 
-
-
 @router.post("/events/{event_id}/note", response_model=PageResponse, status_code=201)
 async def create_event_note(
     event_id: str,

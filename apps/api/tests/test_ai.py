@@ -1,7 +1,7 @@
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
@@ -63,7 +63,7 @@ async def internal_api(client: AsyncClient) -> AsyncIterator[None]:
 async def conversation(client: AsyncClient) -> dict[str, Any]:
     response = await client.post("/api/ai/conversations", json={})
     assert response.status_code == 201
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
 async def test_ai_routes_require_authentication(client: AsyncClient) -> None:
@@ -368,7 +368,7 @@ async def test_get_app_summary_composes_real_endpoint_counts(
     client: AsyncClient, test_user: User
 ) -> None:
     await login(client)
-    result = await tools.execute("get_app_summary", {}, None, test_user.id)  # type: ignore[arg-type]
+    result = await tools.execute("get_app_summary", {}, None, test_user.id)
     assert result["ok"] is True
     assert set(result["data"]) == {
         "pages",
