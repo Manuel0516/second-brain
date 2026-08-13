@@ -125,8 +125,7 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
       SECOND_BRAIN_API_URL: http://api:8000
-      SB_LOGIN_EMAIL: ${INITIAL_USER_EMAIL}
-      SB_LOGIN_PASSWORD: ${INITIAL_USER_PASSWORD}
+      SB_VERIFICATION_BASE: https://brain.zero-five.space
       TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-1110963147}
       SB_BOT_STATE_FILE: /data/state.json
     volumes:

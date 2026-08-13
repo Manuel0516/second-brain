@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { Login } from './pages/Login'
+import { DeviceApprove } from './pages/DeviceApprove'
 import { Calendar } from './pages/Calendar'
 import { SettingsLayout } from './modules/settings/SettingsLayout'
 import { GeneralSettings } from './modules/settings/GeneralSettings'
@@ -70,6 +71,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/device" element={<DeviceApprove />} />
       <Route
         element={
           <ProtectedRoute>

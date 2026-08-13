@@ -785,3 +785,34 @@ class FoodDailyExtras(Base):
         onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
+
+
+class DeviceGrant(Base):
+    """OAuth-style device authorization for machine clients (e.g. the Telegram bot).
+
+    A pending grant carries a human-friendly `user_code` (shown in the web UI)
+    and a hashed `device_code` the client polls with. Once the user approves, a
+    long-lived bearer `bot_token` is minted and delivered once via the status poll.
+    """
+
+    __tablename__ = "device_grants"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_code: Mapped[str] = mapped_column(String(8), unique=True, nullable=False, index=True)
+    device_code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False
+    )  # pending | approved | expired
+    bot_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bot_token_pending: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_delivered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import Cookie, Depends, HTTPException, Request, WebSocket, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, WebSocket, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_async_session
-from app.models import User
+from app.models import DeviceGrant, User
 from app.security import decode_jwt
 
 # In-memory rate limiter: {ip: [timestamp1, timestamp2, ...]}
@@ -44,9 +45,33 @@ def get_client_ip(request: Request) -> str:
 
 async def get_current_user(
     access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     session: AsyncSession = Depends(get_async_session),
 ) -> User:
-    """Extract current user from JWT access token cookie."""
+    """Extract current user from an access-token cookie or a device bearer token."""
+
+    # Machine clients (Telegram bot) authenticate with a device-grant bearer token.
+    if authorization and authorization.lower().startswith("bearer "):
+        from hashlib import sha256
+
+        raw = authorization[7:].strip()
+        token_hash = sha256(raw.encode()).hexdigest()
+        grant_result = await session.execute(
+            select(DeviceGrant).where(
+                DeviceGrant.bot_token_hash == token_hash,
+                DeviceGrant.status == "approved",
+            )
+        )
+        grant = grant_result.scalar_one_or_none()
+        if grant and grant.user_id:
+            user = await session.get(User, grant.user_id)
+            if user and user.is_active:
+                return user
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
     if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,8 +91,6 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
-
-    from sqlalchemy import select
 
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

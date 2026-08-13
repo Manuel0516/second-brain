@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logoAssetFor, readCachedVisualStyle } from '../lib/appearance'
 
 export function Login() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const next = searchParams.get('next') ?? '/calendar'
   const { login, isAuthenticated } = useAuth()
   const [logoSrc] = useState(() => logoAssetFor(readCachedVisualStyle()))
 
@@ -18,8 +20,8 @@ export function Login() {
   const totpInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (isAuthenticated && !success) navigate('/calendar', { replace: true })
-  }, [isAuthenticated, success, navigate])
+    if (isAuthenticated && !success) navigate(next, { replace: true })
+  }, [isAuthenticated, success, navigate, next])
 
   // Credentials live only in this component's state; clear them on unmount so
   // nothing lingers if the user navigates away mid-flow.
@@ -50,7 +52,7 @@ export function Login() {
         setSuccess(true)
         setPassword('')
         setTotp('')
-        setTimeout(() => navigate('/calendar', { replace: true }), 450)
+        setTimeout(() => navigate(next, { replace: true }), 450)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

@@ -435,6 +435,10 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 - `ai_skills` stores user-scoped named markdown procedures; names are unique per user.
 - `ai_actions` records gated writes, original tool-call context, affected entity, undo pre-image,
   and pending/executed/rejected/undone status.
+- `device_grants` implements OAuth-style device authorization for machine clients (the Telegram
+  bot): a hashed `device_code` the client polls with, a human-friendly `user_code` shown on the
+  approval page, and after approval a one-time bearer `bot_token` (delivered once via the status
+  poll, hash stored for authentication). Grants expire after 10 minutes while pending.
 
 ---
 
@@ -464,5 +468,6 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 027 | Ordered multi-photo meal attachments; replaces `meal_logs.photo_file_id` |
 | 028 | `visual_style` (neon/monochrome) on user_settings |
 | c3b8d4b570e2 | Embedded AI conversations, messages, settings, memories, skills, and actions |
+| 029 | `device_grants` — OAuth-style device authorization for the Telegram bot |
 
 Always check `alembic current` before writing a new migration.

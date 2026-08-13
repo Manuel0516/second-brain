@@ -20,6 +20,7 @@ from app.routes import (
     auth,
     calendar,
     databases,
+    device,
     files,
     fitness,
     food,
@@ -83,6 +84,7 @@ app = FastAPI(title="Second Brain API", version="0.1.0", lifespan=lifespan)
 app.include_router(ai.router)
 app.include_router(auth.router)
 app.include_router(calendar.router)
+app.include_router(device.router)
 app.include_router(notes.router)
 app.include_router(databases.router)
 app.include_router(settings.router)

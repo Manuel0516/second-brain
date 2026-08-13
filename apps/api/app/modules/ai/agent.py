@@ -77,6 +77,14 @@ async def run(
                 chunks.append(chunk)
                 yield event("text_delta", content=chunk)
             text = "".join(chunks)
+            # The stream can return zero chunks (provider quirk with repeated
+            # identical requests); the earlier complete() call already holds the
+            # answer in that case — persist and stream that instead of saving an
+            # empty reply.
+            if not text:
+                text = response.get("content") or ""
+                if text:
+                    yield event("text_delta", content=text)
             message = AIMessage(conversation_id=conversation.id, role="assistant", content=text)
             session.add(message)
             await session.commit()
