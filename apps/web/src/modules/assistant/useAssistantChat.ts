@@ -147,14 +147,17 @@ export function useAssistantChat() {
             },
           ])
           break
-        case 'message_done':
-          if (streamTextRef.current) {
+        case 'message_done': {
+          // Capture BEFORE setMessages: the updater runs after this handler
+          // returns, by which time streamTextRef would already be cleared.
+          const doneText = streamTextRef.current
+          if (doneText) {
             setMessages((current) => [
               ...current,
               {
                 id: event.message_id,
                 role: 'assistant',
-                content: streamTextRef.current,
+                content: doneText,
                 created_at: now(),
               },
             ])
@@ -162,6 +165,7 @@ export function useAssistantChat() {
             setStreamingText('')
           }
           break
+        }
         case 'error':
           setError(event.message)
           break

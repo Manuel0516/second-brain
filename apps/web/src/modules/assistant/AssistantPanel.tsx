@@ -123,7 +123,8 @@ export function AssistantPanel() {
   }, [close, open])
 
   useEffect(() => {
-    messagesRef.current?.scrollTo({ top: messagesRef.current.scrollHeight })
+    // jsdom/test environments do not implement Element.scrollTo.
+    messagesRef.current?.scrollTo?.({ top: messagesRef.current.scrollHeight })
   }, [chat.messages, chat.streamingText, chat.pendingConfirmations])
 
   async function submit(event: FormEvent) {

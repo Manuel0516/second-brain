@@ -10,7 +10,7 @@ import os
 
 import httpx
 
-BASE = "http://127.0.0.1:8001"
+BASE = os.environ.get("AI_INTERNAL_API_URL", "http://127.0.0.1:8001")
 
 
 def events(response: httpx.Response) -> list[dict[str, object]]:
