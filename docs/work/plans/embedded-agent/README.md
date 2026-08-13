@@ -230,8 +230,10 @@ errors. `apps/web/src/modules/assistant/AssistantPanel.test.tsx` basic mount tes
 5. **Frontend** — AssistantPanel + useAssistantChat + ConfirmCard. Gate: browser end-to-end.
 6. **Polish** (later, not now) — local provider, autonomy levels, slash commands, skill
    suggestions UI.
-7. **Self-extending tools** (planned, see §16) — spec-based `AITool` registry; the agent
+7. **Self-extending tools** (planned, see §15) — spec-based `AITool` registry; the agent
    creates/updates/disables its own tools; bot photo ingestion.
+8. **Identity & growth** (planned, see §16) — the agent builds a durable model of the
+   user: categorized memory, learning loop (incl. corrections), memory consolidation.
 
 ## 14. Out of scope (do NOT build)
 
@@ -313,7 +315,65 @@ uses `workout_session_detail` + `workout_session_sets`; pytest green; browser pa
 agent-created tools in chips. 7b (write specs + photo ingestion): smoke sends photo →
 log created with photo → confirm → analyze; undo path where declared.
 
-## 16. Conventions (bind)
+---
+
+## 16. Phase 8 — Identity & growth (the agent builds a model of you)
+
+**Goal (user, 2026-08-13):** the agent gets visibly smarter over time and builds a durable
+*identity* about the user — who they are, their goals, habits, and corrections — so answers
+compound in quality with every conversation.
+
+### 16.1 Categorized memory (the identity store)
+Extend `AIMemory` with a `category` column (migration `031_ai_memory_category`):
+`fact` (default; events, states), `profile` (who the user is: role, language, goals,
+routines), `preference` (how they like things: tone, formats, times), `correction`
+(agent mistakes the user corrected). `remember(fact, category)` gains the optional
+category arg (default `fact`). The system prompt renders a dedicated **"About {name}"**
+block: profile + preference + correction entries first (identity), then recent facts —
+so identity always has priority over noise.
+
+### 16.2 The learning loop (agent-driven, every turn)
+1. **Extraction:** after answering, the agent runs a lightweight self-review: durable
+   identity facts → `remember(..., category="profile|preference")`; the user's explicit
+   corrections → `remember(..., category="correction")` (and the agent must visibly
+   acknowledge: "Got it — I'll use that from now on").
+2. **Seeding:** while the profile is thin (< ~5 profile entries), early conversations
+   include at most ONE profile question (fitness goals, diet, sleep schedule…) — never
+   pestering, and it reads existing data first (`get_fitness_goals`, calendar, food
+   logs) so it only asks what it can't infer.
+3. **Gating:** v1 memory/profile writes go through the normal write confirmation (the
+   user sees them as chips: `⌁ remember — category=profile`). The plan's autonomy
+   levels (Polish phase) may later relax this for memory-only writes with a visible
+   "I remembered: …" list.
+4. **Compounding:** the growth loop is *tools × skills × profile*: Phase 7 lets the agent
+   add endpoints it needs, skills capture how, profile captures who — each dimension
+   makes the other two more useful.
+
+### 16.3 Memory consolidation (keep it fresh, not bloated)
+- `consolidate_memory()` tool (gated): summarizes old `fact` entries into the profile
+  (patterns → preferences), dedupes, prunes stale entries (e.g. "event" facts older than
+  their event). Run on a nudge ("review your memory when idle") or a scheduled trigger
+  (bot cron once a week).
+- Visibility: a read-only `profile()` tool renders "What I know about you" (categorized),
+  so the user can see, correct, or clear entries (`forget(category|fact)`).
+
+### 16.4 What "smarter over time" means operationally
+- **Week 1 vs week 20:** the agent knows the workout split, diet style, sleep hours,
+  calendar patterns, and preferred answer formats — answers need fewer tool calls and
+  fewer follow-up questions (measurable: tool-call count per task and correction rate
+  trend down; keep a simple counter in the profile).
+- Corrections never repeat: each correction is stored and injected, so the same mistake
+  is visible in every future system prompt.
+- The user can see growth: `profile()` output + the skill/tool/memory counts shown in
+  the assistant panel footer (polish item, optional).
+
+### 16.5 Phase gates
+Smoke: (1) "remember my protein goal is 150g, category=preference" → confirmed → next
+conversation's system prompt contains it; (2) user corrects the agent → correction stored
+and acknowledged; (3) `profile()` lists the categorized entries; (4) consolidation run
+collapses N fact entries into one preference without losing meaning. pytest green.
+
+## 17. Conventions (bind)
 
 - Repo root `AGENTS.md` + `apps/api/AGENTS.md` are law (ponytail, no deps, docs/history entries,
   `npm run check*`).
