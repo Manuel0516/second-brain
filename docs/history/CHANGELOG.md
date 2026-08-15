@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0240](0240-ci-playwright-browser-install.md)                             | Install Playwright Chromium in CI                                                                      | 2026-08-15 | accepted                   |
 | [0239](0239-web-fetch-click-reliability-fixes.md)                         | web_fetch click reliability: role-preferring targets, waited (not instant) matches                     | 2026-08-15 | accepted                   |
 | [0238](0238-web-fetch-interaction-steps.md)                               | web_fetch gets steps: fill a field, click a result, not just repeated clicks                           | 2026-08-15 | accepted                   |
 | [0237](0237-agent-web-fetch-tool.md)                                      | Agent gets a web_fetch tool, off by default, with a real (but capped) browser mode                     | 2026-08-15 | accepted                   |
