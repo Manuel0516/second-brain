@@ -225,6 +225,9 @@
 .assistant-mobile-back {
   display: none;
 }
+.assistant-mobile-close {
+  display: none;
+}
 .assistant-messages {
   flex: 1;
   min-height: 0;
@@ -653,11 +656,16 @@
 .assistant-composer {
   flex: 0 0 auto;
   display: grid;
+  /* Bound the single column to the panel width so the attach/textarea/send row
+     can shrink on narrow screens instead of overflowing and clipping the send
+     button at the right edge (mobile bug). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 12px 14px 14px;
   border-top: 1px solid var(--border);
 }
 .assistant-composer > div {
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   gap: 8px;
@@ -784,11 +792,20 @@
   .assistant-conversations {
     border-right: 0;
   }
-  .assistant-mobile-back {
+  .assistant-mobile-back,
+  .assistant-mobile-close {
     display: grid;
   }
   .assistant-message {
     max-width: 88%;
+  }
+  /* Snugger composer on phones: slightly smaller width so the send button and
+     attach button both sit fully inside the viewport. */
+  .assistant-composer {
+    padding: 10px 10px 12px;
+  }
+  .assistant-composer > div {
+    gap: 6px;
   }
   .assistant-conversation-delete {
     opacity: 1;

@@ -348,7 +348,6 @@ export function SettingsLayout() {
             className="settings-content"
             style={{
               flex: 1,
-              padding: '24px 28px',
               maxWidth: 760,
               overflow: 'auto',
               minWidth: 0,

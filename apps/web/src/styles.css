@@ -528,6 +528,9 @@ button:not(.calendar-event):active {
 }
 
 /* ── AI assistant settings page ──────────────────────────────────────── */
+.settings-content {
+  padding: 24px 28px;
+}
 .settings-page {
   display: grid;
   gap: 16px;
@@ -734,12 +737,39 @@ button:not(.calendar-event):active {
 }
 
 @media (max-width: 640px) {
+  .settings-content {
+    /* Slimmer side padding so cards use the full phone width. */
+    padding: 16px 14px;
+  }
+  .settings-card {
+    padding: 14px;
+  }
   .settings-number-grid {
     grid-template-columns: 1fr;
   }
   .settings-number-input input {
     min-height: 44px;
     font-size: 16px;
+  }
+  /* Touch-friendly fields + wrapping rows on phones (AI assistant page). */
+  .settings-page .cal-field input:not([type='color']),
+  .ai-skill-card textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .ai-memory-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .ai-capability-row {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+  .ai-action-row {
+    flex-wrap: wrap;
+  }
+  .ai-skill-card-footer {
+    flex-wrap: wrap;
   }
 }
 

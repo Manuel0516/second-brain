@@ -343,6 +343,14 @@ export function AssistantPanel() {
               aria-label="Conversations"
             >
               <header className="assistant-list-header">
+                <button
+                  className="assistant-close assistant-mobile-close"
+                  type="button"
+                  aria-label="Close AI assistant"
+                  onClick={close}
+                >
+                  ×
+                </button>
                 <div>
                   <span>Assistant</span>
                   <h2>Conversations</h2>
