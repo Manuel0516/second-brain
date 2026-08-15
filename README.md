@@ -31,20 +31,21 @@ uv sync --project apps/api --dev
 npm install
 ```
 
-Run the API and web app in separate terminals:
+Start the complete development stack:
 
 ```bash
-npm run dev:api
-npm run dev:web
+./scripts/dev-start.sh
 ```
 
 Open <http://localhost:5173>. Vite proxies `/api` to FastAPI at `localhost:8000`.
 
-With `TELEGRAM_BOT_TOKEN` configured, start the optional local Telegram bridge:
+Stop the complete development stack:
 
 ```bash
-docker compose -f compose.dev.yaml --profile bot up -d --build bot
+./scripts/dev-stop.sh
 ```
+
+The start script also launches the Telegram bridge when `TELEGRAM_BOT_TOKEN` is configured.
 
 ## Quality checks
 

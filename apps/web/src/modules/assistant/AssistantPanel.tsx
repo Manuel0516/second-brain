@@ -35,6 +35,33 @@ function CameraIcon() {
   )
 }
 
+// Same 20x20 stroke-icon convention as the calendar toolbar's chevron/plus
+// icons — the assistant panel previously used raw "‹"/"×"/"+" text glyphs
+// here, the one visibly inconsistent spot against the rest of the app.
+function BackChevronIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="m12 4-6 6 6 6" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M10 3v14M3 10h14" />
+    </svg>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M6 6l8 8M14 6l-8 8" />
+    </svg>
+  )
+}
+
 function relativeTime(value?: string) {
   if (!value) return ''
   const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000)
@@ -63,7 +90,9 @@ function Message({ message }: { message: ChatMessage }) {
       >
         <span aria-hidden="true">{message.ok === false ? '!' : '⌁'}</span>
         <strong>{message.toolName}</strong>
-        <span>— {message.content}</span>
+        <span className="assistant-tool-chip-summary" title={message.content}>
+          — {message.content}
+        </span>
       </div>
     )
   }
@@ -349,7 +378,7 @@ export function AssistantPanel() {
                   aria-label="Close AI assistant"
                   onClick={close}
                 >
-                  ×
+                  <CloseIcon />
                 </button>
                 <div>
                   <span>Assistant</span>
@@ -360,7 +389,7 @@ export function AssistantPanel() {
                   aria-label="Start new conversation"
                   onClick={() => startNewConversation()}
                 >
-                  +
+                  <PlusIcon />
                 </button>
               </header>
               <div className="assistant-conversation-list">
@@ -418,7 +447,7 @@ export function AssistantPanel() {
                   aria-label="Back to conversations"
                   onClick={() => setMobileChatVisible(false)}
                 >
-                  ‹
+                  <BackChevronIcon />
                 </button>
                 <div className="assistant-title-icon">
                   <SparkleIcon />
@@ -434,7 +463,7 @@ export function AssistantPanel() {
                   aria-label="Close AI assistant"
                   onClick={close}
                 >
-                  ×
+                  <CloseIcon />
                 </button>
               </header>
 

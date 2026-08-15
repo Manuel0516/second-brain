@@ -82,6 +82,92 @@ async def test_page_crud_and_ownership(client: AsyncClient, test_db_session: Asy
     ).status_code == 404
 
 
+async def test_append_content_adds_blocks_without_touching_existing_ones(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    """update_page's content field is a full replacement — there's no server-side merge —
+    so /append exists specifically to add blocks safely without the caller reconstructing
+    the whole document (and risking losing existing content by doing that wrong). See
+    history 0237-0241 for the AI-agent-side motivation."""
+    _, owner_token = await _user_and_token(client, test_db_session, "append-owner")
+    _, other_token = await _user_and_token(client, test_db_session, "append-other")
+
+    created = await client.post(
+        "/api/pages",
+        json={"title": "Groceries"},
+        cookies={"access_token": owner_token},
+    )
+    page_id = created.json()["id"]
+    await client.patch(
+        f"/api/pages/{page_id}",
+        json={
+            "content": {
+                "type": "doc",
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Milk"}]}],
+            }
+        },
+        cookies={"access_token": owner_token},
+    )
+
+    appended_end = await client.post(
+        f"/api/pages/{page_id}/append",
+        json={
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Eggs"}]}],
+            "position": "end",
+        },
+        cookies={"access_token": owner_token},
+    )
+    assert appended_end.status_code == 200
+    blocks = appended_end.json()["content"]["content"]
+    assert [b["content"][0]["text"] for b in blocks] == ["Milk", "Eggs"]
+
+    appended_start = await client.post(
+        f"/api/pages/{page_id}/append",
+        json={
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Bread"}]}],
+            "position": "start",
+        },
+        cookies={"access_token": owner_token},
+    )
+    assert appended_start.status_code == 200
+    blocks = appended_start.json()["content"]["content"]
+    assert [b["content"][0]["text"] for b in blocks] == ["Bread", "Milk", "Eggs"]
+
+    denied = await client.post(
+        f"/api/pages/{page_id}/append",
+        json={"content": [{"type": "paragraph"}]},
+        cookies={"access_token": other_token},
+    )
+    assert denied.status_code == 404
+
+    empty = await client.post(
+        f"/api/pages/{page_id}/append",
+        json={"content": []},
+        cookies={"access_token": owner_token},
+    )
+    assert empty.status_code == 422
+
+
+async def test_append_content_on_a_brand_new_empty_page(
+    client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    """A freshly created page's content is {"type": "doc", "content": []} — append must
+    treat that as zero existing blocks, not error on it."""
+    _, owner_token = await _user_and_token(client, test_db_session, "append-fresh")
+    created = await client.post(
+        "/api/pages", json={"title": "New note"}, cookies={"access_token": owner_token}
+    )
+    page_id = created.json()["id"]
+
+    appended = await client.post(
+        f"/api/pages/{page_id}/append",
+        json={"content": [{"type": "paragraph", "content": [{"type": "text", "text": "First"}]}]},
+        cookies={"access_token": owner_token},
+    )
+    assert appended.status_code == 200
+    assert appended.json()["content"]["content"][0]["content"][0]["text"] == "First"
+
+
 async def test_soft_delete_and_restore_children(
     client: AsyncClient, test_db_session: AsyncSession
 ) -> None:

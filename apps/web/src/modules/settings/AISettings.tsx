@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dropdown, type DropdownOption } from '../../components/Dropdown'
 import { Field } from '../../components/Field'
 import { SettingsCard } from '../../components/SettingsCard'
@@ -44,6 +44,13 @@ type Capability = {
 }
 type Action = { id: string; tool: string; status: string; risk: string }
 type Skill = { id: string; name: string; content: string; enabled: boolean }
+type ImportResult = {
+  memories_imported: number
+  memories_already_known: number
+  skills_imported: number
+  tools_imported: number
+  tools_skipped: string[]
+}
 
 export function AISettings() {
   const [config, setConfig] = useState<Config | null>(null)
@@ -52,6 +59,9 @@ export function AISettings() {
   const [actions, setActions] = useState<Action[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [saved, setSaved] = useState('')
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [importError, setImportError] = useState('')
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     void Promise.all([
@@ -132,6 +142,55 @@ export function AISettings() {
       )
   }
 
+  const exportKnowledge = async () => {
+    const response = await fetch('/api/ai/knowledge/export')
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `secondbrain-ai-knowledge-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const importKnowledge = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setImportError('')
+    setImportResult(null)
+    let payload: unknown
+    try {
+      payload = JSON.parse(await file.text())
+    } catch {
+      setImportError('That file is not valid JSON.')
+      return
+    }
+    const response = await fetch('/api/ai/knowledge/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      setImportError(
+        typeof data.detail === 'string' ? data.detail : 'Import failed.',
+      )
+      return
+    }
+    setImportResult((await response.json()) as ImportResult)
+    void Promise.all([
+      fetch('/api/ai/memories').then((r) => r.json()),
+      fetch('/api/ai/skills').then((r) => r.json()),
+    ]).then(([nextMemories, nextSkills]) => {
+      setMemories(nextMemories as Memory[])
+      setSkills(nextSkills as Skill[])
+    })
+  }
+
   return (
     <div className="settings-page">
       <header className="settings-page-header">
@@ -140,19 +199,58 @@ export function AISettings() {
       </header>
 
       <SettingsCard
+        title="Export & import knowledge"
+        description="Memories, skills, and agent-created tools — not settings or conversation history. Use this to move what the agent has learned from one deployment to another (e.g. development to production)."
+      >
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          onChange={(event) => void importKnowledge(event)}
+          hidden
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="settings-card-save"
+            type="button"
+            onClick={() => void exportKnowledge()}
+          >
+            Export
+          </button>
+          <button
+            className="settings-card-save"
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import
+          </button>
+        </div>
+        {importError && (
+          <p className="settings-empty" role="alert">
+            {importError}
+          </p>
+        )}
+        {importResult && (
+          <p className="settings-card-saved">
+            Imported {importResult.memories_imported} memor
+            {importResult.memories_imported === 1 ? 'y' : 'ies'} (
+            {importResult.memories_already_known} already known),{' '}
+            {importResult.skills_imported} skill
+            {importResult.skills_imported === 1 ? '' : 's'},{' '}
+            {importResult.tools_imported} tool
+            {importResult.tools_imported === 1 ? '' : 's'}.
+            {importResult.tools_skipped.length > 0 &&
+              ` Skipped (no matching route on this server): ${importResult.tools_skipped.join(', ')}.`}
+          </p>
+        )}
+      </SettingsCard>
+
+      <SettingsCard
         title="Model & autonomy"
         onSave={() => void save()}
         hasChanges
       >
         <div style={{ display: 'grid', gap: 10 }}>
-          <Field label="Provider">
-            <Dropdown
-              ariaLabel="Provider"
-              value={config.provider}
-              onChange={(provider) => setConfig({ ...config, provider })}
-              options={PROVIDER_OPTIONS}
-            />
-          </Field>
           <Field label="Model">
             <input
               value={config.model_name}
@@ -161,6 +259,26 @@ export function AISettings() {
               }
             />
           </Field>
+          <div className="settings-field-row">
+            <Field label="Provider">
+              <Dropdown
+                ariaLabel="Provider"
+                value={config.provider}
+                onChange={(provider) => setConfig({ ...config, provider })}
+                options={PROVIDER_OPTIONS}
+              />
+            </Field>
+            <Field label="Autonomy">
+              <Dropdown
+                ariaLabel="Autonomy"
+                value={config.autonomy_level}
+                onChange={(autonomy_level) =>
+                  setConfig({ ...config, autonomy_level })
+                }
+                options={AUTONOMY_OPTIONS}
+              />
+            </Field>
+          </div>
           {config.provider === 'local' && (
             <Field label="Local endpoint">
               <input
@@ -175,16 +293,6 @@ export function AISettings() {
               />
             </Field>
           )}
-          <Field label="Autonomy">
-            <Dropdown
-              ariaLabel="Autonomy"
-              value={config.autonomy_level}
-              onChange={(autonomy_level) =>
-                setConfig({ ...config, autonomy_level })
-              }
-              options={AUTONOMY_OPTIONS}
-            />
-          </Field>
           {saved && <span className="settings-card-saved">{saved}</span>}
         </div>
       </SettingsCard>

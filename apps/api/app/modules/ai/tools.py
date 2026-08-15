@@ -162,9 +162,34 @@ TOOLS = [
     ),
     Tool(
         "update_page",
-        "Update a page title and/or Tiptap JSON content.",
+        "Replace a page's title and/or Tiptap JSON content wholesale — content you send "
+        "here REPLACES everything the page currently has. To add a section to a note "
+        "without touching what's already in it (e.g. 'add today's grocery deals to my "
+        "shopping list'), use append_page_content instead — never call get_page yourself "
+        "and try to reconstruct the merged document, that's exactly the failure mode "
+        "append_page_content exists to avoid.",
         {"id": S, "title": S, "content": OBJECT},
         ("id",),
+        True,
+    ),
+    Tool(
+        "append_page_content",
+        "Add Tiptap block(s) to an existing page/note's content — the one existing "
+        "content is left alone, only the new blocks are added, so there's no need to "
+        "read the page first and reconstruct its full content. content is a list of "
+        "Tiptap block nodes (e.g. a heading followed by a bulletList) — NOT a full "
+        '{"type": "doc", ...} wrapper, just the blocks themselves. position: \'end\' '
+        "(default) appends after existing content; 'start' inserts before it — use "
+        "'start' for a running-log/journal-style note where the newest entry should "
+        "read first (e.g. dated grocery-deal check-ins). Prefer a page the user already "
+        "has (search_pages/search_graph first) over creating a new one for a recurring "
+        "note like a shopping list.",
+        {
+            "id": S,
+            "content": {"type": "array", "items": OBJECT, "minItems": 1, "maxItems": 200},
+            "position": {"type": "string", "enum": ["start", "end"]},
+        },
+        ("id", "content"),
         True,
     ),
     Tool(
@@ -459,6 +484,12 @@ def _request(name: str, a: JSON) -> tuple[str, str, JSON | None]:
         return "POST", "/api/pages", {"title": a["title"]}
     if name == "update_page":
         return "PATCH", f"/api/pages/{a['id']}", {k: v for k, v in a.items() if k != "id"}
+    if name == "append_page_content":
+        return (
+            "POST",
+            f"/api/pages/{a['id']}/append",
+            {k: v for k, v in a.items() if k != "id"},
+        )
     if name == "create_event":
         body = {k: v for k, v in a.items() if k not in {"workout_type", "meal_type"}}
         connections: JSON = {}
@@ -839,7 +870,12 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
 
 
 async def preimage(tool: str, args: JSON, session: AsyncSession, user_id: str) -> JSON | None:
-    read_name = {"update_page": "get_page", "update_event": None, "delete_event": None}.get(tool)
+    read_name = {
+        "update_page": "get_page",
+        "append_page_content": "get_page",
+        "update_event": None,
+        "delete_event": None,
+    }.get(tool)
     if tool in {"update_event", "delete_event"}:
         row = await session.get(CalendarEvent, args["id"])
         if row is not None:
@@ -922,7 +958,7 @@ async def undo(
         await session.delete(existing_tool)
         await session.commit()
         return True, None, "Tool deleted"
-    if tool == "update_page" and isinstance(before, dict):
+    if tool in {"update_page", "append_page_content"} and isinstance(before, dict):
         body = {
             key: before[key]
             for key in ("title", "content", "icon", "cover", "parent_page_id")

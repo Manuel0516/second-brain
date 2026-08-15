@@ -15,6 +15,7 @@ build/
 target/
 coverage/
 logs/
+.dev/
 *.tsbuildinfo
 *.log
 *.jsonl

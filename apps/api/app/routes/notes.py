@@ -76,6 +76,11 @@ class PagePatch(BaseModel):
         return value
 
 
+class PageAppendContent(BaseModel):
+    content: list[dict[str, object]] = Field(min_length=1, max_length=200)
+    position: Literal["start", "end"] = "end"
+
+
 class PageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -637,6 +642,42 @@ async def patch_page(
     }
     if live_update:
         await note_connections.send_others(page.id, None, {"type": "page", "page": live_update})
+    return await _page_response(page, user, session)
+
+
+@router.post("/pages/{page_id}/append", response_model=PageResponse)
+async def append_page_content(
+    page_id: str,
+    data: PageAppendContent,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> PageResponse:
+    """Add Tiptap blocks to a page's existing content, server-side — the client sends only
+    the new blocks, not the whole document, so there's no read-merge-write race and no way
+    for a caller (the AI agent especially) to accidentally drop existing content by
+    reconstructing the doc wrong. Existing empty/malformed content is treated as no blocks
+    rather than erroring, since a brand-new page's content is `{"type": "doc", "content":
+    []}` — the common case, not an edge case."""
+    page = await _editable_page(page_id, user, session)
+    existing = page.content.get("content") if isinstance(page.content, dict) else None
+    existing_blocks = list(existing) if isinstance(existing, list) else []
+    merged_blocks = (
+        [*data.content, *existing_blocks]
+        if data.position == "start"
+        else [*existing_blocks, *data.content]
+    )
+    new_content: dict[str, object] = {
+        **(page.content if isinstance(page.content, dict) else {}),
+        "type": "doc",
+        "content": merged_blocks,
+    }
+    await _sync_mentions(page, new_content, user, session)
+    page.content = new_content
+    await session.commit()
+    await session.refresh(page)
+    await note_connections.send_others(
+        page.id, None, {"type": "page", "page": {"content": page.content}}
+    )
     return await _page_response(page, user, session)
 
 

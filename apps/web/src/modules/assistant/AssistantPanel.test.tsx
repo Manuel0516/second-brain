@@ -144,4 +144,52 @@ describe('AssistantPanel', () => {
       expect(screen.getByText('Hello! How can I help?')).toBeInTheDocument(),
     )
   })
+
+  it('truncates a long tool result to one line instead of a scrollable box', async () => {
+    const convId = 'conv-tool-chip'
+    const longSummary =
+      'Meal planning: when asked for meal help, inspect recent food logs, nutrition goals, ' +
+      'preferences, and the calendar. Suggest practical meals that fit the targets and time available.'
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (url.endsWith('/api/ai/conversations') && method === 'GET')
+          return Promise.resolve(jsonResponse([]))
+        if (url.endsWith('/api/ai/conversations') && method === 'POST')
+          return Promise.resolve(
+            jsonResponse({ id: convId, title: 'New conversation' }),
+          )
+        if (url.includes(`/conversations/${convId}/messages`))
+          return Promise.resolve(
+            sseStream([
+              { type: 'conversation', id: convId, title: 'Load a skill' },
+              { type: 'tool_call', name: 'load_skill', args: {} },
+              {
+                type: 'tool_result',
+                name: 'load_skill',
+                ok: true,
+                summary: longSummary,
+              },
+              { type: 'message_done', message_id: 'msg-1' },
+              { type: 'done' },
+            ]),
+          )
+        return Promise.resolve(jsonResponse([]))
+      },
+    )
+
+    render(<AssistantPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open AI assistant' }))
+    await screen.findByRole('dialog', { name: 'AI Assistant' })
+
+    fireEvent.change(screen.getByLabelText('Message the assistant'), {
+      target: { value: 'Load a skill' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    const summary = await screen.findByTitle(longSummary)
+    expect(summary.className).toContain('assistant-tool-chip-summary')
+    expect(summary.textContent).toContain(longSummary)
+  })
 })

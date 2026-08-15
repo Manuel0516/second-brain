@@ -501,6 +501,14 @@ button:not(.calendar-event):active {
   display: grid;
   gap: 10px;
 }
+/* Groups two short-value fields (e.g. Provider + Autonomy) so they can sit
+   side by side on phones instead of each taking a full-width row — see the
+   max-width: 640px override below. Single column (stacked) otherwise,
+   matching how these fields already render today on desktop. */
+.settings-field-row {
+  display: grid;
+  gap: 10px;
+}
 .settings-card-actions {
   display: flex;
   justify-content: flex-end;
@@ -652,7 +660,12 @@ button:not(.calendar-event):active {
   background: var(--bg-base);
 }
 .ai-skill-card .cal-field input {
-  font-weight: 600;
+  /* Reads as an identifier next to the monospace content below it, not
+     bold prose — bold at the 16px touch-zoom-prevention size (forced on
+     phones/touch devices, see the pointer:coarse and max-width:640px
+     rules) looked heavy/oversized relative to the rest of the card. */
+  font-family: var(--font-mono);
+  font-weight: 500;
 }
 .ai-skill-card textarea {
   min-height: 140px;
@@ -752,9 +765,15 @@ button:not(.calendar-event):active {
     font-size: 16px;
   }
   /* Touch-friendly fields + wrapping rows on phones (AI assistant page). */
-  .settings-page .cal-field input:not([type='color']),
-  .ai-skill-card textarea {
+  .settings-page .cal-field input:not([type='color']) {
     min-height: 44px;
+    font-size: 16px;
+  }
+  /* The shared 44px touch minimum would SHRINK this textarea below its
+     140px desktop height (same property, later rule wins) — give it its
+     own, taller mobile height instead of inheriting the input minimum. */
+  .ai-skill-card textarea {
+    min-height: 160px;
     font-size: 16px;
   }
   .ai-memory-row {
@@ -770,6 +789,17 @@ button:not(.calendar-event):active {
   }
   .ai-skill-card-footer {
     flex-wrap: wrap;
+  }
+  /* Buttons that stay compact on desktop (34px) meet the 44px touch
+     minimum on phones — Save/Reindex/Export/Import on this page. */
+  .settings-card-save {
+    min-height: 44px;
+  }
+  /* Short-value dropdowns (Provider/Autonomy) side by side instead of
+     each claiming a full-width row — the single biggest source of
+     unnecessary scrolling on this page. */
+  .settings-field-row {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

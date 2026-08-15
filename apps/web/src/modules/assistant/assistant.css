@@ -71,6 +71,11 @@
 .assistant-list-header {
   justify-content: space-between;
 }
+.assistant-list-header > div {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
 .assistant-list-header span,
 .assistant-composer label,
 .assistant-confirm-label {
@@ -100,8 +105,18 @@
   border-radius: var(--r-md);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 20px;
   cursor: pointer;
+}
+.assistant-list-header button svg,
+.assistant-close svg,
+.assistant-mobile-back svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .assistant-list-header button:hover,
 .assistant-close:hover,
@@ -217,10 +232,17 @@
 }
 .assistant-chat-header > div:nth-child(3) {
   flex: 1;
+  display: grid;
+  gap: 1px;
+}
+.assistant-chat-header > div:nth-child(3) h2 {
+  margin: 0;
+  line-height: 1.2;
 }
 .assistant-chat-header span {
   color: var(--text-tertiary);
   font: 10px var(--font-mono);
+  line-height: 1.2;
 }
 .assistant-mobile-back {
   display: none;
@@ -451,9 +473,8 @@
 .assistant-tool-chip {
   align-self: flex-start;
   max-width: 90%;
-  max-height: 88px;
-  overflow: auto;
   display: flex;
+  align-items: center;
   gap: 5px;
   padding: 4px 8px;
   border: 1px solid var(--border);
@@ -461,11 +482,18 @@
   background: var(--bg-base);
   color: var(--text-tertiary);
   font: 10.5px var(--font-mono);
-  scrollbar-width: thin;
 }
 .assistant-tool-chip strong {
+  flex: 0 0 auto;
   color: var(--text-secondary);
   font-weight: 600;
+}
+.assistant-tool-chip-summary {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
 }
 .assistant-tool-chip.failed {
   border-color: var(--border-strong);

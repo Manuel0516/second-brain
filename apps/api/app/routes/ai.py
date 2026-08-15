@@ -1,6 +1,6 @@
 import ipaddress
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -113,6 +113,48 @@ class SkillPatch(BaseModel):
 
 class FeedbackPatch(BaseModel):
     feedback: Literal["up", "down"] | None
+
+
+class MemoryExport(BaseModel):
+    fact: str
+    category: str
+
+
+class SkillExport(BaseModel):
+    name: str
+    content: str
+    enabled: bool = True
+
+
+class ToolExport(BaseModel):
+    name: str
+    description: str
+    kind: str
+    spec: dict[str, object]
+    enabled: bool = True
+    source: str = "agent"
+
+
+class KnowledgeExport(BaseModel):
+    version: int = 1
+    exported_at: datetime
+    memories: list[MemoryExport]
+    skills: list[SkillExport]
+    tools: list[ToolExport]
+
+
+class KnowledgeImport(BaseModel):
+    memories: list[MemoryExport] = Field(default_factory=list)
+    skills: list[SkillExport] = Field(default_factory=list)
+    tools: list[ToolExport] = Field(default_factory=list)
+
+
+class KnowledgeImportResult(BaseModel):
+    memories_imported: int
+    memories_already_known: int
+    skills_imported: int
+    tools_imported: int
+    tools_skipped: list[str]
 
 
 async def owned_conversation(
@@ -322,6 +364,115 @@ async def skill_patch(
         row.enabled = payload.enabled
     await session.commit()
     return {"id": row.id, "name": row.name, "content": row.content, "enabled": row.enabled}
+
+
+@router.get("/knowledge/export", response_model=KnowledgeExport)
+async def knowledge_export(
+    user: User = Depends(get_current_user), session: AsyncSession = Depends(get_async_session)
+) -> KnowledgeExport:
+    """Everything the agent has learned for this user — memories, skills, agent-created/
+    enabled tools. Deliberately excludes AISettings (provider/model/API config — environment-
+    specific, not knowledge) and conversation history (not knowledge, and large/private)."""
+    memories = (
+        await session.execute(select(AIMemory).where(AIMemory.user_id == user.id))
+    ).scalars()
+    skills = (await session.execute(select(AISkill).where(AISkill.user_id == user.id))).scalars()
+    tool_rows = (await session.execute(select(AITool).where(AITool.user_id == user.id))).scalars()
+    return KnowledgeExport(
+        exported_at=datetime.now(UTC),
+        memories=[MemoryExport(fact=m.fact, category=m.category) for m in memories],
+        skills=[SkillExport(name=s.name, content=s.content, enabled=s.enabled) for s in skills],
+        tools=[
+            ToolExport(
+                name=t.name,
+                description=t.description,
+                kind=t.kind,
+                spec=t.spec,
+                enabled=t.enabled,
+                source=t.source,
+            )
+            for t in tool_rows
+        ],
+    )
+
+
+@router.post("/knowledge/import", response_model=KnowledgeImportResult)
+async def knowledge_import(
+    data: KnowledgeImport,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> KnowledgeImportResult:
+    """Import a previous export — e.g. moving what the agent learned in dev over to
+    production. Memories/skills reuse the same remember()/save_skill() paths the agent's own
+    tools use, so dedup and update-on-name-match behave identically to normal agent writes.
+    Tool specs are re-validated against this instance's own routes/capability catalog before
+    being stored — a spec that was valid where it was exported doesn't get a free pass here,
+    since it must resolve to a real route on whichever app version is actually running."""
+    from app.modules.ai import capabilities, spec_tools
+
+    memories_imported = 0
+    memories_already_known = 0
+    for mem in data.memories:
+        result = await memory.remember(session, user.id, mem.fact, mem.category)
+        if result == "Already remembered.":
+            memories_already_known += 1
+        else:
+            memories_imported += 1
+
+    for skill in data.skills:
+        await memory.save_skill(session, user.id, skill.name, skill.content)
+        if not skill.enabled:
+            row = await session.scalar(
+                select(AISkill).where(AISkill.user_id == user.id, AISkill.name == skill.name)
+            )
+            if row is not None:
+                row.enabled = False
+    if data.skills:
+        await session.commit()
+
+    tools_skipped: list[str] = []
+    tools_imported = 0
+    for tool_item in data.tools:
+        if tool_item.source == "openapi":
+            capability_id = tool_item.spec.get("capability_id")
+            valid = isinstance(capability_id, str) and capabilities.find(capability_id) is not None
+        else:
+            valid = spec_tools.validate_spec(tool_item.spec) is None
+        if not valid:
+            tools_skipped.append(tool_item.name)
+            continue
+        existing = await session.scalar(
+            select(AITool).where(AITool.user_id == user.id, AITool.name == tool_item.name)
+        )
+        if existing is not None:
+            existing.description = tool_item.description
+            existing.kind = tool_item.kind
+            existing.spec = tool_item.spec
+            existing.enabled = tool_item.enabled
+            existing.source = tool_item.source
+        else:
+            session.add(
+                AITool(
+                    user_id=user.id,
+                    name=tool_item.name,
+                    description=tool_item.description,
+                    kind=tool_item.kind,
+                    spec=tool_item.spec,
+                    enabled=tool_item.enabled,
+                    source=tool_item.source,
+                )
+            )
+        tools_imported += 1
+    if data.tools:
+        await session.commit()
+
+    return KnowledgeImportResult(
+        memories_imported=memories_imported,
+        memories_already_known=memories_already_known,
+        skills_imported=len(data.skills),
+        tools_imported=tools_imported,
+        tools_skipped=tools_skipped,
+    )
 
 
 @router.get("/actions", response_model=list[dict[str, object]])

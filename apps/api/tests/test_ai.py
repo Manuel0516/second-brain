@@ -2,6 +2,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -25,6 +26,7 @@ from app.models import (
 )
 from app.modules.ai import agent, capabilities, prompts, tools
 from app.modules.ai import search as graph_search
+from app.security import hash_password
 
 pytestmark = pytest.mark.anyio
 
@@ -580,6 +582,141 @@ async def test_starter_skills_can_be_edited_and_disabled(
     assert loaded["ok"] is False
 
 
+async def test_knowledge_export_includes_memories_skills_and_tools(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    await login(client)
+    await tools.execute(
+        "remember", {"fact": "uses kg", "category": "preference"}, test_db_session, test_user.id
+    )
+    await tools.execute(
+        "save_skill",
+        {"name": "custom-skill", "content": "# Do the thing"},
+        test_db_session,
+        test_user.id,
+    )
+
+    response = await client.get("/api/ai/knowledge/export")
+    assert response.status_code == 200
+    body = response.json()
+    assert {"fact": "uses kg", "category": "preference"} in body["memories"]
+    assert any(
+        s["name"] == "custom-skill" and s["content"] == "# Do the thing" for s in body["skills"]
+    )
+    assert "exported_at" in body and body["version"] == 1
+
+
+async def test_knowledge_import_dedupes_memories_and_upserts_skills(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    await login(client)
+    payload = {
+        "memories": [{"fact": "prefers metric units", "category": "preference"}],
+        "skills": [{"name": "grocery-check", "content": "# Check offers", "enabled": True}],
+        "tools": [],
+    }
+    first = await client.post("/api/ai/knowledge/import", json=payload)
+    assert first.status_code == 200
+    assert first.json() == {
+        "memories_imported": 1,
+        "memories_already_known": 0,
+        "skills_imported": 1,
+        "tools_imported": 0,
+        "tools_skipped": [],
+    }
+
+    second = await client.post("/api/ai/knowledge/import", json=payload)
+    assert second.json()["memories_imported"] == 0
+    assert second.json()["memories_already_known"] == 1
+
+    updated_payload = {
+        "memories": [],
+        "skills": [
+            {"name": "grocery-check", "content": "# Check offers, updated", "enabled": False}
+        ],
+        "tools": [],
+    }
+    await client.post("/api/ai/knowledge/import", json=updated_payload)
+    skills = (await client.get("/api/ai/skills")).json()
+    row = next(s for s in skills if s["name"] == "grocery-check")
+    assert row["content"] == "# Check offers, updated"
+    assert row["enabled"] is False
+
+
+async def test_knowledge_import_skips_a_tool_spec_with_no_matching_route(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    await login(client)
+    payload = {
+        "memories": [],
+        "skills": [],
+        "tools": [
+            {
+                "name": "broken-tool",
+                "description": "Points nowhere",
+                "kind": "read",
+                "spec": {"method": "GET", "path": "/api/does-not-exist", "args": {}},
+                "enabled": True,
+                "source": "agent",
+            }
+        ],
+    }
+    response = await client.post("/api/ai/knowledge/import", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tools_imported"] == 0
+    assert body["tools_skipped"] == ["broken-tool"]
+    imported = await test_db_session.scalar(
+        select(AITool).where(AITool.user_id == test_user.id, AITool.name == "broken-tool")
+    )
+    assert imported is None
+
+
+async def test_knowledge_export_then_import_lands_in_the_importing_users_account(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """The whole point: export from one account/deployment (e.g. dev), import into another
+    (e.g. production) — proves the exported payload is self-contained and doesn't carry any
+    dev-account-specific ids that would make it only importable back into the same account."""
+    await login(client)
+    await tools.execute(
+        "remember",
+        {"fact": "shops at Willys Lund", "category": "profile"},
+        test_db_session,
+        test_user.id,
+    )
+    exported = (await client.get("/api/ai/knowledge/export")).json()
+
+    other = User(
+        id=str(uuid4()),
+        username="prod-account",
+        email="prod@example.com",
+        password_hash=hash_password("testpassword123"),
+        is_active=True,
+    )
+    test_db_session.add(other)
+    await test_db_session.commit()
+    other_login = await client.post(
+        "/api/auth/login", json={"email": other.email, "password": "testpassword123"}
+    )
+    assert other_login.status_code == 200
+
+    imported = await client.post(
+        "/api/ai/knowledge/import",
+        json={"memories": exported["memories"], "skills": [], "tools": []},
+    )
+    assert imported.json()["memories_imported"] >= 1
+
+    other_memories = await test_db_session.scalars(
+        select(AIMemory.fact).where(AIMemory.user_id == other.id)
+    )
+    assert "shops at Willys Lund" in list(other_memories)
+    original_memories = await test_db_session.scalars(
+        select(AIMemory.fact).where(AIMemory.user_id == test_user.id)
+    )
+    assert "shops at Willys Lund" in list(original_memories)
+
+
 async def test_get_app_summary_composes_real_endpoint_counts(
     client: AsyncClient, test_user: User
 ) -> None:
@@ -765,9 +902,126 @@ async def test_create_event_note_creates_and_links_a_page(
     assert link is not None
 
 
+async def test_get_page_then_update_page_prepends_without_losing_existing_content(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """update_page's `content` is a full replacement, not a patch — there's no server-side
+    merge. So a 'find my note and add a new section without deleting what's there' request
+    only works if the agent follows get_page -> merge -> update_page itself. Proves that
+    round trip actually preserves existing content when done this way (the pattern advised
+    for the recurring Willys-offers-into-shopping-list prompt, see history 0237-0239)."""
+    await login(client)
+    original = {
+        "type": "doc",
+        "content": [
+            {
+                "type": "heading",
+                "attrs": {"level": 1},
+                "content": [{"type": "text", "text": "Groceries"}],
+            },
+            {
+                "type": "bulletList",
+                "content": [
+                    {
+                        "type": "listItem",
+                        "content": [
+                            {"type": "paragraph", "content": [{"type": "text", "text": "Milk"}]}
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+    created = await tools.execute(
+        "create_page", {"title": "Groceries", "content": original}, test_db_session, test_user.id
+    )
+    assert created["ok"] is True
+    page_id = created["data"]["id"]
+
+    fetched = await tools.execute("get_page", {"id": page_id}, test_db_session, test_user.id)
+    assert fetched["ok"] is True
+    existing_blocks = fetched["data"]["content"]["content"]
+
+    new_section = [
+        {
+            "type": "heading",
+            "attrs": {"level": 2},
+            "content": [{"type": "text", "text": "Willys offers — 2026-08-15"}],
+        },
+        {
+            "type": "bulletList",
+            "content": [
+                {
+                    "type": "listItem",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"type": "text", "text": "Blueberries 19.90 kr"}],
+                        }
+                    ],
+                }
+            ],
+        },
+    ]
+    merged = {"type": "doc", "content": [*new_section, *existing_blocks]}
+    updated = await tools.execute(
+        "update_page", {"id": page_id, "content": merged}, test_db_session, test_user.id
+    )
+    assert updated["ok"] is True
+
+    refetched = await tools.execute("get_page", {"id": page_id}, test_db_session, test_user.id)
+    text = json.dumps(refetched["data"]["content"])
+    assert "Milk" in text, "original content was lost by the merge"
+    assert "Willys offers" in text and "Blueberries 19.90 kr" in text
+
+
+async def test_append_page_content_tool_adds_blocks_and_can_be_undone(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """append_page_content is the tool the agent should reach for instead of the
+    get_page->merge->update_page dance above — it needs no pre-image reconstruction and
+    still supports undo, restoring the page's prior content (see history 0243)."""
+    await login(client)
+    created = await tools.execute(
+        "create_page",
+        {"title": "Groceries", "content": {"type": "doc", "content": []}},
+        test_db_session,
+        test_user.id,
+    )
+    page_id = created["data"]["id"]
+
+    before = await tools.preimage(
+        "append_page_content", {"id": page_id}, test_db_session, test_user.id
+    )
+    result = await tools.execute(
+        "append_page_content",
+        {
+            "id": page_id,
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Milk"}]}],
+            "position": "start",
+        },
+        test_db_session,
+        test_user.id,
+    )
+    assert result["ok"] is True
+    assert result["data"]["content"]["content"][0]["content"][0]["text"] == "Milk"
+
+    ok, _, summary = await tools.undo(
+        "append_page_content",
+        {"before": before, "result": result["data"]},
+        test_user.id,
+        test_db_session,
+    )
+    assert ok is True, summary
+    restored = await tools.execute("get_page", {"id": page_id}, test_db_session, test_user.id)
+    assert restored["data"]["content"]["content"] == []
+
+
 async def test_tool_schemas_match_content_and_route_requirements() -> None:
     schemas = {item["function"]["name"]: item["function"]["parameters"] for item in tools.schemas()}
     assert schemas["create_page"]["properties"]["content"]["type"] == "object"
+    assert schemas["append_page_content"]["required"] == ["id", "content"]
+    assert schemas["append_page_content"]["properties"]["content"]["type"] == "array"
     assert schemas["create_event"]["required"] == ["calendar_id", "title", "start_at", "end_at"]
     assert set(schemas["create_event"]["properties"]) >= {
         "icon",
