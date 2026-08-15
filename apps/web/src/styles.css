@@ -578,6 +578,15 @@ button:not(.calendar-event):active {
   line-height: 1.5;
 }
 
+.ai-memory-row-fact {
+  flex: 1;
+}
+
+.ai-memory-row-delete {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .ai-capability-row {
   display: flex;
   align-items: center;

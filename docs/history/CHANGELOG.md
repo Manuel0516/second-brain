@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0247](0247-calendar-conventions-skill-and-update-safe-deploy-docs.md)    | Calendar color/caching conventions skill + update-safe deploy docs                                      | 2026-08-15 | accepted                   |
+| [0246](0246-detached-agent-turns-and-telegram-bot-fixes.md)               | Detached agent turns (survive client disconnect) + Telegram bot reliability fixes                       | 2026-08-15 | accepted                   |
 | [0245](0245-mobile-ux-settings-and-assistant.md)                          | Mobile UX pass: AI settings responsiveness + assistant panel polish                                     | 2026-08-15 | accepted                   |
 | [0244](0244-agent-knowledge-export-import.md)                             | Export/import the agent's learned knowledge between deployments                                        | 2026-08-15 | accepted                   |
 | [0243](0243-append-page-content-endpoint.md)                              | A real append-only note endpoint, replacing the get-merge-update dance                                 | 2026-08-15 | accepted                   |

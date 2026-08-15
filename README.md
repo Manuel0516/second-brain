@@ -62,7 +62,18 @@ The base Compose file is production-safe: only the nginx web container joins the
 ```bash
 docker compose config
 docker compose build web api
+docker compose up -d
 ```
+
+`up -d` only recreates the containers whose image changed (`web`, `api`) — it never
+touches `db`, `minio`, or their volumes. Migrations run automatically on `api` startup
+(`entrypoint.sh`, additive only — never drops data) and starter agent skills are
+re-seeded by name, so an existing skill you've edited or a memory the agent has learned
+is never overwritten by an update. **Never run `docker compose down -v` or `docker
+compose down --volumes`** on this deployment — that deletes the named volumes
+(`postgres-data`, `minio-data`, `bot-data`) and everything in them, including all AI
+memories/skills/conversations. A plain `docker compose down` (no `-v`) followed by
+`up -d` is safe and preserves everything.
 
 ## Project navigation
 

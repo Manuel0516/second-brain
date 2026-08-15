@@ -1,6 +1,6 @@
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
@@ -24,7 +24,7 @@ from app.models import (
     User,
     WorkoutSession,
 )
-from app.modules.ai import agent, capabilities, prompts, tools
+from app.modules.ai import agent, capabilities, memory, prompts, tools
 from app.modules.ai import search as graph_search
 from app.security import hash_password
 
@@ -547,6 +547,35 @@ async def test_system_prompt_pins_reply_language_to_latest_message(
     assert prompt.index("Always reply in the same language") < prompt.index("Recent facts:")
 
 
+async def test_facts_show_age_and_nudge_proactive_consolidation_once_stale(
+    test_user: User, test_db_session: AsyncSession
+) -> None:
+    """User ask: memory should get 'summarized after a certain time... kept clean' —
+    rather than a silent background job silently rewriting memory (the product's own
+    safety model says AI changes must stay visible/confirmable), the prompt nudges the
+    agent to run the existing (write-confirmed) memory-consolidation skill itself once
+    enough facts have gone stale."""
+    old = datetime.now(UTC) - timedelta(days=20)
+    test_db_session.add_all(
+        [
+            AIMemory(user_id=test_user.id, fact=f"stale fact {i}", category="fact", created_at=old)
+            for i in range(prompts._STALE_FACT_THRESHOLD - 1)
+        ]
+    )
+    await test_db_session.commit()
+    prompt = await prompts.build_system_prompt(test_db_session, test_user.id)
+    assert "20d ago" in prompt
+    assert "Memory cleanup" not in prompt  # below the threshold yet
+
+    test_db_session.add(
+        AIMemory(user_id=test_user.id, fact="one more stale fact", category="fact", created_at=old)
+    )
+    await test_db_session.commit()
+    prompt = await prompts.build_system_prompt(test_db_session, test_user.id)
+    assert "Memory cleanup" in prompt
+    assert "memory-consolidation" in prompt
+
+
 async def test_starter_skills_can_be_edited_and_disabled(
     client: AsyncClient, test_user: User, test_db_session: AsyncSession
 ) -> None:
@@ -561,6 +590,7 @@ async def test_starter_skills_can_be_edited_and_disabled(
         "workout-coach",
         "spending-review",
         "capture-and-organize",
+        "calendar-conventions",
     }
 
     target = next(row for row in skills if row["name"] == "plan-my-day")
@@ -580,6 +610,45 @@ async def test_starter_skills_can_be_edited_and_disabled(
         "load_skill", {"name": "plan-my-day"}, test_db_session, test_user.id
     )
     assert loaded["ok"] is False
+
+
+async def test_calendar_conventions_skill_encodes_color_rule(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """gym=blue / food=green is a real user preference (see docs/history/0246 follow-up) —
+    seeded as a starter skill rather than a system-prompt hardcode so it lives in the same
+    editable, update-safe store as every other preference."""
+    await login(client)
+    await client.get("/api/ai/skills")
+    loaded = await tools.execute(
+        "load_skill", {"name": "calendar-conventions"}, test_db_session, test_user.id
+    )
+    assert loaded["ok"] is True
+    assert "blue" in loaded["data"]
+    assert "green" in loaded["data"]
+    assert "list_calendars" in loaded["data"]
+
+
+async def test_updating_agent_never_overwrites_existing_skill_or_memory(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """The user's worry: 'when I update the agent I don't want to lose the saved
+    preferences.' ensure_starter_skills only adds skills missing by name — simulate a
+    redeploy (calling it again, as every request does) and confirm an edited starter
+    skill and a user-added memory both survive untouched."""
+    await login(client)
+    await client.get("/api/ai/skills")  # seeds starter skills the first time
+
+    listed = (await client.get("/api/ai/skills")).json()
+    target = next(row for row in listed if row["name"] == "calendar-conventions")
+    await client.patch(f"/api/ai/skills/{target['id']}", json={"content": "# My own version"})
+    await memory.remember(test_db_session, test_user.id, "I go to the gym on Mondays", "fact")
+
+    await memory.ensure_starter_skills(test_db_session, test_user.id)  # simulated redeploy
+
+    refreshed = {row["name"]: row for row in (await client.get("/api/ai/skills")).json()}
+    assert refreshed["calendar-conventions"]["content"] == "# My own version"
+    assert "I go to the gym on Mondays" in await memory.recall(test_db_session, test_user.id)
 
 
 async def test_knowledge_export_includes_memories_skills_and_tools(

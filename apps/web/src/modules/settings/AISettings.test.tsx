@@ -18,6 +18,7 @@ function mockFetch(
   overrides: {
     importResponse?: unknown
     importOk?: boolean
+    memories?: unknown[]
   } = {},
 ) {
   const calls: Array<{ url: string; init?: RequestInit }> = []
@@ -25,7 +26,8 @@ function mockFetch(
     const u = String(url)
     calls.push({ url: u, init })
     if (u === '/api/ai/settings') return { ok: true, json: async () => CONFIG }
-    if (u === '/api/ai/memories') return { ok: true, json: async () => [] }
+    if (u === '/api/ai/memories')
+      return { ok: true, json: async () => overrides.memories ?? [] }
     if (u === '/api/ai/capabilities') return { ok: true, json: async () => [] }
     if (u === '/api/ai/actions') return { ok: true, json: async () => [] }
     if (u === '/api/ai/skills') return { ok: true, json: async () => [] }
@@ -105,6 +107,28 @@ test('importing invalid JSON shows an error instead of calling the API', async (
     '/api/ai/knowledge/import',
     expect.anything(),
   )
+})
+
+test('forgetting a memory deletes it and removes it from the list', async () => {
+  const { fn, calls } = mockFetch({
+    memories: [
+      { id: 'mem-1', fact: 'Gym calendar is blue', category: 'preference' },
+    ],
+  })
+  vi.stubGlobal('fetch', fn)
+  render(<AISettings />)
+
+  await screen.findByText('Gym calendar is blue')
+  fireEvent.click(screen.getByRole('button', { name: /Forget/ }))
+
+  await waitFor(() =>
+    expect(screen.queryByText('Gym calendar is blue')).toBeNull(),
+  )
+  expect(
+    calls.some(
+      (c) => c.url === '/api/ai/memories/mem-1' && c.init?.method === 'DELETE',
+    ),
+  ).toBe(true)
 })
 
 test('export button fetches the export endpoint', async () => {

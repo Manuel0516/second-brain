@@ -69,6 +69,23 @@ When the user gives unstructured thoughts, extract decisions, tasks, dates, and 
 material. Reuse existing pages when appropriate, suggest links to related entities, and show
 the proposed structure before making broad or destructive changes.
 """,
+    "calendar-conventions": """# Calendar conventions
+
+Resolve calendar ids and colors via list_calendars ONCE per conversation — check recent
+facts (already in this prompt) first, since a prior conversation may have already cached
+them. Never call list_calendars again just to re-check something already remembered.
+
+Color rule: gym/workout events always go on the calendar colored blue; food/meal events
+always go on the calendar colored green. Match by each calendar's actual `color` from
+list_calendars, not by name alone (a calendar named "Fitness" is not necessarily blue).
+
+The first time you resolve these in a conversation, cache them for every future
+conversation, e.g.:
+remember(fact="Gym calendar: <id> (<hex>, blue)", category="fact")
+remember(fact="Food calendar: <id> (<hex>, green)", category="fact")
+If no calendar clearly matches, ask once, then remember the answer — never guess a
+calendar_id or assume a color.
+""",
 }
 
 

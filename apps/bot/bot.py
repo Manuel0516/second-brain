@@ -26,6 +26,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import UTC, datetime
 
 API_BASE = os.environ.get("SECOND_BRAIN_API_URL", "http://127.0.0.1:8000")
 VERIFICATION_BASE = os.environ.get("SB_VERIFICATION_BASE", "https://brain.zero-five.space")
@@ -76,13 +77,16 @@ def clear_auth(chat_id: int) -> None:
 # --- telegram api (stdlib urllib) ---------------------------------------------
 
 
-def tg_call(method: str, timeout: int = 60, **params) -> dict:
+def tg_call(method: str, sock_timeout: int = 60, **params) -> dict:
+    # `sock_timeout` (the local socket read timeout) is deliberately its own name —
+    # Telegram's own `timeout` parameter (long-poll wait, in getUpdates) must be free
+    # to pass through **params into the request body without being shadowed by it.
     req = urllib.request.Request(
         f"{TG}/{method}",
         data=json.dumps(params).encode() if params else None,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
         return json.loads(resp.read())
 
 
@@ -124,7 +128,7 @@ def split_text(text: str) -> list[str]:
 
 def tg_typing(chat_id: int) -> None:
     try:
-        tg_call("sendChatAction", chat_id=chat_id, action="typing", timeout=10)
+        tg_call("sendChatAction", sock_timeout=10, chat_id=chat_id, action="typing")
     except Exception:  # noqa: BLE001
         pass
 
@@ -294,7 +298,14 @@ def handle_message(chat_id: int, text: str) -> None:
         return
 
     conv_id = sb_conv_for(chat_id)
-    deliver_events(chat_id, conv_id, sb_agent_events(chat_id, conv_id, text))
+    since = datetime.now(UTC)
+    try:
+        deliver_events(chat_id, conv_id, sb_agent_events(chat_id, conv_id, text))
+    except urllib.error.HTTPError:
+        raise
+    except Exception:  # noqa: BLE001
+        log.exception("stream interrupted for conversation %s", conv_id)
+        recover_reply(chat_id, conv_id, entry["token"], since)
 
 
 def confirmation_markup(action_id: str) -> dict:
@@ -351,6 +362,49 @@ def deliver_events(chat_id: int, conv_id: str, events) -> None:
         tg_send(chat_id, strip_markdown("\n".join(results)), markdown=False)
 
 
+def recover_reply(chat_id: int, conv_id: str, token: str, since: datetime) -> None:
+    """The live SSE connection broke mid-turn (timeout, dropped connection) — but the
+    agent turn keeps running server-side and commits its result regardless (see
+    agent.run_detached in the API). Poll briefly for that result to land instead of
+    leaving the user with silence."""
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        time.sleep(3)
+        try:
+            status, conv = api_json("GET", f"/api/ai/conversations/{conv_id}", token=token)
+        except Exception:  # noqa: BLE001
+            continue
+        if status != 200:
+            continue
+        pending = conv.get("pending_actions") or []
+        if pending:
+            for action in pending:
+                summary = preview_summary(action.get("tool", ""), action.get("preview") or {})
+                tg_send(
+                    chat_id,
+                    f"*Proposed change:* {summary}\n\nApprove or reject?",
+                    reply_markup=confirmation_markup(action["action_id"]),
+                )
+            return
+        messages = conv.get("messages") or []
+        last = messages[-1] if messages else None
+        if last and last.get("role") == "assistant":
+            created = (last.get("created_at") or "").replace("Z", "+00:00")
+            try:
+                is_new = created and datetime.fromisoformat(created) > since
+            except ValueError:
+                is_new = False
+            if is_new:
+                if last.get("content"):
+                    tg_send(chat_id, strip_markdown(last["content"]), markdown=False)
+                return
+    tg_send(
+        chat_id,
+        "⚠️ Lost the connection while working on that. It may still finish in the "
+        "background — ask again in a moment if you don't hear back.",
+    )
+
+
 def handle_photo(chat_id: int, sizes: list[dict], caption: str) -> None:
     if not authorized(chat_id):
         return
@@ -363,12 +417,9 @@ def handle_photo(chat_id: int, sizes: list[dict], caption: str) -> None:
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
             raise
-        log.exception("callback failed")
-        tg_call(
-            "answerCallbackQuery",
-            callback_query_id=callback_id,
-            text="Could not complete action.",
-        )
+        log.exception("photo upload failed")
+        tg_send(chat_id, "⚠️ Could not process that photo.")
+        return
     except Exception:  # noqa: BLE001
         log.exception("photo upload failed")
         tg_send(chat_id, "⚠️ Could not process that photo.")
@@ -418,6 +469,7 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         )
         return
     tg_typing(chat_id)
+    since = datetime.now(UTC)
     try:
         if decision == "undo":
             status, body = api_json(
@@ -437,13 +489,19 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
         )
         tg_call("answerCallbackQuery", callback_query_id=callback_id)
         deliver_events(chat_id, conv_id, events)
-    except Exception:  # noqa: BLE001
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise
         log.exception("callback failed")
         tg_call(
             "answerCallbackQuery",
             callback_query_id=callback_id,
             text="Could not complete action.",
         )
+    except Exception:  # noqa: BLE001
+        log.exception("stream interrupted for conversation %s", conv_id)
+        tg_call("answerCallbackQuery", callback_query_id=callback_id)
+        recover_reply(chat_id, conv_id, token, since)
 
 
 def _handle_update(update: dict) -> None:
@@ -489,7 +547,7 @@ def main() -> None:
     log.info("polling telegram (allowed: %s, api: %s)", ALLOWED, API_BASE)
     while True:
         try:
-            updates = tg_call("getUpdates", offset=offset, timeout=50)
+            updates = tg_call("getUpdates", sock_timeout=70, offset=offset, timeout=50)
             for update in updates.get("result", []):
                 offset = max(offset, update["update_id"] + 1)
                 try:

@@ -1,10 +1,12 @@
 """Stdlib-only checks for bot.py's pure text-formatting logic (no network)."""
 
+import json
 import os
 import sys
 import unittest
 import urllib.error
-from unittest.mock import patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
@@ -119,6 +121,69 @@ class BotFlowTests(unittest.TestCase):
         bot.handle_update({"message": {"chat": {"id": 1}, "text": "hello"}})
         self.assertEqual(bot._state["1"], {})
         self.assertIn("/login", send.call_args.args[1])
+
+    @patch.object(bot, "recover_reply")
+    @patch.object(bot, "deliver_events")
+    @patch.object(bot, "sb_agent_events", return_value=iter(()))
+    @patch.object(bot, "sb_conv_for", return_value="conversation-1")
+    @patch.object(bot, "authorized", return_value=True)
+    @patch.object(bot, "tg_typing")
+    def test_dropped_stream_falls_back_to_recover_reply(
+        self, _typing, _auth, _conv, _events, deliver, recover
+    ):
+        bot._state = {"1": {"token": "token"}}
+        deliver.side_effect = TimeoutError("connection dropped")
+        bot.handle_message(1, "hello")
+        recover.assert_called_once()
+        self.assertEqual(recover.call_args.args[:3], (1, "conversation-1", "token"))
+
+    @patch.object(bot, "deliver_events")
+    @patch.object(bot, "sb_agent_events", return_value=iter(()))
+    @patch.object(bot, "sb_conv_for", return_value="conversation-1")
+    @patch.object(bot, "authorized", return_value=True)
+    @patch.object(bot, "tg_typing")
+    def test_401_during_stream_still_propagates(self, _typing, _auth, _conv, _events, deliver):
+        bot._state = {"1": {"token": "token"}}
+        deliver.side_effect = urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)
+        with self.assertRaises(urllib.error.HTTPError):
+            bot.handle_message(1, "hello")
+
+    @patch.object(bot.time, "sleep")
+    @patch.object(bot, "tg_send")
+    @patch.object(bot, "api_json")
+    def test_recover_reply_delivers_message_once_it_lands(self, api_json, send, _sleep):
+        since = datetime.now(UTC) - timedelta(seconds=1)
+        landed_at = (since + timedelta(seconds=5)).isoformat()
+        api_json.return_value = (
+            200,
+            {
+                "pending_actions": [],
+                "messages": [{"role": "assistant", "content": "All set", "created_at": landed_at}],
+            },
+        )
+        bot.recover_reply(1, "conversation-1", "token", since)
+        send.assert_called_once_with(1, "All set", markdown=False)
+
+    @patch.object(bot, "tg_send")
+    @patch.object(bot, "api_upload_file")
+    @patch.object(bot, "tg_download_file", return_value=b"data")
+    @patch.object(bot, "tg_call", return_value={"result": {"file_path": "p"}})
+    @patch.object(bot, "authorized", return_value=True)
+    def test_photo_upload_failure_notifies_user(self, _auth, _tg_call, _dl, upload, send):
+        upload.side_effect = urllib.error.HTTPError("url", 500, "Server Error", {}, None)
+        bot._state = {"1": {"token": "token"}}
+        bot.handle_photo(1, [{"file_id": "f1"}], "")
+        send.assert_called_once_with(1, "⚠️ Could not process that photo.")
+
+    def test_get_updates_forwards_long_poll_timeout_to_telegram(self):
+        response = MagicMock()
+        response.read.return_value = b'{"result": []}'
+        response.__enter__.return_value = response
+        with patch("urllib.request.urlopen", return_value=response) as urlopen:
+            bot.tg_call("getUpdates", sock_timeout=70, offset=5, timeout=50)
+        request = urlopen.call_args.args[0]
+        self.assertEqual(json.loads(request.data), {"offset": 5, "timeout": 50})
+        self.assertEqual(urlopen.call_args.kwargs["timeout"], 70)
 
 
 class StripMarkdownTests(unittest.TestCase):

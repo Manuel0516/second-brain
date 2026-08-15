@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dropdown, type DropdownOption } from '../../components/Dropdown'
 import { Field } from '../../components/Field'
+import { IconButton } from '../../components/IconButton'
 import { SettingsCard } from '../../components/SettingsCard'
 import { ToggleRow } from '../../components/ToggleRow'
 
@@ -114,6 +115,14 @@ export function AISettings() {
           row.id === capability.id ? { ...row, enabled: !row.enabled } : row,
         ),
       )
+  }
+
+  const deleteMemory = async (memory: Memory) => {
+    const response = await fetch(`/api/ai/memories/${memory.id}`, {
+      method: 'DELETE',
+    })
+    if (response.ok)
+      setMemories((rows) => rows.filter((row) => row.id !== memory.id))
   }
 
   const saveSkill = async (skill: Skill) => {
@@ -369,7 +378,13 @@ export function AISettings() {
           {memories.slice(0, 20).map((memory) => (
             <div className="ai-memory-row" key={memory.id}>
               <span className="integration-status">{memory.category}</span>
-              <span>{memory.fact}</span>
+              <span className="ai-memory-row-fact">{memory.fact}</span>
+              <IconButton
+                className="ai-memory-row-delete"
+                icon="✕"
+                label={`Forget "${memory.fact}"`}
+                onClick={() => void deleteMemory(memory)}
+              />
             </div>
           ))}
           {!memories.length && (

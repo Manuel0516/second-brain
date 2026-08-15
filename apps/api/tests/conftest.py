@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import get_async_session
 from app.main import app
 from app.models import Base, User
+from app.modules.ai import agent
 from app.security import hash_password
 
 
@@ -79,6 +80,10 @@ async def client(test_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
             yield session
 
     app.dependency_overrides[get_async_session] = override_get_session
+
+    # agent.run_detached opens its own session outside any request — point it at the
+    # test database too, same reasoning as overriding get_async_session above.
+    agent.session_factory = test_session_factory
 
     # Reset rate limiter for testing
     from app.dependencies import _login_attempts

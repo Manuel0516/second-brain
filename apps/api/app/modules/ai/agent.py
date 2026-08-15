@@ -1,20 +1,29 @@
+import asyncio
 import json
+import logging
 import re
 import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import AIAction, AIConversation, AIMessage, User
+from app.database import async_session_factory
+from app.models import AIAction, AIConversation, AIMessage
 from app.modules.ai import tools
 from app.modules.ai.prompts import build_system_prompt
 from app.modules.ai.providers import LocalProvider, OpenRouterProvider, ProviderProtocol
 from app.modules.ai.sse import event
 
+logger = logging.getLogger(__name__)
+
 ProviderFactory = Callable[[str], ProviderProtocol]
 provider_factory: ProviderFactory | None = None
+
+# Overridable in tests, same pattern as provider_factory — points at the real DB by
+# default, swapped to the test session factory in tests/conftest.py.
+session_factory: async_sessionmaker[AsyncSession] = async_session_factory
 
 
 def provider(
@@ -46,14 +55,20 @@ def _history_message(message: AIMessage) -> list[dict[str, Any]]:
 
 async def run(
     session: AsyncSession,
-    user: User,
-    conversation: AIConversation,
+    user_id: str,
+    conversation_id: str,
     model: str,
     content: str | None = None,
     provider_name: str = "openrouter",
     endpoint: str | None = None,
     autonomy_level: str = "ask_before_write",
 ) -> AsyncIterator[str]:
+    conversation = await session.get(AIConversation, conversation_id)
+    if conversation is None:
+        yield event("error", message="This conversation no longer exists.")
+        yield event("done")
+        return
+
     if content is not None:
         session.add(AIMessage(conversation_id=conversation.id, role="user", content=content))
         if conversation.title == "New conversation":
@@ -70,7 +85,7 @@ async def run(
         ).scalars()
     )
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": await build_system_prompt(session, user.id)}
+        {"role": "system", "content": await build_system_prompt(session, user_id)}
     ]
     for item in history:
         messages.extend(_history_message(item))
@@ -81,7 +96,7 @@ async def run(
     tool_count = 0
     for _ in range(12):
         # Refresh each step: load_capability can add a typed OpenAPI tool mid-turn.
-        tool_schemas, is_write = await tools.schemas_for(session, user.id)
+        tool_schemas, is_write = await tools.schemas_for(session, user_id)
         response = await engine.complete(messages, tool_schemas)
         calls = response.get("tool_calls") or []
         tool_count += len(calls)
@@ -104,7 +119,7 @@ async def run(
             )
             session.add(message)
             if content and autonomy_level in {"auto_low_risk", "auto_all"}:
-                await _learn_explicit(session, user.id, content)
+                await _learn_explicit(session, user_id, content)
             await session.commit()
             await session.refresh(message)
             yield event("message_done", message_id=message.id)
@@ -129,19 +144,19 @@ async def run(
             if write is None:
                 result = {"ok": False, "summary": f"Unknown tool: {name}"}
             elif write:
-                risk = await tools.risk_for(name, session, user.id)
+                risk = await tools.risk_for(name, session, user_id)
                 auto = autonomy_level == "auto_all" or (
                     autonomy_level == "auto_low_risk" and risk == "low"
                 )
                 if not auto or risk == "high_risk":
                     writes.append((call, name, args))
                     continue
-                before = await tools.preimage(name, args, session, user.id)
-                result = await tools.execute(name, args, session, user.id)
+                before = await tools.preimage(name, args, session, user_id)
+                result = await tools.execute(name, args, session, user_id)
                 data = result.get("data")
                 session.add(
                     AIAction(
-                        user_id=user.id,
+                        user_id=user_id,
                         conversation_id=conversation.id,
                         tool=name,
                         entity_type=_entity_type(name),
@@ -155,7 +170,7 @@ async def run(
                     )
                 )
             else:
-                result = await tools.execute(name, args, session, user.id)
+                result = await tools.execute(name, args, session, user_id)
             yield event("tool_result", name=name, ok=result["ok"], summary=result["summary"])
             tool_message = {
                 "role": "tool",
@@ -176,10 +191,10 @@ async def run(
             )
             session.add(message)
             for call, name, args in writes:
-                risk = await tools.risk_for(name, session, user.id)
-                secure_fields = await tools.secure_fields_for(name, session, user.id)
+                risk = await tools.risk_for(name, session, user_id)
+                secure_fields = await tools.secure_fields_for(name, session, user_id)
                 action = AIAction(
-                    user_id=user.id,
+                    user_id=user_id,
                     conversation_id=conversation.id,
                     tool=name,
                     entity_type=_entity_type(name),
@@ -207,6 +222,50 @@ async def run(
         "break this into smaller steps.",
     )
     yield event("done")
+
+
+async def run_detached(
+    user_id: str,
+    conversation_id: str,
+    model: str,
+    content: str | None = None,
+    provider_name: str = "openrouter",
+    endpoint: str | None = None,
+    autonomy_level: str = "ask_before_write",
+) -> AsyncIterator[str]:
+    """Runs the turn in a background task with its own DB session, so a client that
+    disconnects mid-turn (closed tab, backgrounded app, flaky network) does not cancel
+    it — a GeneratorExit thrown into this generator only stops relaying events, the
+    task keeps running and committing to the DB. Reconnecting (loading the conversation)
+    picks up wherever the turn landed."""
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def worker() -> None:
+        async with session_factory() as bg_session:
+            try:
+                async for chunk in run(
+                    bg_session,
+                    user_id,
+                    conversation_id,
+                    model,
+                    content,
+                    provider_name,
+                    endpoint,
+                    autonomy_level,
+                ):
+                    await queue.put(chunk)
+            except Exception:
+                logger.exception("agent turn failed for conversation %s", conversation_id)
+                await queue.put(event("error", message="The assistant hit an unexpected error."))
+            finally:
+                await queue.put(None)
+
+    asyncio.create_task(worker())
+    while True:
+        chunk = await queue.get()
+        if chunk is None:
+            return
+        yield chunk
 
 
 def _entity_type(name: str) -> str | None:

@@ -624,15 +624,14 @@ async def chat(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
-    row = await owned_conversation(session, user, conversation_id)
+    await owned_conversation(session, user, conversation_id)
     if await pending_action_count(session, conversation_id):
         raise HTTPException(409, "Resolve pending confirmations before continuing")
     settings = await get_ai_settings(session, user)
     return StreamingResponse(
-        agent.run(
-            session,
-            user,
-            row,
+        agent.run_detached(
+            user.id,
+            conversation_id,
             settings.model_name,
             payload.content,
             settings.provider,
@@ -721,7 +720,7 @@ async def confirm(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
-    conversation = await owned_conversation(session, user, conversation_id)
+    await owned_conversation(session, user, conversation_id)
     action = await action_for(session, user, conversation_id, payload.action_id)
     action.confirmations_received = 1
     message, call_id, args = await awaiting_message(session, action)
@@ -755,10 +754,9 @@ async def confirm(
     await session.commit()
     settings = await get_ai_settings(session, user)
     return StreamingResponse(
-        agent.run(
-            session,
-            user,
-            conversation,
+        agent.run_detached(
+            user.id,
+            conversation_id,
             settings.model_name,
             provider_name=settings.provider,
             endpoint=settings.local_endpoint_url,
@@ -779,7 +777,7 @@ async def reject(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> StreamingResponse:
-    conversation = await owned_conversation(session, user, conversation_id)
+    await owned_conversation(session, user, conversation_id)
     action = await action_for(session, user, conversation_id, payload.action_id)
     message, call_id, _ = await awaiting_message(session, action)
     action.status = "rejected"
@@ -796,10 +794,9 @@ async def reject(
     await session.commit()
     settings = await get_ai_settings(session, user)
     return StreamingResponse(
-        agent.run(
-            session,
-            user,
-            conversation,
+        agent.run_detached(
+            user.id,
+            conversation_id,
             settings.model_name,
             provider_name=settings.provider,
             endpoint=settings.local_endpoint_url,
