@@ -6,10 +6,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import or_, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 
 from app.config import get_settings
 from app.database import async_session_factory, check_database
@@ -93,6 +93,21 @@ app.include_router(fitness.router)
 app.include_router(food.router)
 app.include_router(admin.router)
 app.include_router(integrations.router)
+
+
+# ── Malformed-id guard ────────────────────────────────────────────────
+# Postgres rejects a non-UUID string bound to a UUID column at the wire level
+# (asyncpg/psycopg DataError) before any route code can catch it — e.g. an id a
+# caller (often the AI agent, guessing an id it never looked up) supplies that
+# was never a real UUID. Convert that specific case to a clean 404 instead of
+# letting it surface as an unhandled 500; anything else still 500s generically
+# (never leak the raw DB error — see apps/api/AGENTS.md).
+@app.exception_handler(DBAPIError)
+async def malformed_id_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+    if "invalid input syntax for type uuid" in str(exc.orig or exc).lower():
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    logger.exception("Unhandled database error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 # ── Security headers middleware ─────────────────────────────────────────

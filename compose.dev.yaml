@@ -1,11 +1,11 @@
-# Dev environment for Second Brain — db + minio only.
+# Dev environment for Second Brain — db + minio, plus an opt-in Telegram bot profile.
 # API and web run directly on the host (uvicorn --reload + vite HMR) for fast iteration.
 # Everything binds to 127.0.0.1 — never exposed. Prod stack (compose.yaml) untouched.
 name: secondbrain-dev
 
 services:
   db:
-    image: postgres:18.3-alpine
+    image: pgvector/pgvector:0.8.6-pg18-trixie
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-secondbrain_dev}
@@ -40,6 +40,23 @@ services:
       retries: 5
       start_period: 10s
 
+  bot:
+    profiles: ["bot"]
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SECOND_BRAIN_API_URL: http://127.0.0.1:8000
+      SB_VERIFICATION_BASE: ${SB_VERIFICATION_BASE:-http://localhost:5173}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-1110963147}
+      SB_BOT_STATE_FILE: /data/state.json
+    volumes:
+      - dev-bot-data:/data
+
 volumes:
   dev-postgres-data:
   dev-minio-data:
+  dev-bot-data:

@@ -98,7 +98,7 @@ npm install
 uv sync --project apps/api --dev
 
 # 2. Start Postgres + MinIO
-docker compose -f compose.yaml -f compose.dev.yaml up -d db minio
+docker compose -f compose.dev.yaml up -d db minio
 
 # 3. Run migrations
 cd apps/api && uv run alembic upgrade head
@@ -106,6 +106,9 @@ cd apps/api && uv run alembic upgrade head
 # 4. Start both servers
 npm run dev:api    # FastAPI on :8000
 npm run dev:web    # Vite on :5173 (proxies /api → :8000)
+
+# Optional: Telegram bridge (requires TELEGRAM_BOT_TOKEN)
+docker compose -f compose.dev.yaml --profile bot up -d --build bot
 ```
 
 ---

@@ -32,7 +32,9 @@ export function DeviceApprove() {
       } else {
         const body = await response.json().catch(() => ({}))
         setState('error')
-        setError(body.detail || 'Could not approve this code')
+        setError(
+          `${body.detail || 'Could not approve this code'} — ask the bot for a fresh link.`,
+        )
       }
     } catch {
       setState('error')

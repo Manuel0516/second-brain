@@ -2,7 +2,7 @@ name: secondbrain
 
 services:
   db:
-    image: postgres:18.3-alpine
+    image: pgvector/pgvector:0.8.6-pg18-trixie
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-secondbrain}

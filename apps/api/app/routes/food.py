@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.database import get_async_session
 from app.dependencies import get_current_user
 from app.models import File, FoodDailyExtras, Link, MealLog, MealLogPhoto, User
+from app.routes.settings import _get_or_create_settings
 from app.storage import download, remove
 
 router = APIRouter(prefix="/api/food", tags=["food"])
@@ -125,20 +126,6 @@ class FoodDailyExtrasResponse(BaseModel):
     fruit_units: int
     created_at: datetime
     updated_at: datetime
-
-
-# ── AI prompt for /analyze ──────────────────────────────────────────────
-
-_ANALYZE_PROMPT = (
-    "Analyze all of these meal photos as one meal. Each image may show a different dish; "
-    "include every dish once and return combined totals. Return JSON with: "
-    "calories (int), protein_g (float), carbs_g (float), fat_g (float), "
-    "water_units (int, glasses of water visible), "
-    "veg_units (int, vegetable portions), "
-    "fruit_units (int, fruit portions), "
-    "items (array of {name, quantity, calories, protein, carbs, fat}). "
-    "Only return valid JSON."
-)
 
 
 # ── Helper Functions ────────────────────────────────────────────────────
@@ -381,6 +368,7 @@ async def analyze_meal_photo(
             status_code=400,
             detail="OPENROUTER_API_KEY is not configured",
         )
+    user_settings = await _get_or_create_settings(user.id, session)
 
     log = await _owned_meal_log(log_id, user, session)
 
@@ -415,11 +403,14 @@ async def analyze_meal_photo(
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": settings.openrouter_model,
+                    "model": user_settings.food_analyze_model,
                     "messages": [
                         {
                             "role": "user",
-                            "content": [{"type": "text", "text": _ANALYZE_PROMPT}, *image_parts],
+                            "content": [
+                                {"type": "text", "text": user_settings.food_analyze_prompt},
+                                *image_parts,
+                            ],
                         }
                     ],
                 },

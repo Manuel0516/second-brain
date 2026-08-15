@@ -26,7 +26,7 @@ Log out and back in after the group change, then verify with `docker version` an
 ```bash
 cp .env.example .env
 colima start
-docker-compose -f compose.yaml -f compose.dev.yaml up -d db minio
+docker compose -f compose.dev.yaml up -d db minio
 uv sync --project apps/api --dev
 npm install
 ```
@@ -39,6 +39,12 @@ npm run dev:web
 ```
 
 Open <http://localhost:5173>. Vite proxies `/api` to FastAPI at `localhost:8000`.
+
+With `TELEGRAM_BOT_TOKEN` configured, start the optional local Telegram bridge:
+
+```bash
+docker compose -f compose.dev.yaml --profile bot up -d --build bot
+```
 
 ## Quality checks
 

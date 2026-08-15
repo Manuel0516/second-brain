@@ -14,6 +14,7 @@ export function ToggleRow({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 10,
         minHeight: 38,
         cursor: 'pointer',
       }}

@@ -52,6 +52,8 @@ export interface UserSettings {
   food_veg_target_units: number | null
   food_fruit_target_units: number | null
   food_stats_range_days: number
+  food_analyze_model: string
+  food_analyze_prompt: string
 }
 
 interface SettingsContextType {
@@ -60,7 +62,7 @@ interface SettingsContextType {
   patch: (partial: Partial<UserSettings>) => Promise<void>
 }
 
-const DEFAULTS: UserSettings = {
+export const DEFAULTS: UserSettings = {
   theme: 'system',
   visual_style: 'neon',
   timezone: 'Europe/Stockholm',
@@ -94,6 +96,16 @@ const DEFAULTS: UserSettings = {
   food_veg_target_units: null,
   food_fruit_target_units: null,
   food_stats_range_days: 90,
+  food_analyze_model: 'google/gemini-2.5-flash',
+  food_analyze_prompt:
+    'Analyze all of these meal photos as one meal. Each image may show a different dish; ' +
+    'include every dish once and return combined totals. Return JSON with: ' +
+    'calories (int), protein_g (float), carbs_g (float), fat_g (float), ' +
+    'water_units (int, glasses of water visible), ' +
+    'veg_units (int, vegetable portions), ' +
+    'fruit_units (int, fruit portions), ' +
+    'items (array of {name, quantity, calories, protein, carbs, fat}). ' +
+    'Only return valid JSON.',
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(

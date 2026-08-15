@@ -1,10 +1,16 @@
+import { useRef } from 'react'
 import { Segmented } from '../../components/Segmented'
 import { SettingsCard } from '../../components/SettingsCard'
-import { useSettings } from '../../context/SettingsContext'
+import { DEFAULTS, useSettings } from '../../context/SettingsContext'
 import { SettingsNumberField } from './SettingsNumberField'
+import {
+  SettingsTextField,
+  type SettingsTextFieldHandle,
+} from './SettingsTextField'
 
 export function FoodSettings() {
   const { settings, patch } = useSettings()
+  const promptFieldRef = useRef<SettingsTextFieldHandle>(null)
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -144,6 +150,55 @@ export function FoodSettings() {
           }}
           onChange={(value) => patch({ food_stats_range_days: Number(value) })}
         />
+      </SettingsCard>
+
+      <SettingsCard
+        title="AI photo analysis"
+        description="Model used to estimate calories and macros from a meal photo."
+      >
+        <SettingsTextField
+          id="settings-food-analyze-model"
+          label="OpenRouter model"
+          value={settings.food_analyze_model}
+          onCommit={(food_analyze_model) => patch({ food_analyze_model })}
+        />
+      </SettingsCard>
+
+      <SettingsCard
+        title="Analysis prompt"
+        description="Sent to the model together with the photo. Must still ask for JSON output."
+      >
+        <div style={{ display: 'grid', gap: 10 }}>
+          <SettingsTextField
+            ref={promptFieldRef}
+            id="settings-food-analyze-prompt"
+            label="Prompt"
+            value={settings.food_analyze_prompt}
+            onCommit={(food_analyze_prompt) => patch({ food_analyze_prompt })}
+            multiline
+            prompt
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="settings-card-save"
+              type="button"
+              onClick={() => promptFieldRef.current?.commit()}
+            >
+              Save prompt
+            </button>
+            <button
+              className="settings-card-save"
+              type="button"
+              onClick={() =>
+                void patch({
+                  food_analyze_prompt: DEFAULTS.food_analyze_prompt,
+                })
+              }
+            >
+              Reset to default
+            </button>
+          </div>
+        </div>
       </SettingsCard>
     </div>
   )

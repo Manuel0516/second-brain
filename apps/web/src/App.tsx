@@ -17,6 +17,7 @@ import { FitnessSettings } from './modules/settings/FitnessSettings'
 import { FoodSettings } from './modules/settings/FoodSettings'
 import { NotesSettings } from './modules/settings/NotesSettings'
 import { AdminSettings } from './modules/settings/AdminSettings'
+import { AISettings } from './modules/settings/AISettings'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { useAuth } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
@@ -122,6 +123,7 @@ function AppRoutes() {
           <Route path="fitness" element={<FitnessSettings />} />
           <Route path="food" element={<FoodSettings />} />
           <Route path="notes" element={<NotesSettings />} />
+          <Route path="ai" element={<AISettings />} />
           <Route path="admin" element={<AdminSettings />} />
         </Route>
       </Route>

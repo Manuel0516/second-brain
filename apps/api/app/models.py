@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     UUID,
@@ -21,6 +22,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+EmbeddingType = Vector().with_variant(JSON(), "sqlite")
 
 
 class User(Base):
@@ -203,6 +207,20 @@ class CalendarEvent(Base):
     calendar: Mapped["Calendar"] = relationship("Calendar", back_populates="events")
 
 
+# Default vision prompt for POST /api/food/logs/{id}/analyze — user-editable per-user via
+# UserSettings.food_analyze_prompt; this is only the seed value for new rows.
+DEFAULT_FOOD_ANALYZE_PROMPT = (
+    "Analyze all of these meal photos as one meal. Each image may show a different dish; "
+    "include every dish once and return combined totals. Return JSON with: "
+    "calories (int), protein_g (float), carbs_g (float), fat_g (float), "
+    "water_units (int, glasses of water visible), "
+    "veg_units (int, vegetable portions), "
+    "fruit_units (int, fruit portions), "
+    "items (array of {name, quantity, calories, protein, carbs, fat}). "
+    "Only return valid JSON."
+)
+
+
 class UserSettings(Base):
     __tablename__ = "user_settings"
 
@@ -256,6 +274,18 @@ class UserSettings(Base):
     food_fruit_target_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
     food_stats_range_days: Mapped[int] = mapped_column(
         Integer, nullable=False, default=90, server_default="90"
+    )
+    food_analyze_model: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        default="google/gemini-2.5-flash",
+        server_default="google/gemini-2.5-flash",
+    )
+    food_analyze_prompt: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default=DEFAULT_FOOD_ANALYZE_PROMPT,
+        server_default=DEFAULT_FOOD_ANALYZE_PROMPT,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -677,6 +707,8 @@ class AIMessage(Base):
     tool_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
     tool_results: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="complete")
+    metrics: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -696,6 +728,15 @@ class AISettings(Base):
     autonomy_level: Mapped[str] = mapped_column(
         String(32), nullable=False, default="ask_before_write"
     )
+    embedding_provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="openrouter"
+    )
+    embedding_model: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="openai/text-embedding-3-small"
+    )
+    embedding_endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False, default=1536)
+    web_fetch_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class AIMemory(Base):
@@ -707,6 +748,8 @@ class AIMemory(Base):
         UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     fact: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="fact")
+    normalized_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -723,6 +766,7 @@ class AISkill(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -755,8 +799,72 @@ class AIAction(Base):
     preview: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     undo_payload: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False, default="ordinary")
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="tool")
+    confirmations_required: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    confirmations_received: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
+class AITool(Base):
+    """Agent-visible tool defined as a declarative spec (method+path+args), not code.
+
+    Every spec resolves to a real registered route (validated in spec_tools.validate_spec)
+    — the executor can never run arbitrary code, only call the app's own API.
+    """
+
+    __tablename__ = "ai_tools"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_ai_tools_user_name"),)
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    spec: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="agent")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
+class AISearchDocument(Base):
+    __tablename__ = "ai_search_documents"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source_type", "source_id", name="uq_ai_search_source"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingType, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
     )
 
 

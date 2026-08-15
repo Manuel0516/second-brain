@@ -43,6 +43,7 @@ const NAV_ITEMS = [
   { to: '/settings/fitness', label: 'Fitness', disabled: false },
   { to: '/settings/food', label: 'Food', disabled: false },
   { to: '/settings/notes', label: 'Notes', disabled: false },
+  { to: '/settings/ai', label: 'AI assistant', disabled: false },
   { to: '/settings/security', label: 'Security', disabled: true },
 ]
 

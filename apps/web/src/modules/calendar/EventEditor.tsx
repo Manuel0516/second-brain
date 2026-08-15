@@ -1078,7 +1078,7 @@ export function EventEditor({
       return { ...r, byday: [...r.byday, code] }
     })
 
-  return (
+  return createPortal(
     <div
       className={`calendar-backdrop ${closing ? 'closing' : ''}`}
       role="presentation"
@@ -2753,6 +2753,7 @@ export function EventEditor({
         </div>
         {/* /editor-drag-wrap */}
       </aside>
-    </div>
+    </div>,
+    document.body,
   )
 }

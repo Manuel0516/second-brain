@@ -430,11 +430,25 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 
 - `ai_conversations` and `ai_messages` persist user-scoped chat history, assistant tool calls,
   matching tool results, and confirmation status.
-- `ai_settings` is a user-keyed singleton for provider, model, endpoint, and autonomy settings.
-- `ai_memories` stores durable facts injected into every later conversation.
-- `ai_skills` stores user-scoped named markdown procedures; names are unique per user.
-- `ai_actions` records gated writes, original tool-call context, affected entity, undo pre-image,
-  and pending/executed/rejected/undone status.
+- `ai_settings` is a user-keyed singleton for chat/embedding providers, models, endpoints,
+  dimensions, and autonomy settings. `web_fetch_enabled` (default `false`) gates the agent's
+  `web_fetch` tool — off by default since it's the only tool that reaches the open internet
+  rather than this app's own API; see `apps/api/app/modules/ai/web.py`.
+- `ai_memories` stores durable facts injected into every later conversation, categorized
+  (`fact`|`profile`|`preference`|`correction`) via the `category` column — profile/preference/
+  correction entries render as an identity block ahead of recent facts in the system prompt.
+- `ai_skills` stores user-scoped named markdown procedures; names are unique per user. Includes
+  a seeded `memory-consolidation` skill the agent loads on request to collapse old `fact` rows
+  into a `preference`.
+- `ai_actions` records gated and automatic writes, risk/origin, confirmation progress, original
+  tool-call context, affected entity, undo pre-image, and status.
+- `ai_tools` stores agent-visible tools defined as declarative specs (method + path + args),
+  executed by a generic runner — never arbitrary code. Every spec is validated against the app's
+  own registered routes at create time. `source` distinguishes seeded (`system`) specs from
+  tools the agent created for itself (`agent`); `enabled` lets either be turned off without
+  deleting the row.
+- `ai_search_documents` is the user-scoped hybrid retrieval index for pages, events, meals, and
+  workouts: normalized text/content hash plus an optional pgvector embedding.
 - `device_grants` implements OAuth-style device authorization for machine clients (the Telegram
   bot): a hashed `device_code` the client polls with, a human-friendly `user_code` shown on the
   approval page, and after approval a one-time bearer `bot_token` (delivered once via the status
@@ -469,5 +483,7 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 028 | `visual_style` (neon/monochrome) on user_settings |
 | c3b8d4b570e2 | Embedded AI conversations, messages, settings, memories, skills, and actions |
 | 029 | `device_grants` — OAuth-style device authorization for the Telegram bot |
+| 030 | `ai_tools` — declarative spec tools the agent can create/enable/disable for itself |
+| 031 | `ai_memories.category` — fact/profile/preference/correction memory categorization |
 
 Always check `alembic current` before writing a new migration.

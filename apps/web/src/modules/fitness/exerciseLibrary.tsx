@@ -50,8 +50,8 @@ export interface ExerciseCandidate {
 
 /**
  * Keep the plan picker and live-session picker on the same exercise source.
- * Ordered so exercises relevant to `sessionType` (its usual category, plus
- * its curated defaults) come first, and every other known exercise — any
+ * Ordered so exercises matching `sessionType`'s curated defaults (e.g. Legs →
+ * Squat, Leg Press, ...) come first, and every other known exercise — any
  * category, any session type — follows below rather than being hidden.
  */
 export function mergeExerciseCandidates(
@@ -62,12 +62,15 @@ export function mergeExerciseCandidates(
   const primary: ExerciseCandidate[] = []
   const rest: ExerciseCandidate[] = []
   const libraryCategory = sessionType === 'Cardio' ? 'cardio' : 'strength'
+  const libraryNames = new Set(
+    (EXERCISE_LIBRARY[sessionType] || []).map((name) => name.toLowerCase()),
+  )
 
   for (const exercise of dbExercises) {
     const key = exercise.name.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
-    ;(exercise.category === libraryCategory ? primary : rest).push({
+    ;(libraryNames.has(key) ? primary : rest).push({
       name: exercise.name,
       category: exercise.category,
     })

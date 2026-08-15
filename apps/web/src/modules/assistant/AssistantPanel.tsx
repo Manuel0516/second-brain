@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import { apiCall, apiErrorMessage } from '../../lib/api'
+import { uploadFile, type FileUpload } from '../food/api'
 import { ConfirmCard } from './ConfirmCard'
+import { renderMarkdown } from './markdown'
 import {
   useAssistantChat,
   type Conversation,
@@ -13,6 +22,15 @@ function SparkleIcon() {
     <svg viewBox="0 0 20 20" aria-hidden="true">
       <path d="M10 2.5 11.2 7.5 16 10l-4.8 2.5L10 17.5l-1.2-5L4 10l4.8-2.5L10 2.5Z" />
       <circle cx="16" cy="4" r="1" />
+    </svg>
+  )
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M3.5 8A1.5 1.5 0 0 1 5 6.5h2l.9-1.5a1 1 0 0 1 .86-.5h2.48a1 1 0 0 1 .86.5l.9 1.5h2A1.5 1.5 0 0 1 16.5 8v6A1.5 1.5 0 0 1 15 15.5H5A1.5 1.5 0 0 1 3.5 14V8Z" />
+      <circle cx="10" cy="10.7" r="2.3" />
     </svg>
   )
 }
@@ -37,6 +55,7 @@ function messageTime(value: string) {
 }
 
 function Message({ message }: { message: ChatMessage }) {
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
   if (message.role === 'tool') {
     return (
       <div
@@ -48,29 +67,91 @@ function Message({ message }: { message: ChatMessage }) {
       </div>
     )
   }
+  if (message.role === 'assistant' && !message.content) {
+    return (
+      <article className="assistant-message assistant assistant-message-lost">
+        <div>⚠ Reply lost — try asking again.</div>
+        <time dateTime={message.created_at}>
+          {messageTime(message.created_at)}
+        </time>
+      </article>
+    )
+  }
   return (
     <article className={`assistant-message ${message.role}`}>
-      <div>{message.content}</div>
-      <time dateTime={message.created_at}>
-        {messageTime(message.created_at)}
-      </time>
+      {message.imageUrl && (
+        <img
+          className="assistant-message-photo"
+          src={message.imageUrl}
+          alt=""
+        />
+      )}
+      <div>
+        {message.role === 'assistant'
+          ? renderMarkdown(message.content)
+          : message.content}
+      </div>
+      <div className="assistant-message-footer">
+        <time dateTime={message.created_at}>
+          {messageTime(message.created_at)}
+        </time>
+        {message.role === 'assistant' && (
+          <div className="assistant-feedback" aria-label="Rate this answer">
+            {(['up', 'down'] as const).map((value) => (
+              <button
+                type="button"
+                aria-label={
+                  value === 'up' ? 'Helpful answer' : 'Unhelpful answer'
+                }
+                aria-pressed={feedback === value}
+                onClick={() => {
+                  const next = feedback === value ? null : value
+                  setFeedback(next)
+                  void apiCall(`/api/ai/messages/${message.id}/feedback`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ feedback: next }),
+                  })
+                }}
+              >
+                {value === 'up' ? '↑' : '↓'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </article>
   )
 }
 
 export function AssistantPanel() {
-  const [open, setOpen] = useState(false)
+  const [handoff] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return {
+      conversationId: params.get('assistant'),
+      actionId: params.get('action'),
+    }
+  })
+  const handoffFocused = useRef(false)
+  const [open, setOpen] = useState(Boolean(handoff.conversationId))
   const [input, setInput] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
-  const [mobileChatVisible, setMobileChatVisible] = useState(false)
+  const [mobileChatVisible, setMobileChatVisible] = useState(
+    Boolean(handoff.conversationId),
+  )
   const launcherRef = useRef<HTMLButtonElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [lastPrompt, setLastPrompt] = useState('')
+  const [attachedPhoto, setAttachedPhoto] = useState<FileUpload | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const chat = useAssistantChat()
+  const { loadConversation, pendingConfirmations } = chat
 
   const close = useCallback(() => {
     setOpen(false)
@@ -97,6 +178,40 @@ export function AssistantPanel() {
       setLoadingConversations(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!handoff.conversationId) return
+    const timeout = window.setTimeout(() => {
+      void loadConversations()
+      void loadConversation(handoff.conversationId!)
+    }, 0)
+    const params = new URLSearchParams(window.location.search)
+    params.delete('assistant')
+    params.delete('action')
+    const query = params.toString()
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}`,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [handoff.conversationId, loadConversation, loadConversations])
+
+  useEffect(() => {
+    if (
+      !handoff.actionId ||
+      handoffFocused.current ||
+      !pendingConfirmations.length
+    )
+      return
+    const card = [
+      ...document.querySelectorAll<HTMLElement>('[data-action-id]'),
+    ].find((element) => element.dataset.actionId === handoff.actionId)
+    if (!card) return
+    card?.scrollIntoView?.({ block: 'center' })
+    card?.querySelector<HTMLButtonElement>('button')?.focus()
+    handoffFocused.current = true
+  }, [handoff.actionId, pendingConfirmations])
 
   useEffect(() => {
     if (!open) return
@@ -129,16 +244,51 @@ export function AssistantPanel() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const prompt = input.trim()
-    if (!prompt || chat.isStreaming) return
+    if (chat.isStreaming || uploadingPhoto) return
+    const trimmed = input.trim()
+    if (!trimmed && !attachedPhoto) return
     setInput('')
-    setLastPrompt(prompt)
-    await chat.sendMessage(prompt)
+    if (attachedPhoto) {
+      const caption = trimmed || 'Log this meal from the photo.'
+      const content = `[Photo attached — file_id=${attachedPhoto.id}] ${caption}`
+      const imageUrl = attachedPhoto.url
+      setAttachedPhoto(null)
+      setLastPrompt(content)
+      await chat.sendMessage(content, { displayContent: caption, imageUrl })
+    } else {
+      setLastPrompt(trimmed)
+      await chat.sendMessage(trimmed)
+    }
     await loadConversations()
+  }
+
+  async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please choose an image file.')
+      return
+    }
+    setPhotoError(null)
+    setUploadingPhoto(true)
+    try {
+      setAttachedPhoto(await uploadFile(file))
+    } catch (uploadError) {
+      setPhotoError(
+        uploadError instanceof Error
+          ? uploadError.message
+          : 'Could not upload that photo.',
+      )
+    } finally {
+      setUploadingPhoto(false)
+    }
   }
 
   async function selectConversation(id: string) {
     setMobileChatVisible(true)
+    setAttachedPhoto(null)
+    setPhotoError(null)
     await chat.loadConversation(id)
   }
 
@@ -159,6 +309,8 @@ export function AssistantPanel() {
   function startNewConversation(prompt?: string) {
     chat.startConversation()
     setMobileChatVisible(true)
+    setAttachedPhoto(null)
+    setPhotoError(null)
     if (prompt) setInput(prompt)
   }
 
@@ -350,13 +502,55 @@ export function AssistantPanel() {
 
               <form className="assistant-composer" onSubmit={submit}>
                 <label htmlFor="assistant-input">Message the assistant</label>
+                {(attachedPhoto || uploadingPhoto) && (
+                  <div className="assistant-composer-photo">
+                    {uploadingPhoto ? (
+                      <span className="skeleton" />
+                    ) : (
+                      attachedPhoto && <img src={attachedPhoto.url} alt="" />
+                    )}
+                    <span className="assistant-composer-photo-name">
+                      {uploadingPhoto ? 'Uploading…' : attachedPhoto?.name}
+                    </span>
+                    <button
+                      type="button"
+                      className="assistant-composer-photo-remove"
+                      aria-label="Remove photo"
+                      disabled={uploadingPhoto}
+                      onClick={() => setAttachedPhoto(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                {photoError && (
+                  <p className="assistant-composer-error">{photoError}</p>
+                )}
                 <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={selectPhoto}
+                  />
+                  <button
+                    type="button"
+                    className="assistant-attach-button"
+                    aria-label="Attach a photo"
+                    disabled={chat.isStreaming || uploadingPhoto}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <CameraIcon />
+                  </button>
                   <textarea
                     id="assistant-input"
                     rows={1}
                     value={input}
                     disabled={chat.isStreaming}
-                    placeholder="Ask anything…"
+                    placeholder={
+                      attachedPhoto ? 'Add a caption…' : 'Ask anything…'
+                    }
                     onChange={(event) => setInput(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' && !event.shiftKey) {
@@ -368,7 +562,11 @@ export function AssistantPanel() {
                   <button
                     type="submit"
                     aria-label="Send message"
-                    disabled={chat.isStreaming || !input.trim()}
+                    disabled={
+                      chat.isStreaming ||
+                      uploadingPhoto ||
+                      (!input.trim() && !attachedPhoto)
+                    }
                   >
                     →
                   </button>

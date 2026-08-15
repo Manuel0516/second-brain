@@ -15,12 +15,15 @@ export type ChatMessage = {
   created_at: string
   toolName?: string
   ok?: boolean
+  imageUrl?: string
 }
 
 export type PendingConfirmation = {
   actionId: string
   tool: string
   preview: unknown
+  highRisk?: boolean
+  confirmation?: number
   status:
     | 'pending'
     | 'applying'
@@ -30,7 +33,18 @@ export type PendingConfirmation = {
     | 'undone'
 }
 
-type ConversationDetail = Conversation & { messages: ChatMessage[] }
+type PendingAction = {
+  action_id: string
+  tool: string
+  preview: unknown
+  high_risk?: boolean
+  confirmation?: number
+}
+
+type ConversationDetail = Conversation & {
+  messages: ChatMessage[]
+  pending_actions: PendingAction[]
+}
 
 type StreamEvent =
   | { type: 'conversation'; id: string; title: string }
@@ -42,6 +56,8 @@ type StreamEvent =
       action_id: string
       tool: string
       preview: unknown
+      high_risk?: boolean
+      confirmation?: number
     }
   | { type: 'message_done'; message_id: string }
   | { type: 'error'; message: string }
@@ -143,6 +159,8 @@ export function useAssistantChat() {
               actionId: event.action_id,
               tool: event.tool,
               preview: event.preview,
+              highRisk: event.high_risk,
+              confirmation: event.confirmation,
               status: 'pending',
             },
           ])
@@ -168,6 +186,13 @@ export function useAssistantChat() {
         }
         case 'error':
           setError(event.message)
+          setMessages((current) =>
+            current.map((message) =>
+              message.role === 'tool' && message.content === 'Working…'
+                ? { ...message, content: 'No result (stream error)', ok: false }
+                : message,
+            ),
+          )
           break
         case 'done':
           break
@@ -214,7 +239,16 @@ export function useAssistantChat() {
     const conversation = (await response.json()) as ConversationDetail
     setConversationId(id)
     setMessages(conversation.messages ?? [])
-    setPendingConfirmations([])
+    setPendingConfirmations(
+      (conversation.pending_actions ?? []).map((action) => ({
+        actionId: action.action_id,
+        tool: action.tool,
+        preview: action.preview,
+        highRisk: action.high_risk,
+        confirmation: action.confirmation,
+        status: 'pending',
+      })),
+    )
     setStreamingText('')
   }, [])
 
@@ -227,7 +261,10 @@ export function useAssistantChat() {
   }, [])
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (
+      content: string,
+      meta?: { displayContent?: string; imageUrl?: string },
+    ) => {
       const trimmed = content.trim()
       if (!trimmed || isStreaming) return
       setError(null)
@@ -251,7 +288,8 @@ export function useAssistantChat() {
           {
             id: crypto.randomUUID(),
             role: 'user',
-            content: trimmed,
+            content: meta?.displayContent ?? trimmed,
+            imageUrl: meta?.imageUrl,
             created_at: now(),
           },
         ])
@@ -275,7 +313,11 @@ export function useAssistantChat() {
   )
 
   const continueAction = useCallback(
-    async (actionId: string, decision: 'confirm' | 'reject') => {
+    async (
+      actionId: string,
+      decision: 'confirm' | 'reject',
+      secureArgs?: Record<string, string>,
+    ) => {
       if (!conversationId) return
       const busyStatus = decision === 'confirm' ? 'applying' : 'rejecting'
       setPendingConfirmations((current) =>
@@ -289,7 +331,10 @@ export function useAssistantChat() {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action_id: actionId }),
+            body: JSON.stringify({
+              action_id: actionId,
+              secure_args: secureArgs ?? {},
+            }),
           },
         )
         setPendingConfirmations((current) =>
@@ -347,7 +392,8 @@ export function useAssistantChat() {
     isStreaming,
     conversationId,
     sendMessage,
-    confirmAction: (actionId: string) => continueAction(actionId, 'confirm'),
+    confirmAction: (actionId: string, secureArgs?: Record<string, string>) =>
+      continueAction(actionId, 'confirm', secureArgs),
     rejectAction: (actionId: string) => continueAction(actionId, 'reject'),
     undoAction,
     loadConversation,

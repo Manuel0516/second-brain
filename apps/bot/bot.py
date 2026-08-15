@@ -20,19 +20,18 @@ Env:
 import json
 import logging
 import os
+import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+import uuid
 
 API_BASE = os.environ.get("SECOND_BRAIN_API_URL", "http://127.0.0.1:8000")
-VERIFICATION_BASE = os.environ.get(
-    "SB_VERIFICATION_BASE", "https://brain.zero-five.space"
-)
+VERIFICATION_BASE = os.environ.get("SB_VERIFICATION_BASE", "https://brain.zero-five.space")
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ALLOWED = {
-    int(x)
-    for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "1110963147").split(",")
-    if x.strip()
+    int(x) for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "1110963147").split(",") if x.strip()
 }
 STATE_FILE = os.environ.get("SB_BOT_STATE_FILE", "/data/state.json")
 TG = f"https://api.telegram.org/bot{TOKEN}"
@@ -66,7 +65,16 @@ def chat_entry(chat_id: int) -> dict:
     return _state.setdefault(str(chat_id), {})
 
 
+def clear_auth(chat_id: int) -> None:
+    entry = chat_entry(chat_id)
+    entry.pop("token", None)
+    entry.pop("conv_id", None)
+    entry.pop("device_code", None)
+    save_state()
+
+
 # --- telegram api (stdlib urllib) ---------------------------------------------
+
 
 def tg_call(method: str, timeout: int = 60, **params) -> dict:
     req = urllib.request.Request(
@@ -78,15 +86,27 @@ def tg_call(method: str, timeout: int = 60, **params) -> dict:
         return json.loads(resp.read())
 
 
-def tg_send(chat_id: int, text: str, reply_markup: dict | None = None) -> None:
+def tg_send(
+    chat_id: int, text: str, reply_markup: dict | None = None, markdown: bool = True
+) -> None:
     for chunk in split_text(text):
         tg_call(
             "sendMessage",
             chat_id=chat_id,
             text=chunk,
-            parse_mode="Markdown",
+            **({"parse_mode": "Markdown"} if markdown else {}),
             **({"reply_markup": reply_markup} if reply_markup else {}),
         )
+
+
+def strip_markdown(text: str) -> str:
+    """Drop LLM markdown (bold/code fences) so a 4096-char split can't leave
+    unbalanced Telegram markdown entities (edge I) — sent as plain text instead."""
+    text = re.sub(r"```[a-zA-Z]*\n?", "", text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    return text
 
 
 def split_text(text: str) -> list[str]:
@@ -111,11 +131,10 @@ def tg_typing(chat_id: int) -> None:
 
 # --- second brain api (bearer token) ------------------------------------------
 
+
 def api_json(method: str, path: str, body: dict | None = None, token: str | None = None):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        f"{API_BASE}{path}", data=data, method=method
-    )
+    req = urllib.request.Request(f"{API_BASE}{path}", data=data, method=method)
     if data:
         req.add_header("Content-Type", "application/json")
     if token:
@@ -124,11 +143,41 @@ def api_json(method: str, path: str, body: dict | None = None, token: str | None
         return resp.status, json.loads(resp.read() or "null")
 
 
+def _multipart_body(filename: str, content_type: str, data: bytes) -> tuple[bytes, str]:
+    """Stdlib-only multipart/form-data encoder (no requests dep). Returns (body, boundary)."""
+    boundary = uuid.uuid4().hex
+    body = (
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode()
+        + data
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+    return body, boundary
+
+
+def api_upload_file(token: str, filename: str, content_type: str, data: bytes) -> str:
+    """Upload a file to /api/files, returning its file id."""
+    body, boundary = _multipart_body(filename, content_type, data)
+    req = urllib.request.Request(f"{API_BASE}/api/files", data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return str(json.loads(resp.read())["id"])
+
+
+def tg_download_file(file_path: str) -> bytes:
+    with urllib.request.urlopen(
+        f"https://api.telegram.org/file/bot{TOKEN}/{file_path}", timeout=60
+    ) as resp:
+        return resp.read()
+
+
 def api_stream(method: str, path: str, body: dict, token: str, timeout: int = 240):
     """Open a streaming request and yield parsed SSE events."""
-    req = urllib.request.Request(
-        f"{API_BASE}{path}", data=json.dumps(body).encode(), method=method
-    )
+    req = urllib.request.Request(f"{API_BASE}{path}", data=json.dumps(body).encode(), method=method)
     req.add_header("Content-Type", "application/json")
     req.add_header("Authorization", f"Bearer {token}")
     resp = urllib.request.urlopen(req, timeout=timeout)
@@ -146,6 +195,7 @@ def api_stream(method: str, path: str, body: dict, token: str, timeout: int = 24
 
 
 # --- device authorization ------------------------------------------------------
+
 
 def device_flow(chat_id: int) -> bool:
     """Start a device grant and wait for the user to approve it in the browser."""
@@ -181,8 +231,12 @@ def device_flow(chat_id: int) -> bool:
             tg_send(chat_id, "✅ *Connected!* Ask me anything about your Second Brain.")
             return True
         if body.get("status") == "expired":
+            entry.pop("device_code", None)
+            save_state()
             tg_send(chat_id, "⌛ The code expired — send /start to try again.")
             return False
+    entry.pop("device_code", None)
+    save_state()
     tg_send(chat_id, "⌛ The code expired — send /start to try again.")
     return False
 
@@ -205,15 +259,27 @@ def authorized(chat_id: int) -> bool:
 
 # --- chat flow -----------------------------------------------------------------
 
+
 def handle_message(chat_id: int, text: str) -> None:
     if not text.strip():
         return
     tg_typing(chat_id)
     entry = chat_entry(chat_id)
 
-    if text.startswith("/start") or text.startswith("/login"):
+    if text.startswith("/login"):
+        clear_auth(chat_id)
+        authorized(chat_id)
+        return
+
+    if text.startswith("/start"):
         if entry.get("token"):
-            tg_send(chat_id, "Already connected. Ask me anything! (/new starts a fresh conversation)")
+            tg_send(
+                chat_id,
+                "Already connected. Ask me anything!\n\n"
+                "*Commands*\n"
+                "/new — start a fresh conversation\n"
+                "/login — reconnect this bot",
+            )
         else:
             authorized(chat_id)
         return
@@ -228,47 +294,94 @@ def handle_message(chat_id: int, text: str) -> None:
         return
 
     conv_id = sb_conv_for(chat_id)
-    tools: list[str] = []
-    answer: list[str] = []
+    deliver_events(chat_id, conv_id, sb_agent_events(chat_id, conv_id, text))
 
-    for ev in sb_agent_events(chat_id, conv_id, text):
+
+def confirmation_markup(action_id: str) -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Apply", "callback_data": f"confirm:{action_id}"},
+                {"text": "✖ Reject", "callback_data": f"reject:{action_id}"},
+            ]
+        ]
+    }
+
+
+def deliver_events(chat_id: int, conv_id: str, events) -> None:
+    called_tools: list[str] = []
+    results: list[str] = []
+    answer: list[str] = []
+    for ev in events:
         etype = ev.get("type")
         if etype == "text_delta":
             answer.append(ev.get("content", ""))
         elif etype == "tool_call":
-            tools.append(ev.get("name", "?"))
+            called_tools.append(ev.get("name", "?"))
+            tg_typing(chat_id)
+        elif etype == "tool_result":
+            results.append(ev.get("summary", "Done"))
         elif etype == "confirm_required":
             action_id = ev["action_id"]
             preview = ev.get("preview") or {}
             summary = preview_summary(ev.get("tool", ""), preview)
-            tg_send(
-                chat_id,
-                f"*Proposed change:* {summary}\n\nApprove or reject?",
-                reply_markup={
-                    "inline_keyboard": [
-                        [
-                            {"text": "✅ Apply", "callback_data": f"apply:{action_id}"},
-                            {"text": "✖ Reject", "callback_data": f"reject:{action_id}"},
-                        ]
-                    ]
-                },
-            )
+            secure_fields = preview.get("_secure_fields", []) if isinstance(preview, dict) else []
+            if secure_fields:
+                query = urllib.parse.urlencode({"assistant": conv_id, "action": action_id})
+                tg_send(
+                    chat_id,
+                    f"🔐 This action needs sensitive information. Finish it securely in "
+                    f"the app:\n{VERIFICATION_BASE.rstrip('/')}/calendar?{query}",
+                    markdown=False,
+                )
+            else:
+                tg_send(
+                    chat_id,
+                    f"*Proposed change:* {summary}\n\nApprove or reject?",
+                    reply_markup=confirmation_markup(action_id),
+                )
         elif etype == "error":
             answer.append(f"⚠️ {ev.get('message', 'something went wrong')}")
 
-    if tools:
-        tg_send(chat_id, "🔧 " + ", ".join(tools))
+    if called_tools:
+        tg_send(chat_id, "🔧 " + ", ".join(called_tools))
     if answer:
-        tg_send(chat_id, "".join(answer))
+        tg_send(chat_id, strip_markdown("".join(answer)), markdown=False)
+    elif results:
+        tg_send(chat_id, strip_markdown("\n".join(results)), markdown=False)
+
+
+def handle_photo(chat_id: int, sizes: list[dict], caption: str) -> None:
+    if not authorized(chat_id):
+        return
+    tg_typing(chat_id)
+    entry = chat_entry(chat_id)
+    try:
+        info = tg_call("getFile", file_id=sizes[-1]["file_id"])
+        data = tg_download_file(info["result"]["file_path"])
+        file_id = api_upload_file(entry["token"], "photo.jpg", "image/jpeg", data)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise
+        log.exception("callback failed")
+        tg_call(
+            "answerCallbackQuery",
+            callback_query_id=callback_id,
+            text="Could not complete action.",
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("photo upload failed")
+        tg_send(chat_id, "⚠️ Could not process that photo.")
+        return
+    prompt = caption or "Log this meal from the photo."
+    handle_message(chat_id, f"[Photo attached — file_id={file_id}] {prompt}")
 
 
 def sb_conv_for(chat_id: int, fresh: bool = False) -> str:
     entry = chat_entry(chat_id)
     if entry.get("conv_id") and not fresh:
         return entry["conv_id"]
-    status, conv = api_json(
-        "POST", "/api/ai/conversations", body={}, token=entry.get("token")
-    )
+    status, conv = api_json("POST", "/api/ai/conversations", body={}, token=entry.get("token"))
     if status != 201:
         raise RuntimeError(f"create conversation failed: {status}")
     entry["conv_id"] = conv["id"]
@@ -279,8 +392,10 @@ def sb_conv_for(chat_id: int, fresh: bool = False) -> str:
 def sb_agent_events(chat_id: int, conv_id: str, content: str):
     entry = chat_entry(chat_id)
     yield from api_stream(
-        "POST", f"/api/ai/conversations/{conv_id}/messages",
-        {"content": content}, token=entry["token"],
+        "POST",
+        f"/api/ai/conversations/{conv_id}/messages",
+        {"content": content},
+        token=entry["token"],
     )
 
 
@@ -298,7 +413,9 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
     token = entry.get("token")
     conv_id = entry.get("conv_id")
     if not token or not conv_id:
-        tg_call("answerCallbackQuery", callback_query_id=callback_id, text="Start with /start first.")
+        tg_call(
+            "answerCallbackQuery", callback_query_id=callback_id, text="Start with /start first."
+        )
         return
     tg_typing(chat_id)
     try:
@@ -306,28 +423,30 @@ def handle_callback(chat_id: int, callback_id: str, data: str) -> None:
             status, body = api_json(
                 "POST", f"/api/ai/actions/{action_id}/undo", body={}, token=token
             )
-            tg_call("answerCallbackQuery", callback_query_id=callback_id, text=f"Undone ({body.get('status', status)}).")
+            tg_call(
+                "answerCallbackQuery",
+                callback_query_id=callback_id,
+                text=f"Undone ({body.get('status', status)}).",
+            )
             return
-        answer: list[str] = []
-        for ev in api_stream(
-            "POST", f"/api/ai/conversations/{conv_id}/{decision}",
-            {"action_id": action_id}, token=token,
-        ):
-            if ev.get("type") == "text_delta":
-                answer.append(ev.get("content", ""))
-            elif ev.get("type") == "error":
-                answer.append(f"⚠️ {ev.get('message', 'error')}")
+        events = api_stream(
+            "POST",
+            f"/api/ai/conversations/{conv_id}/{decision}",
+            {"action_id": action_id},
+            token=token,
+        )
         tg_call("answerCallbackQuery", callback_query_id=callback_id)
-        if answer:
-            tg_send(chat_id, "".join(answer))
-        else:
-            tg_send(chat_id, "Done ✅")
-    except Exception as exc:  # noqa: BLE001
+        deliver_events(chat_id, conv_id, events)
+    except Exception:  # noqa: BLE001
         log.exception("callback failed")
-        tg_call("answerCallbackQuery", callback_query_id=callback_id, text=f"Error: {exc}")
+        tg_call(
+            "answerCallbackQuery",
+            callback_query_id=callback_id,
+            text="Could not complete action.",
+        )
 
 
-def handle_update(update: dict) -> None:
+def _handle_update(update: dict) -> None:
     if "callback_query" in update:
         cq = update["callback_query"]
         chat_id = cq["message"]["chat"]["id"]
@@ -338,13 +457,30 @@ def handle_update(update: dict) -> None:
         return
     msg = update.get("message") or {}
     chat_id = msg.get("chat", {}).get("id")
+    photo = msg.get("photo")
     text = msg.get("text")
-    if chat_id is None or text is None:
+    if chat_id is None or (text is None and not photo):
         return
     if chat_id not in ALLOWED:
         tg_send(chat_id, "Sorry, you are not allowed to use this bot.")
         return
+    if photo:
+        handle_photo(chat_id, photo, msg.get("caption") or "")
+        return
     handle_message(chat_id, text)
+
+
+def handle_update(update: dict) -> None:
+    try:
+        _handle_update(update)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 401:
+            raise
+        msg = update.get("message") or update.get("callback_query", {}).get("message", {})
+        chat_id = msg.get("chat", {}).get("id")
+        if chat_id is not None:
+            clear_auth(chat_id)
+            tg_send(chat_id, "🔐 Your connection expired. Send /login to reconnect.")
 
 
 def main() -> None:

@@ -25,9 +25,63 @@ function jsonResponse(data: unknown): Response {
   })
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  window.history.replaceState(null, '', '/')
+})
 
 describe('AssistantPanel', () => {
+  it('opens a handed-off conversation and restores its pending secure action', async () => {
+    const convId = 'conversation-handoff'
+    const actionId = 'action-handoff'
+    window.history.replaceState(
+      null,
+      '',
+      `/calendar?assistant=${convId}&action=${actionId}`,
+    )
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.endsWith(`/api/ai/conversations/${convId}`))
+          return Promise.resolve(
+            jsonResponse({
+              id: convId,
+              title: 'Telegram handoff',
+              updated_at: new Date().toISOString(),
+              messages: [],
+              pending_actions: [
+                {
+                  action_id: actionId,
+                  tool: 'login',
+                  preview: {
+                    username: 'manuel',
+                    _secure_fields: ['password'],
+                  },
+                  high_risk: true,
+                  confirmation: 1,
+                },
+              ],
+            }),
+          )
+        return Promise.resolve(jsonResponse([]))
+      },
+    )
+
+    render(<AssistantPanel />)
+
+    expect(
+      await screen.findByRole('dialog', { name: 'AI Assistant' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('password')).toHaveAttribute(
+      'type',
+      'password',
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Reject' })).toHaveFocus(),
+    )
+    expect(window.location.search).toBe('')
+  })
+
   it('mounts globally and opens a dismissible assistant slide-over', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse([]))
 

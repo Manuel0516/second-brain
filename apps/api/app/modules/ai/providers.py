@@ -16,14 +16,16 @@ class ProviderProtocol(Protocol):
 
 
 class OpenRouterProvider:
-    def __init__(self, api_key: str, model: str) -> None:
-        self.api_key, self.model = api_key, model
+    def __init__(
+        self, api_key: str, model: str, base_url: str = "https://openrouter.ai/api/v1"
+    ) -> None:
+        self.api_key, self.model, self.base_url = api_key, model, base_url.rstrip("/")
 
     async def _post(self, payload: dict[str, Any], stream: bool = False) -> httpx.Response:
         for attempt in range(2):
             async with httpx.AsyncClient(timeout=90) as client:
                 response = await client.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
+                    f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={"model": self.model, **payload, "stream": stream},
                 )
@@ -49,7 +51,7 @@ class OpenRouterProvider:
             async with httpx.AsyncClient(timeout=90) as client:
                 async with client.stream(
                     "POST",
-                    "https://openrouter.ai/api/v1/chat/completions",
+                    f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json=payload,
                 ) as response:
@@ -68,3 +70,23 @@ class OpenRouterProvider:
                         if content:
                             yield str(content)
                     return
+
+
+class LocalProvider(OpenRouterProvider):
+    def __init__(self, endpoint: str, model: str) -> None:
+        super().__init__("", model, endpoint)
+
+    async def _post(self, payload: dict[str, Any], stream: bool = False) -> httpx.Response:
+        for attempt in range(2):
+            async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    json={"model": self.model, **payload, "stream": stream},
+                )
+            if response.status_code != 429 and response.status_code < 500:
+                response.raise_for_status()
+                return response
+            if attempt == 0:
+                await asyncio.sleep(0.5)
+        response.raise_for_status()
+        return response

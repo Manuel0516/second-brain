@@ -56,6 +56,8 @@ class SettingsResponse(BaseModel):
     food_veg_target_units: int | None
     food_fruit_target_units: int | None
     food_stats_range_days: int
+    food_analyze_model: str
+    food_analyze_prompt: str
 
 
 class SettingsPatch(BaseModel):
@@ -92,6 +94,8 @@ class SettingsPatch(BaseModel):
     food_veg_target_units: int | None = Field(default=None, ge=0)
     food_fruit_target_units: int | None = Field(default=None, ge=0)
     food_stats_range_days: int | None = Field(default=None, ge=7, le=365)
+    food_analyze_model: str | None = Field(default=None, min_length=1, max_length=255)
+    food_analyze_prompt: str | None = Field(default=None, min_length=1, max_length=4000)
 
     @field_validator("favorite_emojis")
     @classmethod
@@ -195,6 +199,8 @@ def _settings_to_response(s: UserSettings) -> SettingsResponse:
         food_veg_target_units=s.food_veg_target_units,
         food_fruit_target_units=s.food_fruit_target_units,
         food_stats_range_days=s.food_stats_range_days,
+        food_analyze_model=s.food_analyze_model,
+        food_analyze_prompt=s.food_analyze_prompt,
     )
 
 

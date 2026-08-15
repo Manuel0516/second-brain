@@ -244,7 +244,12 @@ undo UI beyond ConfirmCard, tool-call streaming assembly (non-streaming tool tur
 
 ---
 
-## 15. Phase 7 — Self-extending spec tools + bot photo ingestion (planned)
+## 15. Phase 7 — Self-extending spec tools + bot photo ingestion (shipped 2026-08-15)
+
+> Implemented as designed below, with one correction: the "endpoint gap" noted in §15
+> (needing a new `PUT` meal-log route) was stale by the time this was implemented —
+> `PATCH /api/food/logs/{id}` and `POST /api/food/logs` already accepted `photo_file_ids`.
+> No new route was added. See `docs/history/0215-self-extending-tools-and-memory-identity.md`.
 
 **Decision (user, 2026-08-13):** Option 1 — tools as *declarative specs* executed by a
 generic runner. NOT agent-written Python (that is a separate, riskier future phase).
@@ -317,7 +322,15 @@ log created with photo → confirm → analyze; undo path where declared.
 
 ---
 
-## 16. Phase 8 — Identity & growth (the agent builds a model of you)
+## 16. Phase 8 — Identity & growth (shipped 2026-08-15)
+
+> Implemented as designed below, with two deviations decided with the user before
+> implementation: (1) `remember`/`recall`/`profile()` stay ungated — only `forget` and the
+> Phase 7 self-management tools are gated writes, to preserve the already-shipped
+> low-friction memory UX; (2) consolidation is a seeded `AISkill` the agent executes with
+> `remember`/`forget` on a manual nudge, not a dedicated `consolidate_memory()` tool with
+> LLM-in-tool-execution plumbing, and there is no bot cron scheduler. See
+> `docs/history/0215-self-extending-tools-and-memory-identity.md`.
 
 **Goal (user, 2026-08-13):** the agent gets visibly smarter over time and builds a durable
 *identity* about the user — who they are, their goals, habits, and corrections — so answers
