@@ -24,6 +24,9 @@ provider_factory: ProviderFactory | None = None
 # Overridable in tests, same pattern as provider_factory — points at the real DB by
 # default, swapped to the test session factory in tests/conftest.py.
 session_factory: async_sessionmaker[AsyncSession] = async_session_factory
+MAX_AGENT_STEPS = 24
+SSE_KEEPALIVE_SECONDS = 15.0
+_background_tasks: set[asyncio.Task[None]] = set()
 
 
 def provider(
@@ -94,7 +97,7 @@ async def run(
     engine = provider(model, provider_name, endpoint)
     started = time.perf_counter()
     tool_count = 0
-    for _ in range(12):
+    for _ in range(MAX_AGENT_STEPS):
         # Refresh each step: load_capability can add a typed OpenAPI tool mid-turn.
         tool_schemas, is_write = await tools.schemas_for(session, user_id)
         response = await engine.complete(messages, tool_schemas)
@@ -175,7 +178,9 @@ async def run(
             tool_message = {
                 "role": "tool",
                 "tool_call_id": call["id"],
-                "content": result["summary"],
+                # UI chips use the concise summary; the provider gets complete content
+                # for tools such as get_page/load_skill that cannot be safely truncated.
+                "content": result.get("model_content", result["summary"]),
             }
             messages.append(tool_message)
             completed_results.append(tool_message)
@@ -216,11 +221,26 @@ async def run(
                 )
             await session.commit()
             return
-    yield event(
-        "error",
-        message="I made too many tool calls without finishing — try rephrasing, or "
-        "break this into smaller steps.",
+    failure = (
+        "I made too many tool calls without finishing — try rephrasing, or break this into "
+        "smaller steps."
     )
+    message = AIMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=failure,
+        metrics={
+            "provider": provider_name,
+            "model": model,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+            "tool_calls": tool_count,
+        },
+    )
+    session.add(message)
+    await session.commit()
+    await session.refresh(message)
+    yield event("error", message=failure)
+    yield event("message_done", message_id=message.id)
     yield event("done")
 
 
@@ -260,9 +280,19 @@ async def run_detached(
             finally:
                 await queue.put(None)
 
-    asyncio.create_task(worker())
+    task = asyncio.create_task(worker())
+    # asyncio only keeps weak task references. Retain detached turns explicitly so a
+    # disconnected client cannot let an in-flight turn be garbage-collected.
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     while True:
-        chunk = await queue.get()
+        try:
+            chunk = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_SECONDS)
+        except TimeoutError:
+            # SSE comments are ignored by clients but keep proxies/sockets alive while
+            # the provider is thinking between visible events.
+            yield ": keepalive\n\n"
+            continue
         if chunk is None:
             return
         yield chunk

@@ -19,16 +19,30 @@ function mockFetch(
     importResponse?: unknown
     importOk?: boolean
     memories?: unknown[]
+    settings?: unknown
+    settingsOk?: boolean
+    capabilities?: unknown
+    capabilitiesOk?: boolean
   } = {},
 ) {
   const calls: Array<{ url: string; init?: RequestInit }> = []
   const fn = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url)
     calls.push({ url: u, init })
-    if (u === '/api/ai/settings') return { ok: true, json: async () => CONFIG }
+    if (u === '/api/ai/settings')
+      return {
+        ok: overrides.settingsOk ?? true,
+        status: overrides.settingsOk === false ? 500 : 200,
+        json: async () => overrides.settings ?? CONFIG,
+      }
     if (u === '/api/ai/memories')
       return { ok: true, json: async () => overrides.memories ?? [] }
-    if (u === '/api/ai/capabilities') return { ok: true, json: async () => [] }
+    if (u === '/api/ai/capabilities')
+      return {
+        ok: overrides.capabilitiesOk ?? true,
+        status: overrides.capabilitiesOk === false ? 500 : 200,
+        json: async () => overrides.capabilities ?? [],
+      }
     if (u === '/api/ai/actions') return { ok: true, json: async () => [] }
     if (u === '/api/ai/skills') return { ok: true, json: async () => [] }
     if (u === '/api/ai/knowledge/export') {
@@ -142,4 +156,29 @@ test('export button fetches the export endpoint', async () => {
   await waitFor(() =>
     expect(calls.some((c) => c.url === '/api/ai/knowledge/export')).toBe(true),
   )
+})
+
+test('settings API failure shows a useful error instead of crashing', async () => {
+  const { fn } = mockFetch({ settingsOk: false })
+  vi.stubGlobal('fetch', fn)
+  render(<AISettings />)
+
+  expect(
+    await screen.findByText(/database migrations are up to date/),
+  ).toBeTruthy()
+  expect(screen.queryByText('Model & autonomy')).toBeNull()
+})
+
+test('an optional section failure keeps the settings page usable', async () => {
+  const { fn } = mockFetch({
+    capabilities: { detail: 'Internal Server Error' },
+  })
+  vi.stubGlobal('fetch', fn)
+  render(<AISettings />)
+
+  expect(await screen.findByText('Model & autonomy')).toBeTruthy()
+  expect(
+    screen.getByText('Some assistant data could not be loaded: capabilities.'),
+  ).toBeTruthy()
+  expect(screen.getByText('Capabilities (0 enabled)')).toBeTruthy()
 })

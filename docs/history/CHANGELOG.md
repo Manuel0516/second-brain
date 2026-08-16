@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0251](0251-ai-settings-load-error-boundary.md)                          | AI settings API failures show useful errors instead of crashing the page                               | 2026-08-16 | accepted                   |
+| [0250](0250-agent-note-and-telegram-reliability.md)                      | Complete agent note reads, larger tool budget, and reliable Telegram delivery                          | 2026-08-16 | accepted                   |
 | [0249](0249-assistant-desktop-header-close-button-fix.md)                 | Fix stray desktop close button in assistant sidebar header                                              | 2026-08-16 | accepted                   |
 | [0248](0248-memory-delete-ui-and-consolidation-nudge.md)                  | Delete-a-memory settings UI + proactive age-aware consolidation nudge                                   | 2026-08-15 | accepted                   |
 | [0247](0247-calendar-conventions-skill-and-update-safe-deploy-docs.md)    | Calendar color/caching conventions skill + update-safe deploy docs                                      | 2026-08-15 | accepted                   |

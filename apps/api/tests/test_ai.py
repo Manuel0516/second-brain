@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ from app.models import (
     AIMemory,
     AIMessage,
     AISettings,
+    AISkill,
     AITool,
     Calendar,
     CalendarEvent,
@@ -285,6 +287,60 @@ async def test_read_tool_executes_and_preserves_tool_history(
     ]
     assert fake.seen[1][-2]["tool_calls"][0]["id"] == "read-1"
     assert fake.seen[1][-1]["tool_call_id"] == "read-1"
+
+
+async def test_agent_allows_more_than_twelve_tool_rounds(
+    client: AsyncClient, test_user: User
+) -> None:
+    await login(client)
+    row = await conversation(client)
+    responses = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [call(f"read-{index}", "get_today", {})],
+        }
+        for index in range(13)
+    ]
+    responses.append({"role": "assistant", "content": "Finished."})
+    fake = FakeProvider(responses)
+    agent.provider_factory = lambda model: fake
+
+    response = await client.post(
+        f"/api/ai/conversations/{row['id']}/messages", json={"content": "Do a long task"}
+    )
+
+    events = parse_events(response.text)
+    assert any(event.get("content") == "Finished." for event in events)
+    assert not any(event["type"] == "error" for event in events)
+
+
+async def test_detached_turn_sends_keepalives_while_provider_is_thinking(
+    client: AsyncClient, test_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await login(client)
+    row = await conversation(client)
+
+    class SlowProvider(FakeProvider):
+        async def complete(
+            self, messages: list[dict[str, Any]], schemas: list[dict[str, Any]]
+        ) -> dict[str, Any]:
+            await asyncio.sleep(0.03)
+            return await super().complete(messages, schemas)
+
+    fake = SlowProvider([{"role": "assistant", "content": "Done."}])
+    agent.provider_factory = lambda model: fake
+    monkeypatch.setattr(agent, "SSE_KEEPALIVE_SECONDS", 0.005)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_detached(
+            test_user.id, row["id"], "test-model", content="Take your time"
+        )
+    ]
+
+    assert ": keepalive\n\n" in chunks
+    assert any('"type": "done"' in chunk for chunk in chunks)
 
 
 async def test_write_waits_then_confirm_executes_and_resumes(
@@ -1042,6 +1098,90 @@ async def test_get_page_then_update_page_prepends_without_losing_existing_conten
     text = json.dumps(refetched["data"]["content"])
     assert "Milk" in text, "original content was lost by the merge"
     assert "Willys offers" in text and "Blueberries 19.90 kr" in text
+
+
+async def test_get_page_gives_model_every_note_block_but_keeps_ui_summary_compact(
+    client: AsyncClient, test_user: User
+) -> None:
+    await login(client)
+    items = [
+        {
+            "type": "taskItem",
+            "attrs": {"checked": False},
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": f"Item {index}"}]}
+            ],
+        }
+        for index in range(30)
+    ]
+    created = await client.post("/api/pages", json={"title": "Groceries"})
+    page_id = created.json()["id"]
+    await client.patch(
+        f"/api/pages/{page_id}",
+        json={"content": {"type": "doc", "content": [{"type": "taskList", "content": items}]}},
+    )
+    row = await conversation(client)
+    fake = FakeProvider(
+        [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [call("page-1", "get_page", {"id": page_id})],
+            },
+            {"role": "assistant", "content": "I read all 30 items."},
+        ]
+    )
+    agent.provider_factory = lambda model: fake
+
+    response = await client.post(
+        f"/api/ai/conversations/{row['id']}/messages", json={"content": "Read all groceries"}
+    )
+
+    provider_result = fake.seen[1][-1]["content"]
+    assert "Item 0" in provider_result and "Item 29" in provider_result
+    tool_event = next(
+        event for event in parse_events(response.text) if event["type"] == "tool_result"
+    )
+    assert "Item 29" not in tool_event["summary"]
+
+
+async def test_search_pages_excludes_event_ids(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    await login(client)
+    page = Page(user_id=test_user.id, title="Shopping", content={"type": "doc", "content": []})
+    calendar = Calendar(user_id=test_user.id, name="Personal", color="#22d3ee")
+    test_db_session.add_all([page, calendar])
+    await test_db_session.flush()
+    test_db_session.add(
+        CalendarEvent(
+            calendar_id=calendar.id,
+            title="Shopping",
+            start_at=datetime(2026, 8, 16, 9, tzinfo=UTC),
+            end_at=datetime(2026, 8, 16, 10, tzinfo=UTC),
+        )
+    )
+    await test_db_session.commit()
+
+    result = await tools.execute(
+        "search_pages", {"query": "Shopping"}, test_db_session, test_user.id
+    )
+
+    assert result["ok"] is True
+    assert [item["id"] for item in result["data"]] == [page.id]
+
+
+async def test_load_skill_gives_model_complete_procedure(
+    test_user: User, test_db_session: AsyncSession
+) -> None:
+    content = "First instruction\n" + ("detail " * 100) + "FINAL INSTRUCTION"
+    test_db_session.add(AISkill(user_id=test_user.id, name="groceries", content=content))
+    await test_db_session.commit()
+
+    result = await tools.execute("load_skill", {"name": "groceries"}, test_db_session, test_user.id)
+
+    assert len(result["summary"]) == 500
+    assert result["model_content"].endswith("FINAL INSTRUCTION")
 
 
 async def test_append_page_content_tool_adds_blocks_and_can_be_undone(

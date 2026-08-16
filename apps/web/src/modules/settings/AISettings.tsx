@@ -53,6 +53,29 @@ type ImportResult = {
   tools_skipped: string[]
 }
 
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`${url} returned ${response.status}`)
+  return response.json() as Promise<unknown>
+}
+
+function validConfig(value: unknown): value is Config {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<Config>
+  return (
+    (row.provider === 'openrouter' || row.provider === 'local') &&
+    typeof row.model_name === 'string' &&
+    (row.autonomy_level === 'ask_before_write' ||
+      row.autonomy_level === 'auto_low_risk' ||
+      row.autonomy_level === 'auto_all') &&
+    (row.embedding_provider === 'openrouter' ||
+      row.embedding_provider === 'local') &&
+    typeof row.embedding_model === 'string' &&
+    typeof row.embedding_dimensions === 'number' &&
+    typeof row.web_fetch_enabled === 'boolean'
+  )
+}
+
 export function AISettings() {
   const [config, setConfig] = useState<Config | null>(null)
   const [memories, setMemories] = useState<Memory[]>([])
@@ -60,35 +83,80 @@ export function AISettings() {
   const [actions, setActions] = useState<Action[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const [saved, setSaved] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importError, setImportError] = useState('')
   const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    void Promise.all([
-      fetch('/api/ai/settings').then((response) => response.json()),
-      fetch('/api/ai/memories').then((response) => response.json()),
-      fetch('/api/ai/capabilities').then((response) => response.json()),
-      fetch('/api/ai/actions').then((response) => response.json()),
-      fetch('/api/ai/skills').then((response) => response.json()),
-    ]).then(
-      ([
-        nextConfig,
-        nextMemories,
-        nextCapabilities,
-        nextActions,
-        nextSkills,
-      ]) => {
-        setConfig(nextConfig as Config)
-        setMemories(nextMemories as Memory[])
-        setCapabilities(nextCapabilities as Capability[])
-        setActions(nextActions as Action[])
-        setSkills(nextSkills as Skill[])
-      },
-    )
+    let active = true
+    void Promise.allSettled([
+      fetchJson('/api/ai/settings'),
+      fetchJson('/api/ai/memories'),
+      fetchJson('/api/ai/capabilities'),
+      fetchJson('/api/ai/actions'),
+      fetchJson('/api/ai/skills'),
+    ]).then((results) => {
+      if (!active) return
+      const [
+        configResult,
+        memoriesResult,
+        capabilitiesResult,
+        actionsResult,
+        skillsResult,
+      ] = results
+      if (
+        configResult.status !== 'fulfilled' ||
+        !validConfig(configResult.value)
+      ) {
+        setLoadError(
+          'Could not load AI settings. Check that the API is running and database migrations are up to date.',
+        )
+        return
+      }
+
+      setConfig(configResult.value)
+      const failedSections: string[] = []
+      if (
+        memoriesResult.status === 'fulfilled' &&
+        Array.isArray(memoriesResult.value)
+      )
+        setMemories(memoriesResult.value as Memory[])
+      else failedSections.push('memories')
+      if (
+        capabilitiesResult.status === 'fulfilled' &&
+        Array.isArray(capabilitiesResult.value)
+      )
+        setCapabilities(capabilitiesResult.value as Capability[])
+      else failedSections.push('capabilities')
+      if (
+        actionsResult.status === 'fulfilled' &&
+        Array.isArray(actionsResult.value)
+      )
+        setActions(actionsResult.value as Action[])
+      else failedSections.push('actions')
+      if (
+        skillsResult.status === 'fulfilled' &&
+        Array.isArray(skillsResult.value)
+      )
+        setSkills(skillsResult.value as Skill[])
+      else failedSections.push('skills')
+      if (failedSections.length)
+        setLoadError(
+          `Some assistant data could not be loaded: ${failedSections.join(', ')}.`,
+        )
+    })
+    return () => {
+      active = false
+    }
   }, [])
 
-  if (!config) return <p className="route-loading">Loading AI settings…</p>
+  if (!config)
+    return (
+      <p className="route-loading" role={loadError ? 'alert' : 'status'}>
+        {loadError || 'Loading AI settings…'}
+      </p>
+    )
 
   const save = async () => {
     const response = await fetch('/api/ai/settings', {
@@ -206,6 +274,12 @@ export function AISettings() {
         <h1>AI assistant</h1>
         <p>Control what the agent can use, learn, and change.</p>
       </header>
+
+      {loadError && (
+        <p className="settings-empty" role="alert">
+          {loadError}
+        </p>
+      )}
 
       <SettingsCard
         title="Export & import knowledge"

@@ -38,6 +38,7 @@ STATE_FILE = os.environ.get("SB_BOT_STATE_FILE", "/data/state.json")
 TG = f"https://api.telegram.org/bot{TOKEN}"
 MSG_LIMIT = 4096
 DEVICE_TTL_SECONDS = 590
+RECOVERY_TIMEOUT_SECONDS = 240
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sb-bot")
@@ -94,13 +95,20 @@ def tg_send(
     chat_id: int, text: str, reply_markup: dict | None = None, markdown: bool = True
 ) -> None:
     for chunk in split_text(text):
-        tg_call(
-            "sendMessage",
-            chat_id=chat_id,
-            text=chunk,
-            **({"parse_mode": "Markdown"} if markdown else {}),
+        params = {
+            "chat_id": chat_id,
+            "text": chunk,
             **({"reply_markup": reply_markup} if reply_markup else {}),
-        )
+        }
+        try:
+            tg_call("sendMessage", **params, **({"parse_mode": "Markdown"} if markdown else {}))
+        except urllib.error.HTTPError as exc:
+            if not markdown or exc.code != 400:
+                raise
+            # Tool names, model text, and previews can contain unescaped Markdown
+            # punctuation. Telegram rejects the whole message in that case; retrying
+            # as plain text is preferable to losing a completed assistant reply.
+            tg_call("sendMessage", **params)
 
 
 def strip_markdown(text: str) -> str:
@@ -293,7 +301,7 @@ def handle_message(chat_id: int, text: str) -> None:
 
     if text.startswith("/new"):
         tg_send(chat_id, "Starting a fresh conversation…")
-        conv = sb_conv_for(chat_id, fresh=True)
+        sb_conv_for(chat_id, fresh=True)
         tg_send(chat_id, "New conversation started.")
         return
 
@@ -355,7 +363,7 @@ def deliver_events(chat_id: int, conv_id: str, events) -> None:
             answer.append(f"⚠️ {ev.get('message', 'something went wrong')}")
 
     if called_tools:
-        tg_send(chat_id, "🔧 " + ", ".join(called_tools))
+        tg_send(chat_id, "🔧 " + ", ".join(called_tools), markdown=False)
     if answer:
         tg_send(chat_id, strip_markdown("".join(answer)), markdown=False)
     elif results:
@@ -367,7 +375,7 @@ def recover_reply(chat_id: int, conv_id: str, token: str, since: datetime) -> No
     agent turn keeps running server-side and commits its result regardless (see
     agent.run_detached in the API). Poll briefly for that result to land instead of
     leaving the user with silence."""
-    deadline = time.time() + 60
+    deadline = time.time() + RECOVERY_TIMEOUT_SECONDS
     while time.time() < deadline:
         time.sleep(3)
         try:

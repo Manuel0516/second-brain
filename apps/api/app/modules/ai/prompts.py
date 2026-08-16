@@ -128,7 +128,12 @@ async def build_system_prompt(session: AsyncSession, user_id: str) -> str:
         "changes (calendar ids/colors, exercise lists, and similar lookups), cache it once via "
         'remember(fact, category="fact") or a skill instead of re-fetching it every '
         "conversation — check recent facts and skills above before calling a read tool for "
-        "something you may already have. An event with a linked workout, meal, or note is "
+        "something you may already have. Search results and snippets never represent a whole "
+        "note: use them only to find the page id, then call get_page exactly once to read the "
+        "complete note before answering about or editing it. For an in-place page edit, preserve "
+        "all untouched Tiptap blocks and attributes; append_page_content is only for adding "
+        "entirely new blocks, not for modifying or re-adding existing items. An event with a "
+        "linked workout, meal, or note is "
         "ALWAYS one or two create_event calls (workout_type/meal_type params, or "
         "create_event_note for a note) — read create_event's full description before "
         "reaching for create_link on any of those three. Only use create_link to connect "

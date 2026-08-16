@@ -84,6 +84,26 @@ class BotFlowTests(unittest.TestCase):
         )
         send.assert_called_once_with(1, "Done", markdown=False)
 
+    @patch.object(bot, "tg_send")
+    def test_tool_names_are_sent_as_plain_text(self, send):
+        bot.deliver_events(
+            1,
+            "conversation-1",
+            [{"type": "tool_call", "name": "search_pages"}, {"type": "done"}],
+        )
+        send.assert_called_once_with(1, "🔧 search_pages", markdown=False)
+
+    @patch.object(bot, "tg_call")
+    def test_markdown_parse_failure_retries_as_plain_text(self, tg_call):
+        tg_call.side_effect = [
+            urllib.error.HTTPError("url", 400, "Bad Request", {}, None),
+            {"ok": True},
+        ]
+        bot.tg_send(1, "search_pages")
+        self.assertEqual(tg_call.call_count, 2)
+        self.assertEqual(tg_call.call_args_list[0].kwargs["parse_mode"], "Markdown")
+        self.assertNotIn("parse_mode", tg_call.call_args_list[1].kwargs)
+
     @patch.object(bot, "deliver_events")
     @patch.object(bot, "tg_call")
     @patch.object(bot, "api_stream", return_value=iter(()))

@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -52,8 +53,22 @@ TOOLS = [
         {"query": S, "limit": {"type": "integer", "minimum": 1, "maximum": 25}},
         ("query",),
     ),
-    Tool("search_pages", "Search pages by keyword.", {"query": S}, ("query",)),
-    Tool("get_page", "Get one page by id.", {"id": S}, ("id",)),
+    Tool(
+        "search_pages",
+        "Search notes/pages by keyword and return page ids. Results are pages only; use "
+        "get_page on the chosen id before answering about its contents because search "
+        "results are matches, not the complete note.",
+        {"query": S},
+        ("query",),
+    ),
+    Tool(
+        "get_page",
+        "Get one complete page by id, including its full Tiptap content and every section. "
+        "This result is authoritative: do not use search snippets to infer what else the "
+        "note contains and do not keep searching for sections after this succeeds.",
+        {"id": S},
+        ("id",),
+    ),
     Tool("list_pages", "List active pages."),
     Tool(
         "get_events",
@@ -163,11 +178,11 @@ TOOLS = [
     Tool(
         "update_page",
         "Replace a page's title and/or Tiptap JSON content wholesale — content you send "
-        "here REPLACES everything the page currently has. To add a section to a note "
-        "without touching what's already in it (e.g. 'add today's grocery deals to my "
-        "shopping list'), use append_page_content instead — never call get_page yourself "
-        "and try to reconstruct the merged document, that's exactly the failure mode "
-        "append_page_content exists to avoid.",
+        "here REPLACES everything the page currently has. For an in-place edit, annotation, "
+        "checkbox change, or text added beside an existing item, first call get_page and "
+        "return its complete document with only the requested changes; preserve every "
+        "untouched block and attribute. Use append_page_content only when the user explicitly "
+        "wants entirely new blocks added, never to re-add or annotate existing items.",
         {"id": S, "title": S, "content": OBJECT},
         ("id",),
         True,
@@ -181,9 +196,10 @@ TOOLS = [
         '{"type": "doc", ...} wrapper, just the blocks themselves. position: \'end\' '
         "(default) appends after existing content; 'start' inserts before it — use "
         "'start' for a running-log/journal-style note where the newest entry should "
-        "read first (e.g. dated grocery-deal check-ins). Prefer a page the user already "
-        "has (search_pages/search_graph first) over creating a new one for a recurring "
-        "note like a shopping list.",
+        "read first. Do not use this tool to annotate, rewrite, check off, or add text "
+        "beside existing blocks; use get_page then update_page for those edits. Prefer a "
+        "page the user already has (search_pages/search_graph first) over creating a new "
+        "one for a recurring note like a shopping list.",
         {
             "id": S,
             "content": {"type": "array", "items": OBJECT, "minItems": 1, "maxItems": 200},
@@ -803,6 +819,8 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
                 "ok": skill_content is not None,
                 "data": skill_content,
                 "summary": (skill_content or "Skill not found")[:500],
+                # Keep chips compact while giving the model the complete procedure.
+                "model_content": skill_content or "Skill not found",
             }
         if name == "save_skill":
             return {
@@ -857,6 +875,12 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
         }
 
     ok, data, summary = await _call(name, args, user_id)
+    if ok and name == "search_pages" and isinstance(data, list):
+        # /api/search intentionally returns pages and events for the app-wide picker,
+        # but this agent tool promises page ids. Event ids sent to get_page caused the
+        # repeated 404/search loop visible in the grocery-list transcript.
+        data = [item for item in data if isinstance(item, dict) and item.get("type") == "page"]
+        summary = _summarize(data)
     if ok and name == "create_page" and isinstance(data, dict) and args.get("content") is not None:
         ok, data, summary = await _call(
             "update_page", {"id": data["id"], "content": args["content"]}, user_id
@@ -866,7 +890,13 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
         if event is not None:
             event.created_by = "ai_assistant"
             await session.commit()
-    return {"ok": ok, "data": data, "summary": summary}
+    result = {"ok": ok, "data": data, "summary": summary}
+    if ok and name == "get_page":
+        # `summary` remains concise for the UI tool chip. The provider needs the full
+        # page JSON, otherwise it sees only "Title (id)" and mistakes a search snippet
+        # for the complete note.
+        result["model_content"] = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return result
 
 
 async def preimage(tool: str, args: JSON, session: AsyncSession, user_id: str) -> JSON | None:
