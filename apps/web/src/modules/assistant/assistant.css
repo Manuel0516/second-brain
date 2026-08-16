@@ -72,9 +72,7 @@
   justify-content: space-between;
 }
 .assistant-list-header > div {
-  flex: 1;
   min-width: 0;
-  text-align: center;
 }
 .assistant-list-header span,
 .assistant-composer label,
@@ -247,7 +245,9 @@
 .assistant-mobile-back {
   display: none;
 }
-.assistant-mobile-close {
+/* Redundant with the chat header's close button on desktop, where both panes
+   show at once — only needed as the phone's single-column dialog title bar. */
+.assistant-close.assistant-mobile-close {
   display: none;
 }
 .assistant-messages {
@@ -821,8 +821,12 @@
     border-right: 0;
   }
   .assistant-mobile-back,
-  .assistant-mobile-close {
+  .assistant-close.assistant-mobile-close {
     display: grid;
+  }
+  .assistant-list-header > div {
+    flex: 1;
+    text-align: center;
   }
   .assistant-message {
     max-width: 88%;

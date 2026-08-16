@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0249](0249-assistant-desktop-header-close-button-fix.md)                 | Fix stray desktop close button in assistant sidebar header                                              | 2026-08-16 | accepted                   |
 | [0248](0248-memory-delete-ui-and-consolidation-nudge.md)                  | Delete-a-memory settings UI + proactive age-aware consolidation nudge                                   | 2026-08-15 | accepted                   |
 | [0247](0247-calendar-conventions-skill-and-update-safe-deploy-docs.md)    | Calendar color/caching conventions skill + update-safe deploy docs                                      | 2026-08-15 | accepted                   |
 | [0246](0246-detached-agent-turns-and-telegram-bot-fixes.md)               | Detached agent turns (survive client disconnect) + Telegram bot reliability fixes                       | 2026-08-15 | accepted                   |
