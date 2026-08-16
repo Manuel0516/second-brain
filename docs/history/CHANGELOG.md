@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0256](0256-note-loss-guard-and-env-parity.md)                           | Stop the agent wiping notes, and why dev behaves differently from production                            | 2026-08-16 | accepted                   |
 | [0255](0255-telegram-live-progress.md)                                   | Telegram bot: live progress instead of a retrospective tool list                                        | 2026-08-16 | accepted                   |
 | [0254](0254-willys-offers-toggle-and-recall.md)                          | Willys offers: settings toggle, English shopping lists, and the missed-offers fix                       | 2026-08-16 | accepted                   |
 | [0253](0253-willys-offers-agent-tool.md)                                 | Willys offers tool: every current offer, matched against a shopping list                                | 2026-08-16 | accepted                   |

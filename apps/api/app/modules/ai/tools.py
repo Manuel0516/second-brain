@@ -677,6 +677,57 @@ def _summarize(data: Any) -> str:
     return str(data)[:200]
 
 
+def _doc_text(node: Any) -> str:
+    """Concatenate every text node in a Tiptap document, at any depth."""
+    if isinstance(node, dict):
+        text = str(node.get("text") or "")
+        return text + _doc_text(node.get("content"))
+    if isinstance(node, list):
+        return "".join(_doc_text(child) for child in node)
+    return ""
+
+
+# A rewrite may legitimately shorten a page, but dropping most of it is far more
+# often the model reconstructing the doc badly than a real intent to erase.
+_LOSS_RATIO = 0.5
+_LOSS_FLOOR = 200
+
+
+async def _guard_content_loss(page_id: str, content: Any, user_id: str) -> str | None:
+    """Refuse an update_page that would silently destroy most of a page.
+
+    PATCH /api/pages/{id} replaces `content` wholesale, so a model that sends only
+    the blocks it was thinking about — or a truncated reconstruction — wipes
+    everything else with no warning and no undo prompt. This is the single most
+    destructive thing the agent can do to a note, so it is checked before the write
+    rather than mopped up afterwards.
+
+    Returns an error message to send back to the model, or None to allow the write.
+    """
+    if not page_id:
+        return None
+    try:
+        response = await _api("GET", f"/api/pages/{quote(page_id)}", None, user_id)
+    except httpx.HTTPError:
+        return None  # Can't verify: let the write proceed rather than block on a blip.
+    if response.status_code >= 400:
+        return None
+    existing = _doc_text(response.json().get("content"))
+    if len(existing) < _LOSS_FLOOR:
+        return None
+    incoming = _doc_text(content)
+    if len(incoming) >= len(existing) * _LOSS_RATIO:
+        return None
+    return (
+        f"Refused: this would cut the page from {len(existing)} to {len(incoming)} "
+        f"characters, deleting most of it. update_page REPLACES the whole document, so "
+        f"you must pass the page's complete content, not only the part you changed. "
+        f"To add to a page use append_page_content. To edit in place, call get_page "
+        f"first and resend every existing block with your change applied. If the user "
+        f"really did ask you to delete this content, tell them to do it in the app."
+    )
+
+
 async def _api(method: str, path: str, body: JSON | None, user_id: str) -> httpx.Response:
     # get_current_user authenticates the same access JWT from its httpOnly cookie.
     token = generate_jwt(user_id, "access", 5)
@@ -958,6 +1009,11 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
             "summary": summary,
             "model_content": json.dumps(willys_data, ensure_ascii=False, separators=(",", ":")),
         }
+
+    if name == "update_page" and args.get("content") is not None:
+        refusal = await _guard_content_loss(str(args.get("id") or ""), args["content"], user_id)
+        if refusal:
+            return {"ok": False, "summary": refusal}
 
     ok, data, summary = await _call(name, args, user_id)
     if ok and name == "search_pages" and isinstance(data, list):
