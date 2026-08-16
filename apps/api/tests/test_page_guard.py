@@ -4,6 +4,9 @@ PATCH /api/pages/{id} replaces `content` wholesale, so an update_page carrying o
 part of the document destroys the rest. See history 0256.
 """
 
+from collections.abc import AsyncIterator
+from typing import Any, cast
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +18,7 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture(autouse=True)
-async def internal_api(client: AsyncClient):
+async def internal_api(client: AsyncClient) -> AsyncIterator[None]:
     """tools._api calls the app's own routes; in tests that has to go through the
     test client rather than a real socket."""
     tools.request_factory = lambda: client
@@ -30,7 +33,7 @@ async def login(client: AsyncClient) -> None:
     assert response.status_code == 200
 
 
-def _doc(text: str) -> dict:
+def _doc(text: str) -> dict[str, Any]:
     return {
         "type": "doc",
         "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
@@ -39,7 +42,7 @@ def _doc(text: str) -> dict:
 
 async def _page(client: AsyncClient, text: str) -> str:
     created = await client.post("/api/pages", json={"title": "Shopping list"})
-    page_id = created.json()["id"]
+    page_id = cast(str, created.json()["id"])
     await client.patch(f"/api/pages/{page_id}", json={"content": _doc(text)})
     return page_id
 
