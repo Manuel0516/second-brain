@@ -146,8 +146,20 @@ TOOLS = [
     ),
     Tool(
         "create_tool",
-        "Create a new agent tool as a declarative spec (method+path+args) calling an "
-        "existing app endpoint. Never arbitrary code.",
+        "Create a new agent tool as a declarative spec (method+path+args). Never "
+        "arbitrary code. "
+        "HARD LIMIT: the spec can only call THIS app's own already-registered routes. "
+        "`path` must start with /api/ and must match a route that already exists here — "
+        "a path that merely looks plausible is rejected. There is no way to call a "
+        "third-party or internet API, and no field anywhere for a base URL, API key, or "
+        "token. So never ask the user for an endpoint URL, API key, or token: nothing "
+        "can be done with one. If what they want needs an external service, say plainly "
+        "that agent-created tools cannot reach outside this app and that it needs to be "
+        "built into the backend instead. "
+        "Prefer discover_capabilities + load_capability over this tool: that searches "
+        "the app's live API catalog and turns a real route into a typed tool, so you "
+        "never guess a path. Use create_tool only to combine or re-shape a route you "
+        "have already confirmed exists.",
         {
             "name": S,
             "description": S,
@@ -398,6 +410,36 @@ TOOLS = [
         ("url",),
         False,
     ),
+    Tool(
+        "willys_offers",
+        "Look up current Willys (Swedish grocery) offers — every live campaign in their "
+        "online range, with the offer price, the ordinary price, the saving, the "
+        "comparison price, and whether a Willys Plus membership is required. Use this "
+        "instead of web_fetch for anything about Willys prices or discounts; web_fetch "
+        "truncates and cannot see all of them. "
+        "Pass items to check a shopping list: give the item names exactly as the user "
+        "wrote them, in whatever language — English items are translated to Swedish "
+        "automatically ('cheese' finds Ost, 'sour cream' finds Gräddfil), so do NOT "
+        "translate them yourself and do not drop items you think will not match. Pass "
+        "the plain grocery word ('kaffe'), not a whole phrase ('2 paket kaffe till "
+        "helgen'). You get back the matching offers per item, best match first, plus a "
+        "no_offer list. "
+        "This already searches every offer in the range — there is no 'show more' to "
+        "click and nothing further to check, so never fall back to web_fetch for Willys "
+        "and never report an item as having no offer unless it came back in no_offer. "
+        "Each offer carries the product's category: use it to sanity-check a match "
+        "before writing it down (an 'ost' hit in Djur is cat food, not cheese). "
+        "Omit items to get the full offer list, capped and only useful for browsing or "
+        "counting — prefer items whenever the user has something specific in mind. "
+        "Offers cover the national online range and refresh weekly; results are cached, "
+        "so calling this repeatedly in one conversation is cheap.",
+        {
+            "items": {"type": "array", "maxItems": 40, "items": S},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 60},
+        },
+        (),
+        False,
+    ),
 ]
 BY_NAME = {tool.name: tool for tool in TOOLS}
 
@@ -428,6 +470,14 @@ async def schemas_for(session: AsyncSession, user_id: str) -> tuple[list[JSON], 
     if not web_fetch_enabled:
         result = [item for item in result if item["function"]["name"] != "web_fetch"]
         is_write.pop("web_fetch", None)
+    willys_enabled = await session.scalar(
+        select(AISettings.willys_offers_enabled).where(AISettings.user_id == user_id)
+    )
+    # `is None` means the user has no AISettings row yet; the column defaults to
+    # true, so an absent row must not read as "disabled" the way `not None` would.
+    if willys_enabled is False:
+        result = [item for item in result if item["function"]["name"] != "willys_offers"]
+        is_write.pop("willys_offers", None)
     for row in rows:
         spec_tool = spec_tools.to_tool(row)
         result.append(spec_tool.schema())
@@ -872,6 +922,41 @@ async def execute(name: str, args: JSON, session: AsyncSession | None, user_id: 
             "ok": True,
             "data": data,
             "summary": f"{title}{data['url']}\n{data['text']}"[:8000],
+        }
+    if name == "willys_offers":
+        assert session is not None
+        from app.modules.ai import willys
+
+        willys_enabled = await session.scalar(
+            select(AISettings.willys_offers_enabled).where(AISettings.user_id == user_id)
+        )
+        if willys_enabled is False:
+            return {"ok": False, "summary": "willys_offers is disabled in AI settings."}
+        try:
+            offers = await willys.all_offers()
+        except (willys.WillysError, httpx.HTTPError) as exc:
+            return {"ok": False, "summary": f"Could not read Willys offers: {exc}"}
+        items = [str(item) for item in (args.get("items") or []) if str(item).strip()]
+        if items:
+            matched = willys.match(offers, items)
+            found = sum(len(group["offers"]) for group in matched)
+            missing = [item for item in items if item not in {g["item"] for g in matched}]
+            willys_data: JSON = {"matches": matched, "no_offer": missing}
+            summary = (
+                f"{found} offer(s) matching {len(matched)} of {len(items)} item(s)."
+                if matched
+                else f"No current Willys offers match: {', '.join(items)}."
+            )
+        else:
+            # The full list is ~800 offers; capped so it cannot swamp the reply.
+            limit = int(args.get("limit") or 40)
+            willys_data = {"offers": offers[:limit], "total": len(offers)}
+            summary = f"{len(offers)} current Willys offers (showing {min(limit, len(offers))})."
+        return {
+            "ok": True,
+            "data": willys_data,
+            "summary": summary,
+            "model_content": json.dumps(willys_data, ensure_ascii=False, separators=(",", ":")),
         }
 
     ok, data, summary = await _call(name, args, user_id)

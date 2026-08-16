@@ -1258,6 +1258,35 @@ async def test_tool_schemas_match_content_and_route_requirements() -> None:
     }
 
 
+async def test_willys_offers_is_on_by_default_and_hidden_once_disabled(
+    client: AsyncClient, test_user: User, test_db_session: AsyncSession
+) -> None:
+    """Unlike web_fetch, willys_offers is on by default: it reads one hardcoded public
+    host with no user-controlled URL, so it has none of web_fetch's SSRF surface. The
+    toggle exists to turn it off, and is checked both when building the tool list the
+    model sees and again inside execute() (see history 0254)."""
+    await login(client)
+
+    # No AISettings row yet -> must still be visible, not read as disabled.
+    schemas, is_write = await tools.schemas_for(test_db_session, test_user.id)
+    assert "willys_offers" in {item["function"]["name"] for item in schemas}
+    assert is_write["willys_offers"] is False
+
+    patched = await client.patch("/api/ai/settings", json={"willys_offers_enabled": False})
+    assert patched.status_code == 200 and patched.json()["willys_offers_enabled"] is False
+
+    schemas, is_write = await tools.schemas_for(test_db_session, test_user.id)
+    assert "willys_offers" not in {item["function"]["name"] for item in schemas}
+    assert "willys_offers" not in is_write
+
+    # Defense in depth: refused even if the model calls it anyway.
+    blocked = await tools.execute(
+        "willys_offers", {"items": ["mjölk"]}, test_db_session, test_user.id
+    )
+    assert blocked["ok"] is False
+    assert "disabled" in blocked["summary"]
+
+
 async def test_web_fetch_hidden_and_blocked_until_enabled_in_settings(
     client: AsyncClient, test_user: User, test_db_session: AsyncSession
 ) -> None:

@@ -12,6 +12,7 @@ const CONFIG = {
   embedding_endpoint_url: null,
   embedding_dimensions: 1536,
   web_fetch_enabled: false,
+  willys_offers_enabled: true,
 }
 
 function mockFetch(

@@ -15,6 +15,7 @@ type Config = {
   embedding_endpoint_url: string | null
   embedding_dimensions: number
   web_fetch_enabled: boolean
+  willys_offers_enabled: boolean
 }
 
 const PROVIDER_OPTIONS: DropdownOption<Config['provider']>[] = [
@@ -72,7 +73,8 @@ function validConfig(value: unknown): value is Config {
       row.embedding_provider === 'local') &&
     typeof row.embedding_model === 'string' &&
     typeof row.embedding_dimensions === 'number' &&
-    typeof row.web_fetch_enabled === 'boolean'
+    typeof row.web_fetch_enabled === 'boolean' &&
+    typeof row.willys_offers_enabled === 'boolean'
   )
 }
 
@@ -439,6 +441,22 @@ export function AISettings() {
           checked={config.web_fetch_enabled}
           onChange={(web_fetch_enabled) =>
             setConfig({ ...config, web_fetch_enabled })
+          }
+        />
+        {saved && <span className="settings-card-saved">{saved}</span>}
+      </SettingsCard>
+
+      <SettingsCard
+        title="Willys offers"
+        description="Lets the agent look up current Willys offers — every live campaign in their online range, with offer price, ordinary price, saving and whether Willys Plus is required. Useful for checking a shopping list against this week's deals. Reads only Willys' own public price data; nothing is sent to them."
+        onSave={() => void save()}
+        hasChanges
+      >
+        <ToggleRow
+          label="Allow looking up Willys offers"
+          checked={config.willys_offers_enabled}
+          onChange={(willys_offers_enabled) =>
+            setConfig({ ...config, willys_offers_enabled })
           }
         />
         {saved && <span className="settings-card-saved">{saved}</span>}

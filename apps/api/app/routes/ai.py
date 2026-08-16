@@ -40,6 +40,7 @@ class SettingsResponse(BaseModel):
     embedding_endpoint_url: str | None
     embedding_dimensions: int
     web_fetch_enabled: bool
+    willys_offers_enabled: bool
 
 
 class SettingsPatch(BaseModel):
@@ -52,6 +53,7 @@ class SettingsPatch(BaseModel):
     embedding_endpoint_url: str | None = Field(default=None, max_length=2048)
     embedding_dimensions: int | None = Field(default=None, ge=1, le=4096)
     web_fetch_enabled: bool | None = None
+    willys_offers_enabled: bool | None = None
 
 
 class ConversationCreate(BaseModel):

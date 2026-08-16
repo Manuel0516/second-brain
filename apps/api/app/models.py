@@ -737,6 +737,7 @@ class AISettings(Base):
     embedding_endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False, default=1536)
     web_fetch_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    willys_offers_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class AIMemory(Base):

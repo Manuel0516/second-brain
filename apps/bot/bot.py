@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -139,6 +140,69 @@ def tg_typing(chat_id: int) -> None:
         tg_call("sendChatAction", sock_timeout=10, chat_id=chat_id, action="typing")
     except Exception:  # noqa: BLE001
         pass
+
+
+# Telegram clears the typing indicator after ~5s, so it has to be re-sent while a
+# turn is still running.
+TYPING_REFRESH_SECONDS = 4
+
+
+class Progress:
+    """Live "what am I doing" feedback for one agent turn.
+
+    Two problems this fixes. Typing was only sent when a tool *started*, so any
+    tool slower than ~5s (the Willys sweep is ~11s cold) left the chat completely
+    silent — a background thread now keeps it alive for the whole turn. And the
+    list of called tools used to be sent only after the turn finished, which told
+    the user what the bot *had* worked on, long after it mattered; one status
+    message is now posted on the first tool and edited in place as more run.
+    """
+
+    def __init__(self, chat_id: int) -> None:
+        self.chat_id = chat_id
+        self.tools: list[str] = []
+        self.message_id: int | None = None
+        self._posted = False
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._keep_typing, daemon=True)
+
+    def start(self) -> "Progress":
+        self._thread.start()
+        return self
+
+    def _keep_typing(self) -> None:
+        while not self._stop.is_set():
+            tg_typing(self.chat_id)
+            self._stop.wait(TYPING_REFRESH_SECONDS)
+
+    def _render(self, suffix: str) -> None:
+        text = "🔧 " + ", ".join(self.tools) + suffix
+        try:
+            if not self._posted:
+                # Set before the call: if Telegram answers without a usable id, the
+                # later edits are skipped rather than posting a message per tool.
+                self._posted = True
+                response = tg_call("sendMessage", chat_id=self.chat_id, text=text)
+                self.message_id = response.get("result", {}).get("message_id")
+            elif self.message_id is not None:
+                tg_call(
+                    "editMessageText",
+                    chat_id=self.chat_id,
+                    message_id=self.message_id,
+                    text=text,
+                )
+        except Exception:  # noqa: BLE001
+            # Progress is cosmetic: never let it break delivery of the real answer.
+            log.debug("progress update failed", exc_info=True)
+
+    def tool(self, name: str) -> None:
+        self.tools.append(name)
+        self._render("…")
+
+    def done(self) -> None:
+        self._stop.set()
+        if self.tools:
+            self._render("")
 
 
 # --- second brain api (bearer token) ------------------------------------------
@@ -328,7 +392,16 @@ def confirmation_markup(action_id: str) -> dict:
 
 
 def deliver_events(chat_id: int, conv_id: str, events) -> None:
-    called_tools: list[str] = []
+    progress = Progress(chat_id).start()
+    try:
+        _deliver_events(chat_id, conv_id, events, progress)
+    finally:
+        # Always stop the typing thread, even if the stream raises and the caller
+        # falls back to recover_reply.
+        progress.done()
+
+
+def _deliver_events(chat_id: int, conv_id: str, events, progress: "Progress") -> None:
     results: list[str] = []
     answer: list[str] = []
     for ev in events:
@@ -336,8 +409,7 @@ def deliver_events(chat_id: int, conv_id: str, events) -> None:
         if etype == "text_delta":
             answer.append(ev.get("content", ""))
         elif etype == "tool_call":
-            called_tools.append(ev.get("name", "?"))
-            tg_typing(chat_id)
+            progress.tool(ev.get("name", "?"))
         elif etype == "tool_result":
             results.append(ev.get("summary", "Done"))
         elif etype == "confirm_required":
@@ -362,8 +434,6 @@ def deliver_events(chat_id: int, conv_id: str, events) -> None:
         elif etype == "error":
             answer.append(f"⚠️ {ev.get('message', 'something went wrong')}")
 
-    if called_tools:
-        tg_send(chat_id, "🔧 " + ", ".join(called_tools), markdown=False)
     if answer:
         tg_send(chat_id, strip_markdown("".join(answer)), markdown=False)
     elif results:

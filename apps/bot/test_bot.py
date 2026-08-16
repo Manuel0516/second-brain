@@ -3,6 +3,8 @@
 import json
 import os
 import sys
+import threading
+import time
 import unittest
 import urllib.error
 from datetime import UTC, datetime, timedelta
@@ -17,6 +19,18 @@ import bot  # noqa: E402
 class BotFlowTests(unittest.TestCase):
     def setUp(self):
         bot._state = {}
+        self._threads_before = threading.active_count()
+
+    def tearDown(self):
+        self._wait_for_threads()
+
+    def _wait_for_threads(self):
+        """The typing thread is a daemon on a 4s tick, so it stops shortly after
+        done() sets the event rather than instantly."""
+        deadline = time.time() + 3
+        while threading.active_count() > self._threads_before and time.time() < deadline:
+            time.sleep(0.02)
+        return threading.active_count()
 
     @patch.object(bot, "tg_send")
     def test_confirmation_uses_confirm_callback(self, send):
@@ -84,14 +98,57 @@ class BotFlowTests(unittest.TestCase):
         )
         send.assert_called_once_with(1, "Done", markdown=False)
 
+    @patch.object(bot, "tg_typing")
+    @patch.object(bot, "tg_call")
     @patch.object(bot, "tg_send")
-    def test_tool_names_are_sent_as_plain_text(self, send):
+    def test_tool_progress_is_posted_live_and_edited_in_place(self, send, tg_call, _typing):
+        """The tool list used to be sent only after the turn finished, telling the user
+        what the bot *had* done long after it mattered. It is now one message posted on
+        the first tool and edited as more run (see history 0255)."""
+        tg_call.return_value = {"result": {"message_id": 77}}
         bot.deliver_events(
             1,
             "conversation-1",
-            [{"type": "tool_call", "name": "search_pages"}, {"type": "done"}],
+            [
+                {"type": "tool_call", "name": "willys_offers"},
+                {"type": "tool_call", "name": "get_page"},
+                {"type": "text_delta", "content": "Done"},
+                {"type": "done"},
+            ],
         )
-        send.assert_called_once_with(1, "🔧 search_pages", markdown=False)
+        methods = [call.args[0] for call in tg_call.call_args_list]
+        assert methods[0] == "sendMessage"
+        assert set(methods[1:]) == {"editMessageText"}
+        # Every edit targets the same message, and the last one drops the ellipsis.
+        assert all(c.kwargs["message_id"] == 77 for c in tg_call.call_args_list[1:])
+        assert tg_call.call_args_list[-1].kwargs["text"] == "🔧 willys_offers, get_page"
+        # The answer itself still goes out exactly once, unchanged.
+        send.assert_called_once_with(1, "Done", markdown=False)
+
+    @patch.object(bot, "tg_typing")
+    @patch.object(bot, "tg_call")
+    @patch.object(bot, "tg_send")
+    def test_no_progress_message_when_no_tools_run(self, _send, tg_call, _typing):
+        bot.deliver_events(
+            1, "conversation-1", [{"type": "text_delta", "content": "Hi"}, {"type": "done"}]
+        )
+        posted = [c.args[0] for c in tg_call.call_args_list if c.args]
+        assert "sendMessage" not in posted and "editMessageText" not in posted
+
+    @patch.object(bot, "tg_typing")
+    @patch.object(bot, "tg_send")
+    def test_typing_thread_stops_even_if_the_stream_raises(self, _send, _typing):
+        """A dropped stream must not leave a typing thread running forever — the caller
+        falls back to recover_reply and that turn is over."""
+
+        def boom():
+            yield {"type": "tool_call", "name": "search_pages"}
+            raise urllib.error.URLError("dropped")
+
+        with patch.object(bot, "tg_call", return_value={"result": {"message_id": 5}}):
+            with self.assertRaises(urllib.error.URLError):
+                bot.deliver_events(1, "conversation-1", boom())
+        assert self._wait_for_threads() == self._threads_before
 
     @patch.object(bot, "tg_call")
     def test_markdown_parse_failure_retries_as_plain_text(self, tg_call):

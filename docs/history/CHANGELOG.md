@@ -7,6 +7,10 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0255](0255-telegram-live-progress.md)                                   | Telegram bot: live progress instead of a retrospective tool list                                        | 2026-08-16 | accepted                   |
+| [0254](0254-willys-offers-toggle-and-recall.md)                          | Willys offers: settings toggle, English shopping lists, and the missed-offers fix                       | 2026-08-16 | accepted                   |
+| [0253](0253-willys-offers-agent-tool.md)                                 | Willys offers tool: every current offer, matched against a shopping list                                | 2026-08-16 | accepted                   |
+| [0252](0252-main-database-migration-lineage-repair.md)                   | Replace Finance database lineage with main migrations                                                   | 2026-08-16 | accepted                   |
 | [0251](0251-ai-settings-load-error-boundary.md)                          | AI settings API failures show useful errors instead of crashing the page                               | 2026-08-16 | accepted                   |
 | [0250](0250-agent-note-and-telegram-reliability.md)                      | Complete agent note reads, larger tool budget, and reliable Telegram delivery                          | 2026-08-16 | accepted                   |
 | [0249](0249-assistant-desktop-header-close-button-fix.md)                 | Fix stray desktop close button in assistant sidebar header                                              | 2026-08-16 | accepted                   |
