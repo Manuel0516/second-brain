@@ -1,4 +1,9 @@
-import type { FinanceActivityItem, FinanceSummary } from './types'
+import type {
+  DecimalString,
+  FinanceActivityItem,
+  FinanceSummary,
+  FinanceTimeseriesSeries,
+} from './types'
 import type { TrendPoint } from './primitives'
 
 const DECIMAL_RE = /^(-?)(\d+)(?:\.(\d+))?$/
@@ -172,4 +177,90 @@ export function readinessPercent(summary: FinanceSummary): number {
   const penalty =
     summary.readiness.blocking_count * 18 + summary.readiness.warning_count * 6
   return Math.max(10, 100 - penalty)
+}
+
+/** Chart-render conversion only — a /timeseries series into TrendPoints. Never sent back. */
+export function seriesToTrend(
+  series: FinanceTimeseriesSeries | undefined,
+): TrendPoint[] {
+  if (!series) return []
+  return series.points.map((point) => ({
+    label: dayLabel(point.t),
+    value: Number(point.v),
+  }))
+}
+
+/** Series values as a plain number array for sparklines. Chart-render conversion only. */
+export function seriesToSparkline(
+  series: FinanceTimeseriesSeries | undefined,
+): number[] {
+  if (!series) return []
+  return series.points.map((point) => Number(point.v))
+}
+
+/**
+ * Merge grouped series into one "All …" trend, summing (money) or averaging
+ * (readiness %) per date. Chart-render conversion only.
+ */
+export function mergeSeries(
+  series: FinanceTimeseriesSeries[],
+  mode: 'sum' | 'avg',
+): TrendPoint[] {
+  const buckets = new Map<string, number[]>()
+  for (const s of series) {
+    for (const point of s.points) {
+      const list = buckets.get(point.t) ?? []
+      list.push(Number(point.v))
+      buckets.set(point.t, list)
+    }
+  }
+  return [...buckets.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([date, values]) => {
+      const total = values.reduce((acc, v) => acc + v, 0)
+      return {
+        label: dayLabel(date),
+        value:
+          mode === 'avg' && values.length > 0 ? total / values.length : total,
+      }
+    })
+}
+
+/**
+ * Year-over-year delta chip text: "↑ 12% vs 2025". Display math only —
+ * percentages are derived presentation, never persisted.
+ */
+export function yoyDelta(
+  current: DecimalString,
+  previous: DecimalString,
+  previousYear: number,
+): { text: string; tone: 'success' | 'danger' | 'neutral' } {
+  const cur = Number(current)
+  const prev = Number(previous)
+  if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) {
+    return cur > 0 && prev === 0
+      ? { text: `New vs ${previousYear}`, tone: 'neutral' }
+      : { text: `— 0% vs ${previousYear}`, tone: 'neutral' }
+  }
+  const pct = Math.round(((cur - prev) / Math.abs(prev)) * 100)
+  if (pct === 0) return { text: `— 0% vs ${previousYear}`, tone: 'neutral' }
+  return pct > 0
+    ? { text: `↑ ${pct}% vs ${previousYear}`, tone: 'success' }
+    : { text: `↓ ${Math.abs(pct)}% vs ${previousYear}`, tone: 'danger' }
+}
+
+/** First→last percentage change of a trend, e.g. "↑ 18% vs Jan 1, 2026". Display only. */
+export function trendDelta(
+  points: TrendPoint[],
+  sinceLabel: string,
+): { text: string; tone: 'success' | 'danger' | 'neutral' } | null {
+  if (points.length < 2) return null
+  const first = points[0].value
+  const last = points[points.length - 1].value
+  if (first === 0) return null
+  const pct = Math.round(((last - first) / Math.abs(first)) * 100)
+  if (pct === 0) return { text: `— 0% vs ${sinceLabel}`, tone: 'neutral' }
+  return pct > 0
+    ? { text: `↑ ${pct}% vs ${sinceLabel}`, tone: 'success' }
+    : { text: `↓ ${Math.abs(pct)}% vs ${sinceLabel}`, tone: 'danger' }
 }

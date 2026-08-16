@@ -248,6 +248,47 @@ async def _attach_valuation_and_evidence(
     return valuation, evidence
 
 
+async def test_review_counts_and_group_filters(
+    finance_review_client: AsyncClient,
+    test_db_session: AsyncSession,
+    test_user: User,
+) -> None:
+    ready = await _seed_group(test_db_session, test_user, member_count=1)
+    needs_evidence = await _seed_group(test_db_session, test_user, member_count=1)
+    problematic = await _seed_group(test_db_session, test_user, member_count=1)
+    needs_grouping = await _seed_group(test_db_session, test_user, member_count=1)
+    ready.group.status = "confirmed"
+    needs_evidence.group.evidence_coverage = Decimal("0.5")
+    problematic.group.warnings = [
+        {"code": "fixture_blocker", "severity": "blocking", "message": "Blocked"}
+    ]
+    needs_grouping.group.warnings = [
+        {"code": "fixture_warning", "severity": "warning", "message": "Review"}
+    ]
+    await test_db_session.commit()
+
+    counts = await finance_review_client.get(
+        "/api/finance/review-queue/counts?tax_year=2026&jurisdiction=SE"
+    )
+    assert counts.status_code == 200
+    assert counts.json() == {
+        "needs_grouping": 1,
+        "needs_evidence": 1,
+        "ready": 1,
+        "problematic": 1,
+        "total": 4,
+    }
+
+    groups = await finance_review_client.get(
+        f"/api/finance/review-groups?event_type=staking_reward&group_id={ready.group.id}"
+    )
+    assert groups.status_code == 200
+    assert [item["id"] for item in groups.json()["items"]] == [ready.group.id]
+    activity = await finance_review_client.get(f"/api/finance/activity?group_id={ready.group.id}")
+    assert activity.status_code == 200
+    assert [item["id"] for item in activity.json()["items"]] == [ready.group.id]
+
+
 async def _seed_transfer_pair(
     session: AsyncSession,
     user: User,

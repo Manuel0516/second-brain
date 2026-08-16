@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Dropdown } from '../../components/Dropdown'
 import { useDialogFocus } from '../../components/useDialogFocus'
 import { JURISDICTIONS } from './navigation'
 import {
@@ -13,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { FinanceSourceCitation, FinanceWarning } from './types'
+import type { FinanceWarning } from './types'
 
 export type PillTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
@@ -228,11 +229,15 @@ export function RingProgress({
 export function BarMeter({
   value,
   tone = 'neutral',
+  color,
 }: {
   value: number
   tone?: PillTone
+  /** Explicit fill (a CSS token) — wins over tone. Used by multi-color source mixes. */
+  color?: string
 }) {
-  const fg = tone === 'neutral' ? 'var(--text-primary)' : PILL_TONES[tone].fg
+  const fg =
+    color ?? (tone === 'neutral' ? 'var(--text-primary)' : PILL_TONES[tone].fg)
   return (
     <div className="fin-barmeter">
       <div
@@ -261,10 +266,30 @@ const MONTHS = [
   'Dec',
 ]
 
-export function SidebarYearBlock({ taxYear }: { taxYear: number }) {
+export function SidebarYearBlock({
+  taxYear,
+  onChange,
+}: {
+  taxYear: number
+  onChange?: (year: number) => void
+}) {
+  const years = Array.from({ length: 6 }, (_, i) => taxYear - 4 + i)
   return (
     <div className="fin-sidebar-section fin-sidebar-year">
-      <span className="finance-section-label">Tax year {taxYear}</span>
+      <div className="fin-sidebar-year-row">
+        <span className="finance-section-label">This year</span>
+        {onChange ? (
+          <Dropdown
+            className="fin-dropdown-plain"
+            ariaLabel="Finance year"
+            value={taxYear}
+            onChange={onChange}
+            options={years.map((year) => ({ value: year, label: `${year}` }))}
+          />
+        ) : (
+          <span className="fin-sidebar-year-value">{taxYear}</span>
+        )}
+      </div>
       <span className="fin-sidebar-year-range">
         {MONTHS[0]} 1 – {MONTHS[11]} 31, {taxYear}
       </span>
@@ -275,13 +300,27 @@ export function SidebarYearBlock({ taxYear }: { taxYear: number }) {
 export function JurisdictionList({
   jurisdiction,
   onChange,
+  onAdd,
 }: {
   jurisdiction: string | undefined
   onChange: (code: string | undefined) => void
+  onAdd?: () => void
 }) {
   return (
     <div className="fin-sidebar-section">
-      <span className="finance-section-label">Jurisdictions</span>
+      <span className="finance-section-label fin-side-label-row">
+        Jurisdictions
+        {onAdd && (
+          <button
+            type="button"
+            className="fin-side-add"
+            aria-label="Add jurisdiction"
+            onClick={onAdd}
+          >
+            <IconPlus />
+          </button>
+        )}
+      </span>
       <div className="fin-sidebar-list">
         {JURISDICTIONS.map((j) => (
           <button
@@ -447,44 +486,7 @@ export function WarningList({ warnings }: { warnings: FinanceWarning[] }) {
   )
 }
 
-/** Renders FinanceSourceCitation[] — internal ledger links and web guidance sources alike. */
-export function CitationList({
-  citations,
-}: {
-  citations: FinanceSourceCitation[]
-}) {
-  if (citations.length === 0) return null
-  return (
-    <div className="fin-citation-list">
-      {citations.map((citation, index) => (
-        <div
-          key={`${citation.source_type}-${citation.source_id ?? index}`}
-          className="fin-citation-card"
-        >
-          {citation.url ? <IconLink /> : <IconFile />}
-          <div>
-            {citation.url ? (
-              <a href={citation.url} target="_blank" rel="noreferrer">
-                {citation.title}
-              </a>
-            ) : (
-              <strong>{citation.title}</strong>
-            )}
-            <span className="fin-table-sub">
-              {citation.source_type.replace(/_/g, ' ')}
-              {citation.locator ? ` · ${citation.locator}` : ''}
-              {citation.accessed_at
-                ? ` · accessed ${citation.accessed_at.slice(0, 10)}`
-                : ''}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** Shared reason-required confirmation dialog — tax-treatment confirm, proposal confirm/reject. */
+/** Shared reason-required confirmation dialog — tax-treatment confirm, split/defer reasons. */
 export function ReasonModal({
   title,
   description,

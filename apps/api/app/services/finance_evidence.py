@@ -139,6 +139,17 @@ def compute_sha256(data: bytes) -> str:
     return sha256(data).hexdigest()
 
 
+def evidence_bundle_folder(source_kind: str) -> str:
+    return {
+        "payslip": "01_payslips",
+        "exchange_statement": "02_exchange_statements",
+        "statement": "02_exchange_statements",
+        "wallet_export": "03_wallet_exports",
+        "contract": "04_contracts",
+        "residency_evidence": "05_residency_evidence",
+    }.get(source_kind.strip().lower(), "99_other")
+
+
 def _command_version(executable: str) -> str:
     path = shutil.which(executable)
     if path is None:

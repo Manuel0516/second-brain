@@ -2,9 +2,10 @@ import csv
 import io
 import json
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -13,10 +14,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import storage
 from app.models import (
+    FinanceAccount,
+    FinanceAsset,
+    FinanceEvent,
+    FinanceEventRevision,
     FinanceOpenQuestion,
     FinanceReportInput,
     FinanceReportRun,
+    FinanceRevisionValuation,
     FinanceTaxProfile,
+    FinanceTaxTreatment,
+    FinanceTaxTreatmentRevision,
+    FinanceValuation,
     User,
 )
 from app.services.finance_reports import (
@@ -116,6 +125,7 @@ def test_frozen_report_manifest_and_exports_are_byte_deterministic() -> None:
     assert first_pdf == export_report(report, "pdf_summary")
     assert first_zip == export_report(report, "zip")
     assert first_pdf.startswith(b"%PDF-1.4")
+    assert first_pdf.count(b"/Type /Page") >= 3
 
     rows = list(csv.DictReader(io.StringIO(first_csv.decode("utf-8"))))
     assert rows[0]["amount"] == "7.20000000"
@@ -343,3 +353,138 @@ async def test_report_api_freezes_export_and_returns_owner_scoped_download_metad
     assert repeated.json() == report.json()
     metadata = await client.get(f"/api/finance/reports/{body['id']}/download", cookies=cookies)
     assert metadata.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_report_category_limits_the_frozen_snapshot(
+    client: AsyncClient,
+    test_db_session: AsyncSession,
+    test_user: User,
+) -> None:
+    cookies = await _login(client, test_user)
+    profile = FinanceTaxProfile(
+        user_id=test_user.id,
+        tax_year=2026,
+        jurisdiction="ES",
+        reporting_currency="EUR",
+        materiality_threshold=Decimal("1"),
+        reconciliation_tolerance=Decimal("0.01"),
+        status="active",
+        valuation_policy={"policy_id": "es-2026-default-v1"},
+    )
+    account = FinanceAccount(
+        user_id=test_user.id,
+        name="Category account",
+        institution="Manual",
+        account_type="bank",
+        country_code="ES",
+        base_currency="EUR",
+        tax_jurisdiction="ES",
+        provider="manual",
+    )
+    asset = FinanceAsset(
+        user_id=test_user.id,
+        asset_type="fiat",
+        symbol="EUR",
+        name="Euro",
+        decimals=2,
+    )
+    test_db_session.add_all((profile, account, asset))
+    await test_db_session.flush()
+    revision_ids: list[str] = []
+    for index, category in enumerate(("salary_income", "staking_income"), start=1):
+        event = FinanceEvent(user_id=test_user.id)
+        test_db_session.add(event)
+        await test_db_session.flush()
+        revision = FinanceEventRevision(
+            user_id=test_user.id,
+            event_id=event.id,
+            revision_number=1,
+            event_type="income" if index == 1 else "staking_reward",
+            effective_at=datetime(2026, index, 1, 10, tzinfo=UTC),
+            tax_date=date(2026, index, 1),
+            tax_day_policy="UTC-v1",
+            source_account_id=account.id,
+            semantic_fingerprint=uuid4().hex,
+            status="confirmed",
+            derivation_type="fixture",
+            derivation_version="1",
+            created_by_type="user",
+            created_by_id=test_user.id,
+            attributes={"jurisdiction": "ES"},
+        )
+        test_db_session.add(revision)
+        await test_db_session.flush()
+        event.current_revision_id = revision.id
+        valuation = FinanceValuation(
+            user_id=test_user.id,
+            event_revision_id=revision.id,
+            asset_id=asset.id,
+            source_currency="EUR",
+            target_currency="EUR",
+            rate=Decimal("1"),
+            value=Decimal(index * 100),
+            valued_at=revision.effective_at,
+            provider="fixture",
+            provider_reference=f"fixture:{revision.id}",
+            valuation_policy="fixture-v1",
+            tax_year=2026,
+            jurisdiction="ES",
+        )
+        treatment = FinanceTaxTreatment(
+            user_id=test_user.id,
+            event_revision_id=revision.id,
+            tax_profile_id=profile.id,
+        )
+        test_db_session.add_all((valuation, treatment))
+        await test_db_session.flush()
+        treatment_revision = FinanceTaxTreatmentRevision(
+            user_id=test_user.id,
+            treatment_id=treatment.id,
+            revision_number=1,
+            event_revision_id=revision.id,
+            tax_profile_id=profile.id,
+            jurisdiction="ES",
+            tax_year=2026,
+            ruleset_id="fixture",
+            ruleset_version="1",
+            category=category,
+            status="confirmed",
+            inputs={},
+            output={},
+            rationale="Fixture classification",
+            source_citations=[],
+            missing_facts=[],
+            confirmed_by=test_user.id,
+            confirmed_at=datetime(2026, 7, 1, tzinfo=UTC),
+        )
+        test_db_session.add(treatment_revision)
+        await test_db_session.flush()
+        treatment.current_revision_id = treatment_revision.id
+        test_db_session.add(
+            FinanceRevisionValuation(
+                event_revision_id=revision.id,
+                valuation_id=valuation.id,
+            )
+        )
+        revision_ids.append(revision.id)
+    await test_db_session.commit()
+
+    response = await client.post(
+        "/api/finance/reports",
+        json={
+            "tax_profile_id": profile.id,
+            "format": "csv",
+            "include_warnings": True,
+            "expected_event_revision_ids": revision_ids,
+            "category": "staking_income",
+        },
+        headers={"Idempotency-Key": "category-report"},
+        cookies=cookies,
+    )
+    assert response.status_code == 201, response.text
+    report = await test_db_session.get(FinanceReportRun, response.json()["report"]["id"])
+    assert report is not None
+    assert report.manifest["event_revision_ids"] == [revision_ids[1]]
+    manifest_items = cast(list[dict[str, object]], report.manifest["items"])
+    assert [item["category"] for item in manifest_items] == ["staking_income"]

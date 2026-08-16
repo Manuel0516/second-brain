@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/Card'
-import { Field } from '../../components/Field'
 import { Segmented } from '../../components/Segmented'
-import {
-  createFinanceAccount,
-  fetchFinanceAccounts,
-  fetchFinanceActivity,
-} from './api'
+import { AddAccountDialog } from './AddAccountDialog'
+import { fetchFinanceAccounts, fetchFinanceActivity } from './api'
 import {
   aggregateByDay,
   aggregateByHour,
@@ -30,23 +26,12 @@ import {
 import type {
   Completeness,
   FinanceAccount,
-  FinanceAccountCreate,
-  FinanceAccountType,
   FinanceActivityItem,
   FinanceLoadState,
   FinanceSummary,
 } from './types'
 
-const ACCOUNT_TYPES: FinanceAccountType[] = [
-  'bank',
-  'broker',
-  'exchange',
-  'wallet',
-  'bot',
-  'cash',
-]
-
-const SOURCE_MIX_TOKENS = [
+export const SOURCE_MIX_TOKENS = [
   'var(--accent)',
   'var(--text-primary)',
   'var(--text-secondary)',
@@ -68,100 +53,15 @@ function useAccounts() {
   return { accounts, reload: () => setReloadKey((k) => k + 1) }
 }
 
-function AddSourceForm({ onDone }: { onDone: () => void }) {
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState<FinanceAccountCreate>({
-    name: '',
-    institution: '',
-    account_type: 'exchange',
-    country_code: 'SE',
-    base_currency: 'EUR',
-    tax_jurisdiction: null,
-    provider: 'manual',
-    external_reference: null,
-    opened_at: null,
-  })
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
-    if (!form.name.trim() || !form.institution.trim()) {
-      setError('Name and institution are required.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      await createFinanceAccount(form, crypto.randomUUID())
-      onDone()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add source')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <form className="fin-add-source-form" onSubmit={submit}>
-      <Field label="Name">
-        <input
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          placeholder="Kraken staking"
-        />
-      </Field>
-      <Field label="Institution">
-        <input
-          value={form.institution}
-          onChange={(e) => setForm({ ...form, institution: e.target.value })}
-          placeholder="Kraken"
-        />
-      </Field>
-      <Field label="Type">
-        <select
-          value={form.account_type}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              account_type: e.target.value as FinanceAccountType,
-            })
-          }
-        >
-          {ACCOUNT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {error && <p className="fin-muted-danger">{error}</p>}
-      <div className="fin-add-source-actions">
-        <button
-          type="button"
-          className="fin-btn fin-btn-ghost fin-btn-sm"
-          onClick={onDone}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="fin-btn fin-btn-primary fin-btn-sm"
-          disabled={saving}
-        >
-          {saving ? 'Adding…' : 'Add source'}
-        </button>
-      </div>
-    </form>
-  )
-}
-
 export function ActivitySidebar({
   taxYear,
+  onTaxYearChange,
   jurisdiction,
   onJurisdictionChange,
   summary,
 }: {
   taxYear: number
+  onTaxYearChange?: (year: number) => void
   jurisdiction: string | undefined
   onJurisdictionChange: (code: string | undefined) => void
   summary: FinanceLoadState<FinanceSummary>
@@ -172,7 +72,7 @@ export function ActivitySidebar({
 
   return (
     <>
-      <SidebarYearBlock taxYear={taxYear} />
+      <SidebarYearBlock taxYear={taxYear} onChange={onTaxYearChange} />
       <JurisdictionList
         jurisdiction={jurisdiction}
         onChange={onJurisdictionChange}
@@ -192,21 +92,21 @@ export function ActivitySidebar({
             </div>
           ))}
         </div>
-        {adding ? (
-          <AddSourceForm
-            onDone={() => {
+        <button
+          type="button"
+          className="fin-btn fin-btn-ghost fin-btn-sm fin-add-source-btn"
+          onClick={() => setAdding(true)}
+        >
+          <IconPlus /> Add source
+        </button>
+        {adding && (
+          <AddAccountDialog
+            onClose={() => setAdding(false)}
+            onSaved={() => {
               setAdding(false)
               reload()
             }}
           />
-        ) : (
-          <button
-            type="button"
-            className="fin-btn fin-btn-ghost fin-btn-sm fin-add-source-btn"
-            onClick={() => setAdding(true)}
-          >
-            <IconPlus /> Add source
-          </button>
         )}
       </div>
 
@@ -475,9 +375,7 @@ function SourceMixCard({
           {rows.map((row) => (
             <div key={row.name} className="fin-source-mix-row">
               <span className="fin-source-mix-name">{row.name}</span>
-              <div style={{ color: row.color }}>
-                <BarMeter value={row.pct} />
-              </div>
+              <BarMeter value={row.pct} color={row.color} />
               <span className="fin-source-mix-pct">{row.pct.toFixed(1)}%</span>
               <span className="fin-source-mix-value">
                 {formatMoney(row.value)}
@@ -672,8 +570,9 @@ function SourcesTab({
         </button>
       </div>
       {adding && (
-        <AddSourceForm
-          onDone={() => {
+        <AddAccountDialog
+          onClose={() => setAdding(false)}
+          onSaved={() => {
             setAdding(false)
             onReload()
           }}

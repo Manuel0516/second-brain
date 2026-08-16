@@ -5,21 +5,26 @@ from app.main import app
 
 EXPECTED_OPERATIONS = {
     ("GET", "/api/finance/summary"),
+    ("GET", "/api/finance/timeseries"),
     ("GET", "/api/finance/accounts"),
     ("POST", "/api/finance/accounts"),
     ("GET", "/api/finance/assets"),
     ("POST", "/api/finance/assets"),
+    ("POST", "/api/finance/events"),
+    ("PATCH", "/api/finance/events/{event_id}"),
     ("GET", "/api/finance/events/{event_id}/lineage"),
     ("GET", "/api/finance/source-connections"),
     ("POST", "/api/finance/source-connections"),
     ("POST", "/api/finance/evidence"),
     ("GET", "/api/finance/evidence"),
+    ("GET", "/api/finance/evidence/bundle"),
     ("POST", "/api/finance/imports/preview"),
     ("POST", "/api/finance/imports/{import_id}/commit"),
     ("GET", "/api/finance/imports"),
     ("GET", "/api/finance/imports/{import_id}/raw-records"),
     ("GET", "/api/finance/activity"),
     ("GET", "/api/finance/review-groups"),
+    ("GET", "/api/finance/review-queue/counts"),
     ("POST", "/api/finance/review-groups/{group_id}/confirm"),
     ("POST", "/api/finance/review-groups/{group_id}/split"),
     ("POST", "/api/finance/review-groups/{group_id}/defer"),
@@ -35,10 +40,6 @@ EXPECTED_OPERATIONS = {
     ("GET", "/api/finance/reports"),
     ("GET", "/api/finance/reports/{report_id}"),
     ("GET", "/api/finance/reports/{report_id}/download"),
-    ("POST", "/api/finance/assistant/tools/{tool_name}"),
-    ("POST", "/api/finance/assistant/proposals"),
-    ("POST", "/api/finance/assistant/proposals/{proposal_id}/confirm"),
-    ("POST", "/api/finance/assistant/proposals/{proposal_id}/reject"),
 }
 
 
@@ -65,7 +66,7 @@ def test_frozen_finance_operations_are_unique_and_authenticated() -> None:
 def test_finance_mutations_require_idempotency_keys() -> None:
     schema = app.openapi()
     for method, path in EXPECTED_OPERATIONS:
-        if method != "POST" or path == "/api/finance/assistant/tools/{tool_name}":
+        if method not in {"POST", "PATCH"}:
             continue
         parameters = schema["paths"][path][method.lower()].get("parameters", [])
         assert any(
@@ -116,17 +117,6 @@ def test_finance_openapi_preserves_frozen_boundary_types() -> None:
         "decimal_separator",
     }
     assert "required" not in components["ImportMappingOutput"]
-    assert "confirmation_token" in components["ProposalConfirmRequest"]["required"]
-    assert set(components["ToolCallRequest"]["required"]) == {"scope", "arguments"}
-    assert components["ToolCallRequest"]["properties"]["scope"]["discriminator"] == {
-        "propertyName": "type",
-        "mapping": {
-            "account": "#/components/schemas/AccountScopeRequest",
-            "event_revisions": "#/components/schemas/EventRevisionsScopeRequest",
-            "finance": "#/components/schemas/FinanceScopeRequest",
-            "report": "#/components/schemas/ReportScopeRequest",
-        },
-    }
     assert components["ReportRunResponse"]["properties"]["status"]["enum"] == [
         "ready",
         "ready_with_warnings",
@@ -135,24 +125,8 @@ def test_finance_openapi_preserves_frozen_boundary_types() -> None:
     assert components["SummaryTotals"]["properties"]["income"]["pattern"] == (
         r"^-?[0-9]+(\.[0-9]+)?$"
     )
-    assert len(components["ToolCallResponse"]["properties"]["tool_name"]["enum"]) == 17
     assert "status" in components["TaxProfileCreate"]["required"]
     assert "determination_status" in components["ResidencyListResponse"]["required"]
-    assert "resulting_revision_id" in components["ProposalMutationResponse"]["required"]
-    assert set(components["ProposalResponse"]["properties"]) == {
-        "id",
-        "proposal_type",
-        "status",
-        "scope",
-        "before",
-        "after",
-        "affected_record_count",
-        "impacted_report_ids",
-        "rationale",
-        "citations",
-        "confirmation_token",
-        "expires_at",
-    }
     assert set(components["SourceConnectionCreate"]["required"]) == {
         "account_id",
         "provider",
@@ -168,16 +142,12 @@ def test_finance_openapi_preserves_frozen_boundary_types() -> None:
         "source",
         "notes",
     }
-    assert set(components["ProposalCreateRequest"]["required"]) == {
-        "proposal_type",
-        "scope",
-        "before",
-        "after",
-        "affected_record_count",
-        "impacted_report_ids",
-        "rationale",
-        "citations",
-    }
+    assert "category" in components["ReportCreateRequest"]["properties"]
+    assert "row_overrides" in components["ImportCommitRequest"]["properties"]
+    assert "excluded_source_indexes" in components["ImportCommitRequest"]["properties"]
+    assert components["ManualEventCreate"]["properties"]["amount"]["pattern"] == (
+        r"^-?[0-9]+(\.[0-9]+)?$"
+    )
 
     for name, component in components.items():
         properties = component.get("properties", {})

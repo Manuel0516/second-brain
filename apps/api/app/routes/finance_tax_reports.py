@@ -760,6 +760,7 @@ class ReportCreateRequest(BaseModel):
     format: Literal["zip", "csv", "pdf_summary"]
     include_warnings: bool
     expected_event_revision_ids: list[FinanceId]
+    category: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class DownloadMetadata(BaseModel):
@@ -935,6 +936,11 @@ async def create_report(
         if revision_ids
         else []
     )
+    if body.category is not None:
+        treatment_rows = [row for row in treatment_rows if row.category == body.category]
+        category_revision_ids = {row.event_revision_id for row in treatment_rows}
+        selected = tuple(row for row in selected if row.revision_id in category_revision_ids)
+        revision_ids = [row.revision_id for row in selected]
     valuation_pairs = (
         list(
             (
@@ -1083,12 +1089,16 @@ async def create_report(
                 profile.id,
             )
         )
-    if not revision_rows:
+    if not selected:
         issues.append(
             ReportIssue(
                 "no_confirmed_events",
                 "blocking",
-                "No current confirmed events exist for this tax profile year.",
+                (
+                    "No confirmed events match this report category."
+                    if body.category is not None
+                    else "No current confirmed events exist for this tax profile year."
+                ),
                 "tax_profile",
                 profile.id,
             )

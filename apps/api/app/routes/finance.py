@@ -1,6 +1,6 @@
 """Authenticated, owner-scoped Finance API."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, cast
 
@@ -38,6 +38,14 @@ from app.services.finance_core import (
     prior_idempotent_response,
     store_idempotent_response,
 )
+from app.services.finance_evidence import acquire_finance_advisory_lock
+from app.services.finance_ledger import (
+    CanonicalEventRevisionPlan,
+    ComponentInput,
+    balanced_postings_for_components,
+    build_canonical_event_revision,
+)
+from app.services.finance_timeseries import finance_timeseries
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
 
@@ -247,6 +255,14 @@ class SummaryTotals(BaseModel):
     net_worth: DecimalString | None
 
 
+class PreviousYearTotals(BaseModel):
+    income: DecimalString
+    expense: DecimalString
+    rewards: DecimalString
+    transfers: DecimalString
+    net_worth: DecimalString
+
+
 class SummaryCounts(BaseModel):
     accounts: int
     assets: int
@@ -270,6 +286,7 @@ class FinanceSummaryResponse(BaseModel):
     jurisdiction: str | None
     reporting_currency: str
     totals: SummaryTotals
+    previous_year: PreviousYearTotals
     counts: SummaryCounts
     readiness: ReportReadiness
     completeness: Completeness
@@ -295,6 +312,640 @@ class EventLineageResponse(BaseModel):
     event_id: FinanceId
     current_revision_id: FinanceId | None
     revisions: list[RevisionLineage]
+
+
+class ManualEventCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    tax_year: int = Field(ge=1900, le=2200)
+    occurred_at: datetime
+    event_type: EventType
+    amount: DecimalString
+    currency: str = Field(min_length=3, max_length=3)
+    source_account_id: FinanceId
+    description: str = Field(min_length=1, max_length=1000)
+    jurisdiction: Literal["SE", "ES"]
+    asset_id: FinanceId | None = None
+
+    @field_validator("occurred_at")
+    @classmethod
+    def aware_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("occurred_at must include a timezone")
+        return value
+
+    @field_validator("currency")
+    @classmethod
+    def uppercase_currency(cls, value: str) -> str:
+        return value.upper()
+
+    @field_validator("amount")
+    @classmethod
+    def positive_amount(cls, value: str) -> str:
+        amount = Decimal(value)
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("amount must be a positive decimal string")
+        return value
+
+
+class ManualEventPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    expected_revision_id: FinanceId
+    tax_year: int | None = Field(default=None, ge=1900, le=2200)
+    occurred_at: datetime | None = None
+    event_type: EventType | None = None
+    amount: DecimalString | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    source_account_id: FinanceId | None = None
+    description: str | None = Field(default=None, min_length=1, max_length=1000)
+    jurisdiction: Literal["SE", "ES"] | None = None
+    asset_id: FinanceId | None = None
+
+    @field_validator("occurred_at")
+    @classmethod
+    def aware_optional_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("occurred_at must include a timezone")
+        return value
+
+    @field_validator("currency")
+    @classmethod
+    def uppercase_optional_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+    @field_validator("amount")
+    @classmethod
+    def positive_optional_amount(cls, value: str | None) -> str | None:
+        if value is not None:
+            amount = Decimal(value)
+            if not amount.is_finite() or amount <= 0:
+                raise ValueError("amount must be a positive decimal string")
+        return value
+
+
+class ManualEventResponse(BaseModel):
+    id: FinanceId
+    current_revision_id: FinanceId
+    revision_number: int
+    status: EventStatus
+    event_type: EventType
+    occurred_at: datetime
+    tax_year: int
+    tax_date: date
+    amount: DecimalString
+    currency: str
+    source_account_id: FinanceId
+    asset_id: FinanceId
+    description: str
+    jurisdiction: Literal["SE", "ES"]
+
+
+class EventMutationResponse(BaseModel):
+    event: ManualEventResponse
+    audit: AuditMetadata
+
+
+class TimeseriesPoint(BaseModel):
+    t: date
+    v: DecimalString
+
+
+class TimeseriesSeries(BaseModel):
+    key: str
+    label: str
+    points: list[TimeseriesPoint]
+
+
+class TimeseriesResponse(BaseModel):
+    series: list[TimeseriesSeries]
+
+
+def _manual_component_role(event_type: str) -> str:
+    return {
+        "income": "income",
+        "staking_reward": "reward",
+        "interest": "income",
+        "dividend": "income",
+        "funding_payment": "funding",
+        "expense": "expense",
+        "fee": "fee",
+        "withholding": "withholding",
+        "transfer": "transfer",
+        "trade": "asset_in",
+        "derivative_fill": "asset_in",
+    }.get(event_type, "other")
+
+
+def _manual_quantity(event_type: str, amount: Decimal) -> Decimal:
+    return -amount if event_type in {"expense", "fee", "withholding"} else amount
+
+
+async def _owned_manual_inputs(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    account_id: str,
+    asset_id: str | None,
+    currency: str,
+) -> tuple[FinanceAccount, FinanceAsset]:
+    account = await session.scalar(
+        select(FinanceAccount).where(
+            FinanceAccount.id == account_id,
+            FinanceAccount.user_id == user_id,
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    asset = None
+    if asset_id is not None:
+        asset = await session.scalar(
+            select(FinanceAsset).where(
+                FinanceAsset.id == asset_id,
+                FinanceAsset.user_id == user_id,
+            )
+        )
+        if asset is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    else:
+        asset = await session.scalar(
+            select(FinanceAsset)
+            .where(
+                FinanceAsset.user_id == user_id,
+                FinanceAsset.asset_type == "fiat",
+                func.upper(FinanceAsset.symbol) == currency,
+            )
+            .order_by(FinanceAsset.created_at, FinanceAsset.id)
+        )
+        if asset is None:
+            asset = FinanceAsset(
+                user_id=user_id,
+                asset_type="fiat",
+                symbol=currency,
+                name=currency,
+                decimals=2,
+            )
+            session.add(asset)
+            await session.flush()
+    return account, asset
+
+
+def _persist_manual_plan(
+    session: AsyncSession,
+    *,
+    plan: CanonicalEventRevisionPlan,
+    event: FinanceEvent,
+    actor_id: str,
+) -> None:
+    session.add(
+        FinanceEventRevision(
+            id=plan.revision_id,
+            user_id=plan.user_id,
+            event_id=plan.event_id,
+            revision_number=plan.revision_number,
+            event_type=plan.event_type,
+            effective_at=plan.effective_at,
+            source_local_time=plan.source_local_time,
+            source_timezone=plan.source_timezone,
+            tax_date=plan.tax_date,
+            tax_day_policy=plan.tax_day_policy,
+            source_account_id=plan.source_account_id,
+            external_id=plan.external_id,
+            semantic_fingerprint=plan.semantic_fingerprint,
+            status=plan.status,
+            derivation_type=plan.derivation_type,
+            derivation_version=plan.derivation_version,
+            supersedes_revision_id=plan.supersedes_revision_id,
+            created_by_type="user",
+            created_by_id=actor_id,
+            attributes=dict(plan.attributes),
+        )
+    )
+    for component in plan.components:
+        session.add(
+            FinanceEventComponent(
+                user_id=plan.user_id,
+                event_revision_id=plan.revision_id,
+                role=component.role,
+                account_id=component.account_id,
+                asset_id=component.asset_id,
+                quantity=component.quantity,
+                fiat_value=component.fiat_value,
+                currency=component.currency,
+                attributes=dict(component.attributes),
+            )
+        )
+    for posting in plan.postings:
+        session.add(
+            FinancePosting(
+                user_id=plan.user_id,
+                event_revision_id=plan.revision_id,
+                account_id=posting.account_id,
+                ledger_account=posting.ledger_account,
+                asset_id=posting.asset_id,
+                quantity=posting.quantity,
+                fiat_value=posting.fiat_value,
+                currency=posting.currency,
+                posting_role=posting.posting_role,
+            )
+        )
+    event.current_revision_id = plan.revision_id
+
+
+def _manual_event_response(
+    *,
+    event: FinanceEvent,
+    revision: CanonicalEventRevisionPlan,
+) -> ManualEventResponse:
+    component = revision.components[0]
+    return ManualEventResponse(
+        id=event.id,
+        current_revision_id=revision.revision_id,
+        revision_number=revision.revision_number,
+        status=cast(EventStatus, revision.status),
+        event_type=cast(EventType, revision.event_type),
+        occurred_at=revision.effective_at,
+        tax_year=revision.tax_date.year,
+        tax_date=revision.tax_date,
+        amount=str(
+            revision.attributes.get("amount", decimal_string(abs(Decimal(component.quantity))))
+        ),
+        currency=component.currency or "",
+        source_account_id=revision.source_account_id,
+        asset_id=component.asset_id,
+        description=str(revision.attributes.get("description", "")),
+        jurisdiction=cast(Literal["SE", "ES"], revision.attributes["jurisdiction"]),
+    )
+
+
+async def _add_manual_valuation(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    revision_id: str,
+    asset_id: str,
+    amount: Decimal,
+    currency: str,
+    occurred_at: datetime,
+    tax_year: int,
+    jurisdiction: str,
+) -> None:
+    valuation = FinanceValuation(
+        user_id=user_id,
+        event_revision_id=revision_id,
+        asset_id=asset_id,
+        source_currency=currency,
+        target_currency=currency,
+        rate=Decimal(1),
+        value=amount,
+        valued_at=occurred_at.astimezone(UTC),
+        provider="manual",
+        provider_reference=f"manual:{revision_id}",
+        valuation_policy="manual_same_currency",
+        tax_year=tax_year,
+        jurisdiction=jurisdiction,
+    )
+    session.add(valuation)
+    await session.flush()
+    session.add(
+        FinanceRevisionValuation(
+            event_revision_id=revision_id,
+            valuation_id=valuation.id,
+        )
+    )
+
+
+def _build_manual_plan(
+    *,
+    user_id: str,
+    event_id: str,
+    revision_number: int,
+    supersedes_revision_id: str | None,
+    occurred_at: datetime,
+    event_type: str,
+    amount: Decimal,
+    currency: str,
+    account_id: str,
+    asset_id: str,
+    description: str,
+    jurisdiction: str,
+) -> CanonicalEventRevisionPlan:
+    component = ComponentInput(
+        role=_manual_component_role(event_type),
+        account_id=account_id,
+        asset_id=asset_id,
+        quantity=_manual_quantity(event_type, amount),
+        fiat_value=amount,
+        currency=currency,
+        attributes={"entry_method": "manual"},
+    )
+    return build_canonical_event_revision(
+        user_id=user_id,
+        event_id=event_id,
+        revision_number=revision_number,
+        supersedes_revision_id=supersedes_revision_id,
+        event_type=event_type,
+        effective_at=occurred_at,
+        tax_date=occurred_at.date(),
+        tax_day_policy="manual-local-date-v1",
+        source_account_id=account_id,
+        components=(component,),
+        postings=balanced_postings_for_components((component,)),
+        status="confirmed",
+        derivation_type="manual" if supersedes_revision_id is None else "correction",
+        derivation_version="manual-v1",
+        source_local_time=occurred_at.isoformat(),
+        source_timezone=str(occurred_at.tzinfo),
+        attributes={
+            "description": description,
+            "jurisdiction": jurisdiction,
+            "entry_method": "manual",
+            "amount": decimal_string(amount),
+            "currency": currency,
+            "asset_id": asset_id,
+        },
+        audit_action="event.created" if supersedes_revision_id is None else "event.corrected",
+        audit_reason=None if supersedes_revision_id is None else "Manual event edit",
+    )
+
+
+@router.post(
+    "/events",
+    response_model=EventMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_manual_event(
+    body: ManualEventCreate,
+    idempotency_key: IdempotencyKey,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> EventMutationResponse:
+    request = body.model_dump(mode="json")
+    await acquire_finance_advisory_lock(
+        session, "workflow", user.id, "create_manual_event", idempotency_key
+    )
+    prior = await prior_idempotent_response(
+        session,
+        user_id=user.id,
+        workflow="create_manual_event",
+        key=idempotency_key,
+        request=request,
+    )
+    if prior is not None:
+        return EventMutationResponse.model_validate(prior)
+    if body.occurred_at.date().year != body.tax_year:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="tax_year must match occurred_at",
+        )
+    account, asset = await _owned_manual_inputs(
+        session,
+        user_id=user.id,
+        account_id=body.source_account_id,
+        asset_id=body.asset_id,
+        currency=body.currency,
+    )
+    event = FinanceEvent(user_id=user.id)
+    session.add(event)
+    await session.flush()
+    amount = Decimal(body.amount)
+    plan = _build_manual_plan(
+        user_id=user.id,
+        event_id=event.id,
+        revision_number=1,
+        supersedes_revision_id=None,
+        occurred_at=body.occurred_at,
+        event_type=body.event_type,
+        amount=amount,
+        currency=body.currency,
+        account_id=account.id,
+        asset_id=asset.id,
+        description=body.description,
+        jurisdiction=body.jurisdiction,
+    )
+    _persist_manual_plan(session, plan=plan, event=event, actor_id=user.id)
+    await session.flush()
+    await _add_manual_valuation(
+        session,
+        user_id=user.id,
+        revision_id=plan.revision_id,
+        asset_id=asset.id,
+        amount=amount,
+        currency=body.currency,
+        occurred_at=body.occurred_at,
+        tax_year=body.tax_year,
+        jurisdiction=body.jurisdiction,
+    )
+    audit = await append_audit_entry(
+        session,
+        user_id=user.id,
+        actor_id=user.id,
+        action="event.created",
+        entity_type="finance_event",
+        entity_id=event.id,
+        request=request,
+        new_revision_id=plan.revision_id,
+    )
+    response = EventMutationResponse(
+        event=_manual_event_response(event=event, revision=plan),
+        audit=_audit_response(audit),
+    )
+    store_idempotent_response(
+        session,
+        user_id=user.id,
+        workflow="create_manual_event",
+        key=idempotency_key,
+        request=request,
+        response=response.model_dump(mode="json"),
+        entity_id=event.id,
+        audit_entry_id=audit.id,
+    )
+    await session.commit()
+    return response
+
+
+@router.patch("/events/{event_id}", response_model=EventMutationResponse)
+async def patch_manual_event(
+    body: ManualEventPatch,
+    idempotency_key: IdempotencyKey,
+    event_id: FinanceIdPath,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> EventMutationResponse:
+    request = {"event_id": event_id, **body.model_dump(mode="json", exclude_unset=True)}
+    await acquire_finance_advisory_lock(
+        session, "workflow", user.id, "patch_manual_event", idempotency_key
+    )
+    prior = await prior_idempotent_response(
+        session,
+        user_id=user.id,
+        workflow="patch_manual_event",
+        key=idempotency_key,
+        request=request,
+    )
+    if prior is not None:
+        return EventMutationResponse.model_validate(prior)
+    event = await session.scalar(
+        select(FinanceEvent)
+        .where(FinanceEvent.id == event_id, FinanceEvent.user_id == user.id)
+        .with_for_update()
+    )
+    if event is None or event.current_revision_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    if event.current_revision_id != body.expected_revision_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "stale_revision",
+                "message": "Finance event changed elsewhere",
+                "current_revision_id": event.current_revision_id,
+            },
+        )
+    current = await session.scalar(
+        select(FinanceEventRevision).where(
+            FinanceEventRevision.id == event.current_revision_id,
+            FinanceEventRevision.user_id == user.id,
+        )
+    )
+    if current is None or current.derivation_type not in {"manual", "correction"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only manually entered events can be edited directly",
+        )
+    current_components = list(
+        (
+            await session.scalars(
+                select(FinanceEventComponent).where(
+                    FinanceEventComponent.event_revision_id == current.id,
+                    FinanceEventComponent.user_id == user.id,
+                )
+            )
+        ).all()
+    )
+    if len(current_components) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Complex events must be corrected through the review workflow",
+        )
+    current_component = current_components[0]
+    occurred_at = body.occurred_at
+    if occurred_at is None:
+        occurred_at = (
+            datetime.fromisoformat(current.source_local_time)
+            if current.source_local_time
+            else current.effective_at.replace(tzinfo=UTC)
+        )
+    tax_year = body.tax_year or occurred_at.date().year
+    if occurred_at.date().year != tax_year:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="tax_year must match occurred_at",
+        )
+    currency = body.currency or current_component.currency
+    if currency is None:
+        raise HTTPException(status_code=409, detail="Current event has no reporting currency")
+    account_id = body.source_account_id or current.source_account_id
+    requested_asset_id = (
+        body.asset_id if "asset_id" in body.model_fields_set else current_component.asset_id
+    )
+    account, asset = await _owned_manual_inputs(
+        session,
+        user_id=user.id,
+        account_id=account_id,
+        asset_id=requested_asset_id,
+        currency=currency,
+    )
+    amount = (
+        Decimal(body.amount)
+        if body.amount is not None
+        else Decimal(str(current.attributes.get("amount", abs(current_component.quantity))))
+    )
+    event_type = body.event_type or cast(EventType, current.event_type)
+    description = body.description or str(current.attributes.get("description", "Manual record"))
+    jurisdiction = body.jurisdiction or cast(
+        Literal["SE", "ES"], current.attributes.get("jurisdiction") or account.tax_jurisdiction
+    )
+    if jurisdiction not in {"SE", "ES"}:
+        raise HTTPException(status_code=422, detail="Event jurisdiction must be SE or ES")
+    plan = _build_manual_plan(
+        user_id=user.id,
+        event_id=event.id,
+        revision_number=current.revision_number + 1,
+        supersedes_revision_id=current.id,
+        occurred_at=occurred_at,
+        event_type=event_type,
+        amount=amount,
+        currency=currency,
+        account_id=account.id,
+        asset_id=asset.id,
+        description=description,
+        jurisdiction=jurisdiction,
+    )
+    _persist_manual_plan(session, plan=plan, event=event, actor_id=user.id)
+    await session.flush()
+    await _add_manual_valuation(
+        session,
+        user_id=user.id,
+        revision_id=plan.revision_id,
+        asset_id=asset.id,
+        amount=amount,
+        currency=currency,
+        occurred_at=occurred_at,
+        tax_year=tax_year,
+        jurisdiction=jurisdiction,
+    )
+    audit = await append_audit_entry(
+        session,
+        user_id=user.id,
+        actor_id=user.id,
+        action="event.corrected",
+        entity_type="finance_event",
+        entity_id=event.id,
+        request=request,
+        reason="Manual event edit",
+        prior_revision_id=current.id,
+        new_revision_id=plan.revision_id,
+    )
+    response = EventMutationResponse(
+        event=_manual_event_response(event=event, revision=plan),
+        audit=_audit_response(audit),
+    )
+    store_idempotent_response(
+        session,
+        user_id=user.id,
+        workflow="patch_manual_event",
+        key=idempotency_key,
+        request=request,
+        response=response.model_dump(mode="json"),
+        entity_id=event.id,
+        audit_entry_id=audit.id,
+    )
+    await session.commit()
+    return response
+
+
+@router.get("/timeseries", response_model=TimeseriesResponse)
+async def get_finance_timeseries(
+    tax_year: int = Query(ge=1900, le=2200),
+    metric: Literal["net_worth", "income", "expense", "rewards", "readiness"] = Query(),
+    granularity: Literal["day", "week", "month"] = Query(default="day"),
+    group_by: Literal["account", "source", "jurisdiction", "none"] = Query(default="none"),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> TimeseriesResponse:
+    series = await finance_timeseries(
+        session,
+        user_id=user.id,
+        tax_year=tax_year,
+        metric=metric,
+        granularity=granularity,
+        group_by=group_by,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    return TimeseriesResponse.model_validate({"series": series})
 
 
 @router.get("/summary", response_model=FinanceSummaryResponse)
@@ -423,6 +1074,70 @@ async def finance_summary(
     expense_total = await event_total("expense", "fee", "withholding")
     reward_total = await event_total("staking_reward", "funding_payment")
     transfer_total = await event_total("transfer")
+
+    async def previous_year_totals() -> PreviousYearTotals:
+        previous_start = date(tax_year - 1, 1, 1)
+        previous_end = date(tax_year - 1, 12, 31)
+        revisions = (
+            select(FinanceEventRevision.id, FinanceEventRevision.event_type)
+            .join(FinanceEvent, FinanceEvent.current_revision_id == FinanceEventRevision.id)
+            .join(FinanceAccount, FinanceAccount.id == FinanceEventRevision.source_account_id)
+            .where(
+                FinanceEventRevision.user_id == user.id,
+                FinanceEvent.user_id == user.id,
+                FinanceAccount.user_id == user.id,
+                FinanceEventRevision.status == "confirmed",
+                FinanceEventRevision.tax_date >= previous_start,
+                FinanceEventRevision.tax_date <= previous_end,
+            )
+        )
+        if jurisdiction_code is not None:
+            revisions = revisions.where(FinanceAccount.tax_jurisdiction == jurisdiction_code)
+        previous_revisions = revisions.subquery()
+        valuations = (
+            select(
+                previous_revisions.c.id.label("event_revision_id"),
+                previous_revisions.c.event_type,
+                FinanceValuation.value,
+                func.row_number()
+                .over(
+                    partition_by=(previous_revisions.c.id, FinanceValuation.asset_id),
+                    order_by=(FinanceValuation.created_at.desc(), FinanceValuation.id.desc()),
+                )
+                .label("valuation_rank"),
+            )
+            .join(
+                FinanceRevisionValuation,
+                FinanceRevisionValuation.event_revision_id == previous_revisions.c.id,
+            )
+            .join(FinanceValuation, FinanceValuation.id == FinanceRevisionValuation.valuation_id)
+            .where(
+                FinanceValuation.user_id == user.id,
+                FinanceValuation.target_currency == reporting_currency.upper(),
+            )
+        ).subquery()
+
+        async def total(*types: str) -> Decimal:
+            value = await session.scalar(
+                select(func.coalesce(func.sum(valuations.c.value), 0)).where(
+                    valuations.c.valuation_rank == 1,
+                    valuations.c.event_type.in_(types),
+                )
+            )
+            return Decimal(str(value or 0))
+
+        income = await total("income", "interest", "dividend")
+        expense = await total("expense", "fee", "withholding")
+        rewards = await total("staking_reward", "funding_payment")
+        transfers = await total("transfer")
+        return PreviousYearTotals(
+            income=decimal_string(income),
+            expense=decimal_string(expense),
+            rewards=decimal_string(rewards),
+            transfers=decimal_string(transfers),
+            net_worth=decimal_string(income + rewards - expense),
+        )
+
     explicit_evidence = (
         select(Link.id)
         .select_from(Link)
@@ -526,6 +1241,7 @@ async def finance_summary(
             net=decimal_string(income_total + reward_total - expense_total),
             net_worth=None,
         ),
+        previous_year=await previous_year_totals(),
         counts=SummaryCounts(
             accounts=account_count,
             assets=asset_count,

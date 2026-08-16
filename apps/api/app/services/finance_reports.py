@@ -12,6 +12,20 @@ from hashlib import sha256
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from reportlab import rl_config  # type: ignore[import-untyped]
+from reportlab.lib import colors  # type: ignore[import-untyped]
+from reportlab.lib.enums import TA_CENTER  # type: ignore[import-untyped]
+from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # type: ignore[import-untyped]
+from reportlab.lib.units import mm  # type: ignore[import-untyped]
+from reportlab.platypus import (  # type: ignore[import-untyped]
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +35,8 @@ from app.models import (
     FinanceReportRun,
 )
 from app.services.finance_core import append_audit_entry
+
+rl_config.invariant = True
 
 ReportStatus = Literal["ready", "ready_with_warnings", "blocked"]
 IssueSeverity = Literal["info", "warning", "blocking"]
@@ -581,53 +597,148 @@ def _safe_schedule_name(value: str) -> str:
 
 
 def _pdf_bytes(report: FrozenReport) -> bytes:
-    lines = [
-        "Second Brain Finance report summary",
-        f"Jurisdiction: {report.jurisdiction}",
-        f"Tax year: {report.tax_year}",
-        f"Reporting currency: {report.reporting_currency}",
-        f"Status: {report.status}",
-        f"Schedule items: {len(report.items)}",
-        f"Manifest SHA-256: {report.manifest_sha256}",
-    ]
-    commands = ["BT", "/F1 10 Tf", "50 790 Td"]
-    for index, line in enumerate(lines):
-        if index:
-            commands.append("0 -16 Td")
-        safe = (
-            line.encode("ascii", "replace")
-            .decode()
-            .replace("\\", "\\\\")
-            .replace("(", "\\(")
-            .replace(")", "\\)")
-        )
-        commands.append(f"({safe}) Tj")
-    commands.append("ET")
-    stream = "\n".join(commands).encode()
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        (
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-            b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
-        ),
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream",
-    ]
-    data = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0]
-    for index, obj in enumerate(objects, 1):
-        offsets.append(len(data))
-        data.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
-    xref = len(data)
-    data.extend(f"xref\n0 {len(objects) + 1}\n".encode())
-    data.extend(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        data.extend(f"{offset:010d} 00000 n \n".encode())
-    data.extend(
-        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    output = io.BytesIO()
+    document = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=16 * mm,
+        leftMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=16 * mm,
+        title=f"Second Brain Finance {report.jurisdiction} {report.tax_year}",
+        author="Second Brain",
     )
-    return bytes(data)
+    styles = getSampleStyleSheet()
+    cover = ParagraphStyle(
+        "FinanceCover",
+        parent=styles["Title"],
+        alignment=TA_CENTER,
+        spaceAfter=12,
+    )
+    small = ParagraphStyle(
+        "FinanceSmall",
+        parent=styles["BodyText"],
+        fontSize=7,
+        leading=9,
+    )
+    table_style = TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8E8E8")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("LEADING", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#B0B0B0")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]
+    )
+    story: list[object] = [
+        Spacer(1, 40 * mm),
+        Paragraph("Second Brain Finance report", cover),
+        Paragraph(f"{report.jurisdiction} · Tax year {report.tax_year}", styles["Heading2"]),
+        Spacer(1, 8 * mm),
+        Paragraph(f"Reporting currency: {report.reporting_currency}", styles["BodyText"]),
+        Paragraph(f"Status: {report.status.replace('_', ' ')}", styles["BodyText"]),
+        Paragraph(f"Generated: {report.created_at.isoformat()}", styles["BodyText"]),
+        Paragraph(f"Profile: {report.tax_profile_id}", small),
+        Spacer(1, 8 * mm),
+        Paragraph(f"Manifest SHA-256: {report.manifest_sha256}", small),
+        PageBreak(),
+    ]
+    schedules = sorted({item.schedule for item in report.items})
+    if not schedules:
+        story.extend(
+            [
+                Paragraph("Schedules", styles["Heading1"]),
+                Paragraph("No reportable schedule items.", styles["BodyText"]),
+            ]
+        )
+    for schedule_index, schedule in enumerate(schedules):
+        if schedule_index:
+            story.append(PageBreak())
+        story.append(Paragraph(schedule.replace("_", " ").title(), styles["Heading1"]))
+        rows: list[list[object]] = [
+            ["Date", "Description", "Amount", "Currency", "Treatment / lineage"]
+        ]
+        for item in report.items:
+            if item.schedule != schedule:
+                continue
+            lineage = ", ".join(item.event_revision_ids)
+            rows.append(
+                [
+                    item.tax_date,
+                    Paragraph(item.description, small),
+                    item.amount,
+                    item.currency,
+                    Paragraph(f"{item.category}<br/>{lineage}", small),
+                ]
+            )
+        table = Table(
+            rows,
+            colWidths=(22 * mm, 39 * mm, 28 * mm, 18 * mm, 66 * mm),
+            repeatRows=1,
+        )
+        table.setStyle(table_style)
+        story.append(table)
+
+    story.extend([PageBreak(), Paragraph("Evidence manifest", styles["Heading1"])])
+    evidence_rows: list[list[object]] = [["Filename", "Type", "SHA-256", "Evidence ID"]]
+    evidence_rows.extend(
+        [
+            Paragraph(item.original_name, small),
+            item.media_type,
+            Paragraph(item.sha256, small),
+            Paragraph(item.id, small),
+        ]
+        for item in report.evidence_manifest
+    )
+    if len(evidence_rows) == 1:
+        evidence_rows.append(["No evidence", "", "", ""])
+    evidence_table = Table(
+        evidence_rows,
+        colWidths=(45 * mm, 30 * mm, 58 * mm, 40 * mm),
+        repeatRows=1,
+    )
+    evidence_table.setStyle(table_style)
+    story.append(evidence_table)
+
+    story.extend([PageBreak(), Paragraph("Residency facts", styles["Heading1"])])
+    residency_rows: list[list[object]] = [["Fact", "Period", "Source", "Status"]]
+    residency_rows.extend(
+        [
+            item.fact_type,
+            f"{item.period_start or '—'} – {item.period_end or '—'}",
+            Paragraph(item.source, small),
+            item.status,
+        ]
+        for item in report.residency_fact_manifest
+    )
+    if len(residency_rows) == 1:
+        residency_rows.append(["No residency facts", "", "", ""])
+    residency_table = Table(
+        residency_rows,
+        colWidths=(42 * mm, 46 * mm, 55 * mm, 30 * mm),
+        repeatRows=1,
+    )
+    residency_table.setStyle(table_style)
+    story.append(residency_table)
+
+    if report.open_question_manifest:
+        story.extend([Spacer(1, 8 * mm), Paragraph("Open questions", styles["Heading2"])])
+        for question in report.open_question_manifest:
+            story.append(
+                Paragraph(
+                    f"{question.severity.upper()}: {question.title} — {question.description}",
+                    styles["BodyText"],
+                )
+            )
+    document.build(story)
+    return output.getvalue()
 
 
 def _zip_bytes(report: FrozenReport) -> bytes:

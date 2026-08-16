@@ -26,8 +26,16 @@ from app.services.finance_evidence import (
     image_dimensions,
     inspect_archive,
 )
+from app.services.finance_pdf_statements import parse_pdf_statement
 
-ParserId = Literal["csv", "json", "pdf_metadata", "image_metadata", "archive_manifest"]
+ParserId = Literal[
+    "csv",
+    "json",
+    "pdf_statement",
+    "pdf_metadata",
+    "image_metadata",
+    "archive_manifest",
+]
 ImportMode = Literal["normal", "reprocess"]
 MAX_IMPORT_RECORDS = 100_000
 
@@ -92,6 +100,7 @@ class ParsedSource:
     columns: tuple[str, ...]
     rows: tuple[SourceRow, ...]
     warnings: tuple[dict[str, object], ...] = ()
+    unparsed_line_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -286,6 +295,33 @@ def _parse_pdf_metadata(data: bytes) -> ParsedSource:
     )
 
 
+def _parse_pdf_statement(data: bytes, extracted_text: str | None) -> ParsedSource:
+    try:
+        parsed = parse_pdf_statement(data, extracted_text=extracted_text)
+    except ValueError as exc:
+        raise FinanceImportError(str(exc)) from exc
+    warnings = (
+        (
+            _warning(
+                "pdf_unparsed_lines",
+                f"{parsed.unparsed_line_count} statement lines could not be parsed",
+                "warning",
+            ),
+        )
+        if parsed.unparsed_line_count
+        else ()
+    )
+    return ParsedSource(
+        columns=("date", "description", "amount", "currency", "confidence", "source_line"),
+        rows=tuple(
+            SourceRow(source_index=row.source_index, original_payload=row.payload())
+            for row in parsed.rows
+        ),
+        warnings=warnings,
+        unparsed_line_count=parsed.unparsed_line_count,
+    )
+
+
 def _parse_image_metadata(data: bytes) -> ParsedSource:
     media_type: str
     dimensions = image_dimensions(data)
@@ -337,6 +373,8 @@ def _parse_archive_manifest(data: bytes) -> ParsedSource:
 def parse_source(
     data: bytes, parser_id: ParserId, *, extracted_text: str | None = None
 ) -> ParsedSource:
+    if parser_id == "pdf_statement":
+        return _parse_pdf_statement(data, extracted_text)
     parsers = {
         "csv": _parse_csv,
         "json": _parse_json,
@@ -664,6 +702,13 @@ def build_import_preview(
         ],
         "mapping": normalized_mapping,
         "warnings": warnings,
+        "source_format": "pdf" if parser_id == "pdf_statement" else "csv",
+        "unparsed_line_count": source.unparsed_line_count,
+        "rows": (
+            [{"source_index": row.source_index, **row.original_payload} for row in source.rows]
+            if parser_id == "pdf_statement"
+            else []
+        ),
     }
     return preview
 
@@ -786,6 +831,8 @@ async def commit_raw_records(
     data: bytes,
     mapping: dict[str, object],
     provider: str,
+    row_overrides: tuple[dict[str, object], ...] = (),
+    excluded_source_indexes: tuple[str, ...] = (),
 ) -> RawCommitPlan:
     """Build and add immutable raw records exactly once for an import.
 
@@ -826,6 +873,29 @@ async def commit_raw_records(
         parser_id,
         extracted_text=_evidence_extracted_text(evidence) if evidence is not None else None,
     )
+    if row_overrides or excluded_source_indexes:
+        overrides = {str(item["source_index"]): item for item in row_overrides}
+        excluded = set(excluded_source_indexes)
+        source = ParsedSource(
+            columns=source.columns,
+            rows=tuple(
+                SourceRow(
+                    source_index=row.source_index,
+                    original_payload={
+                        **row.original_payload,
+                        **{
+                            key: value
+                            for key, value in overrides.get(row.source_index, {}).items()
+                            if key != "source_index" and value is not None
+                        },
+                    },
+                )
+                for row in source.rows
+                if row.source_index not in excluded
+            ),
+            warnings=source.warnings,
+            unparsed_line_count=source.unparsed_line_count,
+        )
     parsed = parse_records(source, mapping, account_id=import_row.account_id, parser_id=parser_id)
     row_hashes = {record.row_fingerprint for record in parsed}
     semantic_hashes = {

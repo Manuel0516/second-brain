@@ -1,8 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
 import {
+  createFinanceEvent,
   fetchFinanceSummary,
-  runFinanceAssistantTool,
+  fetchFinanceTimeseries,
+  patchFinanceEvent,
   runFinanceReconciliation,
   uploadFinanceEvidence,
 } from './api'
@@ -100,21 +102,73 @@ test('uploads evidence as FormData without overriding its content type', async (
   expect(form.get('coverage_end')).toBe('2026-06-30')
 })
 
-test('calls read-only assistant tools without a mutation idempotency key', async () => {
+test('creates a manual event with idempotency and decimal-string amount', async () => {
   const fetchMock = vi
     .spyOn(globalThis, 'fetch')
     .mockResolvedValue(jsonResponse())
 
-  await runFinanceAssistantTool('list_accounts', {
-    scope: { type: 'finance', tax_year: null, jurisdiction: null },
-    arguments: {},
-  })
+  await createFinanceEvent(
+    {
+      tax_year: 2026,
+      occurred_at: '2026-07-16T12:00:00+02:00',
+      event_type: 'income',
+      amount: '48230.00',
+      currency: 'SEK',
+      source_account_id: 'account-id',
+      description: 'University salary',
+      jurisdiction: 'SE',
+      asset_id: null,
+    },
+    'event-key',
+  )
 
-  const [, options] = fetchMock.mock.calls[0]
+  const [url, options] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/finance/events')
   expect(options).toEqual(
     expect.objectContaining({
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: expect.objectContaining({ 'Idempotency-Key': 'event-key' }),
     }),
+  )
+  expect(JSON.parse(String(options?.body))).toEqual(
+    expect.objectContaining({ amount: '48230.00' }),
+  )
+})
+
+test('edits an event with PATCH and an expected revision lock', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(jsonResponse())
+
+  await patchFinanceEvent(
+    'event-id',
+    { expected_revision_id: 'revision-id', amount: '12.480000000000000001' },
+    'patch-key',
+  )
+
+  const [url, options] = fetchMock.mock.calls[0]
+  expect(url).toBe('/api/finance/events/event-id')
+  expect(options).toEqual(expect.objectContaining({ method: 'PATCH' }))
+  expect(JSON.parse(String(options?.body))).toEqual({
+    expected_revision_id: 'revision-id',
+    amount: '12.480000000000000001',
+  })
+})
+
+test('requests timeseries with metric, granularity and grouping', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(jsonResponse())
+
+  await fetchFinanceTimeseries({
+    tax_year: 2026,
+    metric: 'net_worth',
+    granularity: 'day',
+    group_by: 'account',
+  })
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/finance/timeseries?tax_year=2026&metric=net_worth&granularity=day&group_by=account',
+    expect.objectContaining({ credentials: 'include' }),
   )
 })

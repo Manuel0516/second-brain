@@ -1,158 +1,189 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/Card'
+import { Dropdown } from '../../components/Dropdown'
 import { SidebarShell } from '../../components/SidebarShell'
 import {
   fetchFinanceAccounts,
   fetchFinanceActivity,
-  fetchFinanceSummary,
+  fetchFinanceTimeseries,
 } from './api'
 import { ActivityMain, ActivitySidebar } from './FinanceActivity'
+import { AddJurisdictionDialog } from './AddJurisdictionDialog'
 import { FinanceHeader, type FinanceTabProps } from './Finance'
-import { aggregateByDay, formatMoney, readinessPercent } from './format'
 import {
-  IconChevronRight,
-  IconWarning,
-  JurisdictionList,
-  RingProgress,
-  SidebarYearBlock,
+  FinanceSidebarClose,
+  FinanceSidebarContent,
+  useFinanceSummary,
+} from './FinanceSidebar'
+import {
+  formatMoney,
+  mergeSeries,
+  readinessPercent,
+  seriesToTrend,
+  trendDelta,
+  yoyDelta,
+} from './format'
+import {
   StatCard,
   StatusPill,
   TrendChart,
   WarningList,
   type PillTone,
+  type TrendPoint,
 } from './primitives'
 import type {
   FinanceAccount,
   FinanceActivityItem,
   FinanceLoadState,
   FinanceSummary,
+  FinanceTimeseriesSeries,
 } from './types'
 
-function useFinanceSummary(taxYear: number, jurisdiction: string | undefined) {
-  const [summary, setSummary] = useState<FinanceLoadState<FinanceSummary>>({
-    status: 'loading',
-  })
+interface OverviewCharts {
+  income: FinanceTimeseriesSeries[]
+  expense: FinanceTimeseriesSeries[]
+  rewards: FinanceTimeseriesSeries[]
+  netWorth: FinanceTimeseriesSeries[]
+  readiness: FinanceTimeseriesSeries[]
+}
+
+function useOverviewCharts(taxYear: number, refreshKey: number) {
+  const [charts, setCharts] = useState<OverviewCharts | null>(null)
   useEffect(() => {
     let active = true
-    void fetchFinanceSummary(taxYear, jurisdiction)
-      .then((data) => {
+    void Promise.all([
+      fetchFinanceTimeseries({
+        tax_year: taxYear,
+        metric: 'income',
+        granularity: 'day',
+        group_by: 'none',
+      }),
+      fetchFinanceTimeseries({
+        tax_year: taxYear,
+        metric: 'expense',
+        granularity: 'day',
+        group_by: 'none',
+      }),
+      fetchFinanceTimeseries({
+        tax_year: taxYear,
+        metric: 'rewards',
+        granularity: 'day',
+        group_by: 'source',
+      }),
+      fetchFinanceTimeseries({
+        tax_year: taxYear,
+        metric: 'net_worth',
+        granularity: 'day',
+        group_by: 'account',
+      }),
+      fetchFinanceTimeseries({
+        tax_year: taxYear,
+        metric: 'readiness',
+        granularity: 'day',
+        group_by: 'jurisdiction',
+      }),
+    ])
+      .then(([income, expense, rewards, netWorth, readiness]) => {
         if (!active) return
-        setSummary(
-          data.empty_state
-            ? { status: 'empty', empty_state: data.empty_state }
-            : { status: 'ready', data },
-        )
-      })
-      .catch((error: unknown) => {
-        if (!active) return
-        setSummary({
-          status: 'error',
-          message:
-            error instanceof Error ? error.message : 'Finance request failed',
-          retryable: true,
+        setCharts({
+          income: income.series,
+          expense: expense.series,
+          rewards: rewards.series,
+          netWorth: netWorth.series,
+          readiness: readiness.series,
         })
+      })
+      .catch(() => {
+        // ponytail: charts degrade to their empty states on failure; the summary
+        // cards still render, so a timeseries hiccup never blanks the page.
+        if (active) setCharts(null)
       })
     return () => {
       active = false
     }
-  }, [taxYear, jurisdiction])
-  return summary
+  }, [taxYear, refreshKey])
+  return charts
 }
 
-function OverviewSidebar({
-  taxYear,
-  summary,
-  jurisdiction,
-  onJurisdictionChange,
+/** Chart card with an optional series filter dropdown ("All accounts ▾" …). */
+function SeriesChartCard({
+  label,
+  headline,
+  series,
+  allLabel,
+  merge,
+  valueFormatter,
+  sinceLabel,
+  footnote,
+  action,
 }: {
-  taxYear: number
-  summary: FinanceLoadState<FinanceSummary>
-  jurisdiction: string | undefined
-  onJurisdictionChange: (code: string | undefined) => void
+  label: string
+  headline: string
+  series: FinanceTimeseriesSeries[]
+  allLabel: string
+  merge: 'sum' | 'avg'
+  valueFormatter: (value: number) => string
+  sinceLabel: string
+  footnote?: string
+  action?: React.ReactNode
 }) {
-  const ready = summary.status === 'ready' ? summary.data : null
+  const [selected, setSelected] = useState('all')
+  const options = useMemo(
+    () => [
+      { value: 'all', label: allLabel },
+      ...series
+        .filter((s) => s.key !== 'all')
+        .map((s) => ({ value: s.key, label: s.label })),
+    ],
+    [series, allLabel],
+  )
+  const points: TrendPoint[] = useMemo(() => {
+    if (selected !== 'all') {
+      return seriesToTrend(series.find((s) => s.key === selected))
+    }
+    const all = series.find((s) => s.key === 'all')
+    return all ? seriesToTrend(all) : mergeSeries(series, merge)
+  }, [series, selected, merge])
+  const delta = trendDelta(points, sinceLabel)
+
   return (
-    <>
-      <SidebarYearBlock taxYear={taxYear} />
-      <JurisdictionList
-        jurisdiction={jurisdiction}
-        onChange={onJurisdictionChange}
-      />
-
-      {ready && (
-        <div className="fin-sidebar-section">
-          <span className="finance-section-label">Readiness</span>
-          <div className="fin-readiness-card">
-            <div className="fin-readiness-top">
-              <RingProgress value={readinessPercent(ready)} />
-              <div>
-                <strong>{readinessPercent(ready)}%</strong>
-                <span
-                  className={
-                    ready.readiness.status === 'blocked'
-                      ? 'fin-muted-danger'
-                      : 'fin-muted-success'
-                  }
-                >
-                  {ready.readiness.status === 'ready'
-                    ? 'On track'
-                    : ready.readiness.status === 'blocked'
-                      ? 'Blocked'
-                      : 'Needs review'}
-                </span>
-              </div>
-            </div>
-            <span className="fin-sidebar-link">
-              Complete your review to increase accuracy.
-              <IconChevronRight />
+    <Card className="fin-chart-card">
+      <div className="fin-chart-head">
+        <div>
+          <span className="finance-section-label">{label}</span>
+          <strong className="fin-chart-value">{headline}</strong>
+          {delta && (
+            <span className={`fin-kpi-delta fin-kpi-delta--${delta.tone}`}>
+              {delta.text}
             </span>
-          </div>
+          )}
         </div>
-      )}
-
-      {ready &&
-        (ready.counts.pending_review_groups > 0 ||
-          ready.counts.missing_evidence > 0) && (
-          <div className="fin-sidebar-section">
-            <span className="finance-section-label">Warnings</span>
-            <div className="fin-sidebar-list">
-              {ready.counts.pending_review_groups > 0 && (
-                <span className="fin-warning-row">
-                  <IconWarning />
-                  <span>
-                    <strong>
-                      {ready.counts.pending_review_groups} unreviewed rewards
-                    </strong>
-                    <span>Review in queue</span>
-                  </span>
-                  <IconChevronRight />
-                </span>
-              )}
-              {ready.counts.missing_evidence > 0 && (
-                <span className="fin-warning-row">
-                  <IconWarning />
-                  <span>
-                    <strong>
-                      {ready.counts.missing_evidence} missing documents
-                    </strong>
-                    <span>Add to improve readiness</span>
-                  </span>
-                  <IconChevronRight />
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-    </>
+        <div className="fin-chart-actions">
+          {action}
+          {options.length > 1 && (
+            <Dropdown
+              ariaLabel={`${label} filter`}
+              value={selected}
+              onChange={setSelected}
+              options={options}
+            />
+          )}
+        </div>
+      </div>
+      <TrendChart data={points} valueFormatter={valueFormatter} height={180} />
+      {footnote && <p className="fin-chart-footnote">{footnote}</p>}
+    </Card>
   )
 }
 
 function TodayTable({
   items,
   accounts,
+  onOpenReview,
 }: {
   items: FinanceActivityItem[]
   accounts: Map<string, FinanceAccount>
+  onOpenReview: () => void
 }) {
   if (items.length === 0) {
     return (
@@ -170,6 +201,9 @@ function TodayTable({
             <th>Source</th>
             <th>Amount</th>
             <th>Status</th>
+            <th>
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -183,18 +217,26 @@ function TodayTable({
               item.representation === 'group' ? item.label : item.event_type
             const reviewOrStatus =
               item.representation === 'group' ? item.review_status : item.status
+            const missingEvidence =
+              item.completeness.blockers.length > 0 ||
+              (item.representation === 'raw' &&
+                item.evidence_document_ids.length === 0)
             const tone: PillTone =
               reviewOrStatus === 'confirmed'
                 ? 'success'
-                : reviewOrStatus === 'deferred'
-                  ? 'neutral'
-                  : 'warning'
+                : missingEvidence
+                  ? 'danger'
+                  : reviewOrStatus === 'deferred'
+                    ? 'neutral'
+                    : 'warning'
             const statusText =
               reviewOrStatus === 'confirmed'
                 ? 'Matched'
-                : reviewOrStatus === 'deferred'
-                  ? 'Deferred'
-                  : 'Review'
+                : missingEvidence
+                  ? 'Missing doc'
+                  : reviewOrStatus === 'deferred'
+                    ? 'Deferred'
+                    : 'Review'
             return (
               <tr key={item.id}>
                 <td>
@@ -213,6 +255,17 @@ function TodayTable({
                 <td>
                   <StatusPill tone={tone}>{statusText}</StatusPill>
                 </td>
+                <td className="fin-table-actions">
+                  {/* ponytail: single row action — full context menu when a second action exists. */}
+                  <button
+                    type="button"
+                    className="fin-row-menu"
+                    aria-label={`Open ${label} in review`}
+                    onClick={onOpenReview}
+                  >
+                    …
+                  </button>
+                </td>
               </tr>
             )
           })}
@@ -225,20 +278,26 @@ function TodayTable({
 function OverviewMain({
   summary,
   taxYear,
+  refreshKey,
   onOpenActivity,
+  onOpenReview,
 }: {
   summary: FinanceLoadState<FinanceSummary>
   taxYear: number
+  refreshKey: number
   onOpenActivity: () => void
+  onOpenReview: () => void
 }) {
   const [recent, setRecent] = useState<FinanceLoadState<FinanceActivityItem[]>>(
     {
       status: 'loading',
     },
   )
+  const [recentTotal, setRecentTotal] = useState(0)
   const [accounts, setAccounts] = useState<Map<string, FinanceAccount>>(
     new Map(),
   )
+  const charts = useOverviewCharts(taxYear, refreshKey)
 
   useEffect(() => {
     let active = true
@@ -250,6 +309,7 @@ function OverviewMain({
     })
       .then((page) => {
         if (!active) return
+        setRecentTotal(page.page.total)
         setRecent(
           page.items.length === 0 && page.empty_state
             ? { status: 'empty', empty_state: page.empty_state }
@@ -272,12 +332,8 @@ function OverviewMain({
     return () => {
       active = false
     }
-  }, [taxYear])
+  }, [taxYear, refreshKey])
 
-  const rewardTrend = useMemo(
-    () => (recent.status === 'ready' ? aggregateByDay(recent.data) : []),
-    [recent],
-  )
   const today = useMemo(() => {
     if (recent.status !== 'ready') return []
     const todayIso = new Date().toISOString().slice(0, 10)
@@ -318,8 +374,26 @@ function OverviewMain({
     )
   }
 
-  const { totals, counts, completeness } = summary.data
+  const { totals, counts, completeness, previous_year } = summary.data
   const pageWarnings = [...completeness.blockers, ...completeness.warnings]
+  const previousYear = taxYear - 1
+  const sinceLabel = `Jan 1, ${taxYear}`
+
+  const sparkOf = (series: FinanceTimeseriesSeries[] | undefined) =>
+    series ? mergeSeries(series, 'sum').map((p) => p.value) : undefined
+
+  const kpiTrend = (current: string, previous: string) => {
+    const delta = yoyDelta(current, previous, previousYear)
+    return {
+      tone:
+        delta.tone === 'success'
+          ? ('success' as const)
+          : delta.tone === 'danger'
+            ? ('danger' as const)
+            : ('neutral' as const),
+      text: delta.text,
+    }
+  }
 
   return (
     <>
@@ -335,24 +409,31 @@ function OverviewMain({
           label="Income"
           value={formatMoney(totals.income)}
           caption="YTD"
+          sparkline={sparkOf(charts?.income)}
+          trend={kpiTrend(totals.income, previous_year.income)}
         />
         <StatCard
           icon="↑"
           label="Expenses"
           value={formatMoney(totals.expense)}
           caption="YTD"
+          sparkline={sparkOf(charts?.expense)}
+          trend={kpiTrend(totals.expense, previous_year.expense)}
         />
         <StatCard
           icon="★"
           label="Rewards"
           value={formatMoney(totals.rewards)}
           caption="YTD"
+          sparkline={sparkOf(charts?.rewards)}
+          trend={kpiTrend(totals.rewards, previous_year.rewards)}
         />
         <StatCard
           icon="⇄"
           label="Transfers"
           value={formatMoney(totals.transfers)}
           caption="YTD"
+          trend={kpiTrend(totals.transfers, previous_year.transfers)}
         />
         <StatCard
           icon="☰"
@@ -371,29 +452,26 @@ function OverviewMain({
       </div>
 
       <div className="fin-chart-row">
-        <Card className="fin-chart-card">
-          <div className="fin-chart-head">
-            <div>
-              <span className="finance-section-label">Net worth</span>
-              <strong className="fin-chart-value">
-                {formatMoney(totals.net_worth)}
-              </strong>
-            </div>
-          </div>
-          <div className="fin-chart-empty">
-            {totals.net_worth === null
-              ? 'Net worth arrives once account balances are reconciled.'
-              : 'Historical trend arrives once valuation snapshots accumulate across imports.'}
-          </div>
-        </Card>
-        <Card className="fin-chart-card">
-          <div className="fin-chart-head">
-            <div>
-              <span className="finance-section-label">Passive income</span>
-              <strong className="fin-chart-value">
-                {formatMoney(totals.rewards)}
-              </strong>
-            </div>
+        <SeriesChartCard
+          label="Net worth"
+          headline={formatMoney(totals.net_worth)}
+          series={charts?.netWorth ?? []}
+          allLabel="All accounts"
+          merge="sum"
+          valueFormatter={(v) => `€${Math.round(v / 1000)}k`}
+          sinceLabel={sinceLabel}
+          footnote="Total across all accounts and assets."
+        />
+        <SeriesChartCard
+          label="Passive income"
+          headline={formatMoney(totals.rewards)}
+          series={charts?.rewards ?? []}
+          allLabel="All sources"
+          merge="sum"
+          valueFormatter={(v) => `€${v.toFixed(0)}`}
+          sinceLabel={sinceLabel}
+          footnote="Daily aggregated staking, savings and rewards. Tiny hourly rewards are grouped by day for clarity."
+          action={
             <button
               type="button"
               className="fin-btn fin-btn-ghost fin-btn-sm"
@@ -401,30 +479,18 @@ function OverviewMain({
             >
               View activity
             </button>
-          </div>
-          <TrendChart
-            data={rewardTrend}
-            valueFormatter={(v) => `€${v.toFixed(0)}`}
-            height={180}
-          />
-          <p className="fin-chart-footnote">
-            Daily aggregated staking, savings and reward groups for {taxYear}.
-          </p>
-        </Card>
-        <Card className="fin-chart-card">
-          <div className="fin-chart-head">
-            <div>
-              <span className="finance-section-label">Tax readiness</span>
-              <strong className="fin-chart-value">
-                {readinessPercent(summary.data)}%
-              </strong>
-            </div>
-          </div>
-          <div className="fin-chart-empty">
-            Based on data completeness, reviews and documents. History arrives
-            after your first full review pass.
-          </div>
-        </Card>
+          }
+        />
+        <SeriesChartCard
+          label="Tax readiness"
+          headline={`${readinessPercent(summary.data)}%`}
+          series={charts?.readiness ?? []}
+          allLabel="All jurisdictions"
+          merge="avg"
+          valueFormatter={(v) => `${Math.round(v)}%`}
+          sinceLabel={sinceLabel}
+          footnote="Based on data completeness, reviews and documents."
+        />
       </div>
 
       <Card>
@@ -432,11 +498,22 @@ function OverviewMain({
           <span className="finance-section-label">
             Today <span className="fin-count-badge">{today.length}</span>
           </span>
+          <button
+            type="button"
+            className="fin-btn fin-btn-ghost fin-btn-sm"
+            onClick={onOpenReview}
+          >
+            View all ({recentTotal})
+          </button>
         </div>
         {recent.status === 'error' ? (
           <p className="finance-muted">{recent.message}</p>
         ) : (
-          <TodayTable items={today} accounts={accounts} />
+          <TodayTable
+            items={today}
+            accounts={accounts}
+            onOpenReview={onOpenReview}
+          />
         )}
       </Card>
     </>
@@ -445,7 +522,13 @@ function OverviewMain({
 
 export function FinanceOverview(props: FinanceTabProps) {
   const [view, setView] = useState<'overview' | 'activity'>('overview')
-  const summary = useFinanceSummary(props.taxYear, props.jurisdiction)
+  const [addJurisdictionOpen, setAddJurisdictionOpen] = useState(false)
+  const summary = useFinanceSummary(
+    props.taxYear,
+    props.jurisdiction,
+    props.refreshKey,
+  )
+  const openReview = () => props.onSelectTab('review')
 
   return (
     <>
@@ -454,17 +537,27 @@ export function FinanceOverview(props: FinanceTabProps) {
         title="Finance"
         className="finance-sidebar"
         ariaLabel="Finance navigation"
+        open={props.sidebarOpen}
+        actions={
+          <FinanceSidebarClose
+            onClose={() => props.onSidebarOpenChange(false)}
+          />
+        }
       >
         {view === 'overview' ? (
-          <OverviewSidebar
+          <FinanceSidebarContent
             taxYear={props.taxYear}
+            onTaxYearChange={props.onTaxYearChange}
             summary={summary}
             jurisdiction={props.jurisdiction}
             onJurisdictionChange={props.onJurisdictionChange}
+            onAddJurisdiction={() => setAddJurisdictionOpen(true)}
+            onOpenReview={openReview}
           />
         ) : (
           <ActivitySidebar
             taxYear={props.taxYear}
+            onTaxYearChange={props.onTaxYearChange}
             jurisdiction={props.jurisdiction}
             onJurisdictionChange={props.onJurisdictionChange}
             summary={summary}
@@ -478,12 +571,17 @@ export function FinanceOverview(props: FinanceTabProps) {
             onTaxYearChange={props.onTaxYearChange}
             tab={props.tab}
             onSelectTab={props.onSelectTab}
+            onRefresh={props.onRefresh}
+            sidebarOpen={props.sidebarOpen}
+            onSidebarOpenChange={props.onSidebarOpenChange}
           />
           {view === 'overview' ? (
             <OverviewMain
               summary={summary}
               taxYear={props.taxYear}
+              refreshKey={props.refreshKey}
               onOpenActivity={() => setView('activity')}
+              onOpenReview={openReview}
             />
           ) : (
             <ActivityMain
@@ -493,6 +591,13 @@ export function FinanceOverview(props: FinanceTabProps) {
           )}
         </div>
       </main>
+      {addJurisdictionOpen && (
+        <AddJurisdictionDialog
+          taxYear={props.taxYear}
+          onClose={() => setAddJurisdictionOpen(false)}
+          onSaved={props.onRefresh}
+        />
+      )}
     </>
   )
 }

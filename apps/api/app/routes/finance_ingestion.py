@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import io
+import json
+import re
+import zipfile
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal, TypedDict, cast
 
@@ -19,9 +23,10 @@ from fastapi import (
 from fastapi import (
     File as FormFile,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from app.database import get_async_session
 from app.dependencies import get_current_user
@@ -33,6 +38,7 @@ from app.models import (
     FinanceImport,
     FinanceRawRecord,
     FinanceSourceConnection,
+    Link,
     User,
 )
 from app.security import encrypt_finance_value
@@ -47,6 +53,7 @@ from app.services.finance_evidence import (
     acquire_finance_advisory_lock,
     compute_sha256,
     create_evidence_document,
+    evidence_bundle_folder,
     evidence_response,
 )
 from app.services.finance_import_projection import project_import_records
@@ -471,6 +478,135 @@ async def list_evidence(
     )
 
 
+def _bundle_safe_name(value: str) -> str:
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip(".-")
+    return name or "evidence"
+
+
+@router.get("/evidence/bundle")
+async def download_evidence_bundle(
+    tax_year: int = Query(ge=1900, le=2200),
+    jurisdiction: Literal["SE", "ES"] | None = None,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> StreamingResponse:
+    documents = list(
+        (
+            await session.scalars(
+                select(FinanceEvidenceDocument)
+                .where(FinanceEvidenceDocument.user_id == user.id)
+                .order_by(
+                    FinanceEvidenceDocument.source_kind,
+                    FinanceEvidenceDocument.original_name,
+                    FinanceEvidenceDocument.id,
+                )
+            )
+        ).all()
+    )
+    year_start = date(tax_year, 1, 1)
+    year_end = date(tax_year, 12, 31)
+    documents = [
+        document
+        for document in documents
+        if (
+            (document.coverage_start is not None or document.coverage_end is not None)
+            and (document.coverage_start is None or document.coverage_start <= year_end)
+            and (document.coverage_end is None or document.coverage_end >= year_start)
+        )
+        or (
+            document.coverage_start is None
+            and document.coverage_end is None
+            and document.captured_at.date().year == tax_year
+        )
+    ]
+    if jurisdiction is not None and documents:
+        imported_ids = set(
+            (
+                await session.scalars(
+                    select(FinanceImport.evidence_document_id)
+                    .join(FinanceAccount, FinanceAccount.id == FinanceImport.account_id)
+                    .where(
+                        FinanceImport.user_id == user.id,
+                        FinanceAccount.user_id == user.id,
+                        FinanceAccount.tax_jurisdiction == jurisdiction,
+                    )
+                )
+            ).all()
+        )
+        linked_ids = set(
+            (
+                await session.scalars(
+                    select(Link.target_id)
+                    .join(
+                        FinanceEventRevision,
+                        FinanceEventRevision.id == Link.source_id,
+                    )
+                    .join(
+                        FinanceAccount,
+                        FinanceAccount.id == FinanceEventRevision.source_account_id,
+                    )
+                    .where(
+                        Link.source_type == "finance_event_revision",
+                        Link.target_type == "finance_evidence",
+                        FinanceEventRevision.user_id == user.id,
+                        FinanceAccount.user_id == user.id,
+                        FinanceAccount.tax_jurisdiction == jurisdiction,
+                    )
+                )
+            ).all()
+        )
+        allowed_ids = imported_ids | linked_ids
+        documents = [document for document in documents if document.id in allowed_ids]
+
+    files: list[tuple[str, bytes, FinanceEvidenceDocument]] = []
+    used_paths: set[str] = set()
+    for document in documents:
+        data = _download_evidence(user.id, document)
+        folder = evidence_bundle_folder(document.source_kind)
+        basename = _bundle_safe_name(document.original_name)
+        path = f"{folder}/{basename}"
+        if path in used_paths:
+            path = f"{folder}/{document.id}-{basename}"
+        used_paths.add(path)
+        files.append((path, data, document))
+    files.sort(key=lambda item: item[0])
+    manifest = {
+        "tax_year": tax_year,
+        "jurisdiction": jurisdiction,
+        "documents": [
+            {
+                "path": path,
+                "evidence_document_id": document.id,
+                "source_kind": document.source_kind,
+                "sha256": document.sha256,
+                "size": len(data),
+            }
+            for path, data, document in files
+        ],
+    }
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        bundle_files = [
+            (
+                "manifest.json",
+                json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode(),
+            ),
+            *((path, data) for path, data, _ in files),
+        ]
+        for path, data in bundle_files:
+            info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    filename = f"finance-evidence-{jurisdiction or 'all'}-{tax_year}.zip"
+    return StreamingResponse(
+        iter((output.getvalue(),)),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 class ImportMappingOutput(TypedDict, total=False):
     date_column: str
     time_column: str
@@ -549,6 +685,22 @@ class ImportPreviewResponse(BaseModel):
     rejected_rows: list[dict[str, str]]
     mapping: ImportMapping
     warnings: list[FinanceWarning]
+    source_format: Literal["csv", "pdf"] = "csv"
+    unparsed_line_count: int = 0
+    rows: list[dict[str, object]] = Field(default_factory=list)
+
+
+def _effective_import_mapping(parser_id: ParserId, mapping: dict[str, object]) -> dict[str, object]:
+    if parser_id != "pdf_statement":
+        return mapping
+    return {
+        "date_column": "date",
+        "amount_column": "amount",
+        "description_column": "description",
+        "timezone": mapping.get("timezone", "UTC"),
+        "date_format": "%Y-%m-%d",
+        "decimal_separator": ".",
+    }
 
 
 async def _owned_import_inputs(
@@ -579,6 +731,7 @@ def _parser_accepts(parser_id: ParserId, media_type: str) -> bool:
     return {
         "csv": media_type == "text/csv",
         "json": media_type == "application/json",
+        "pdf_statement": media_type == "application/pdf",
         "pdf_metadata": media_type == "application/pdf",
         "image_metadata": media_type in {"image/png", "image/jpeg", "image/webp"},
         "archive_manifest": media_type in {"application/zip", "application/x-tar"},
@@ -637,6 +790,7 @@ async def create_import_preview(
             detail="Parser does not support this evidence type",
         )
     data = _download_evidence(user.id, evidence)
+    mapping = _effective_import_mapping(body.parser_id, body.mapping.normalized())
     try:
         row, preview, created = await preview_import(
             session,
@@ -647,7 +801,7 @@ async def create_import_preview(
             parser_id=body.parser_id,
             parser_version=body.parser_version,
             import_mode=body.import_mode,
-            mapping=body.mapping.normalized(),
+            mapping=mapping,
         )
     except FinanceImportError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -677,11 +831,28 @@ async def create_import_preview(
     return response
 
 
+class PdfRowOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, populate_by_name=True)
+
+    source_index: str = Field(min_length=1, max_length=100)
+    transaction_date: date | None = Field(default=None, alias="date")
+    description: str | None = Field(default=None, max_length=2_000)
+    amount: Annotated[str, Field(pattern=r"^-?[0-9]+(\.[0-9]+)?$")] | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+
+    @field_validator("currency")
+    @classmethod
+    def uppercase_currency(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+
 class ImportCommitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mapping: ImportMapping
     confirm_warnings: list[str]
+    row_overrides: list[PdfRowOverride] = Field(default_factory=list)
+    excluded_source_indexes: list[str] = Field(default_factory=list, max_length=100_000)
 
 
 ImportStatus = Literal[
@@ -733,11 +904,17 @@ async def commit_import(
     )
     if import_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import not found")
-    mapping = body.mapping.normalized()
+    parser_id = cast(ParserId, import_row.parser_id)
+    mapping = _effective_import_mapping(parser_id, body.mapping.normalized())
     if mapping != import_row.mapping:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Import mapping differs from the immutable preview",
+        )
+    if parser_id != "pdf_statement" and (body.row_overrides or body.excluded_source_indexes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Row corrections are only supported for PDF statement imports",
         )
     warning_codes = {
         str(item["code"])
@@ -771,6 +948,11 @@ async def commit_import(
             data=data,
             mapping=mapping,
             provider=account.provider,
+            row_overrides=tuple(
+                item.model_dump(mode="json", exclude_none=True, by_alias=True)
+                for item in body.row_overrides
+            ),
+            excluded_source_indexes=tuple(body.excluded_source_indexes),
         )
         projection = await project_import_records(
             session,

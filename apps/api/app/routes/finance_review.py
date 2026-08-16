@@ -124,6 +124,14 @@ class ReviewGroupListResponse(BaseModel):
     empty_state: EmptyState | None
 
 
+class ReviewQueueCountsResponse(BaseModel):
+    needs_grouping: int
+    needs_evidence: int
+    ready: int
+    problematic: int
+    total: int
+
+
 class GroupedActivityItem(BaseModel):
     representation: Literal["group"]
     id: FinanceId
@@ -972,6 +980,7 @@ async def finance_activity(
     to_date: datetime | None = Query(default=None, alias="to"),
     account_id: str | None = None,
     asset_id: str | None = None,
+    group_id: str | None = None,
     event_type: EventType | None = None,
     event_status: Literal["proposed", "confirmed", "superseded", "voided"] | None = Query(
         default=None, alias="status"
@@ -992,6 +1001,8 @@ async def finance_activity(
             criteria.append(FinanceReviewGroup.account_id == account_id)
         if asset_id is not None:
             criteria.append(FinanceReviewGroup.asset_id == asset_id)
+        if group_id is not None:
+            criteria.append(FinanceReviewGroup.id == group_id)
         if event_type is not None:
             criteria.append(FinanceReviewGroup.event_type == event_type)
         if event_status is not None:
@@ -1076,6 +1087,13 @@ async def finance_activity(
                     FinanceEventComponent.event_revision_id == FinanceEventRevision.id,
                     FinanceEventComponent.user_id == user.id,
                     FinanceEventComponent.asset_id == asset_id,
+                )
+            )
+        if group_id is not None:
+            raw_criteria.append(
+                exists().where(
+                    FinanceReviewGroupMember.event_revision_id == FinanceEventRevision.id,
+                    FinanceReviewGroupMember.group_id == group_id,
                 )
             )
         total = int(
@@ -1242,9 +1260,51 @@ async def finance_activity(
     )
 
 
+@router.get("/review-queue/counts", response_model=ReviewQueueCountsResponse)
+async def review_queue_counts(
+    tax_year: int = Query(ge=1900, le=2200),
+    jurisdiction: Literal["SE", "ES"] | None = None,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> ReviewQueueCountsResponse:
+    query = (
+        select(FinanceReviewGroup)
+        .join(FinanceAccount, FinanceAccount.id == FinanceReviewGroup.account_id)
+        .where(
+            FinanceReviewGroup.user_id == user.id,
+            FinanceAccount.user_id == user.id,
+            FinanceReviewGroup.tax_date >= date(tax_year, 1, 1),
+            FinanceReviewGroup.tax_date <= date(tax_year, 12, 31),
+            FinanceReviewGroup.status != "split",
+        )
+    )
+    if jurisdiction is not None:
+        query = query.where(FinanceAccount.tax_jurisdiction == jurisdiction)
+    groups = list((await session.scalars(query)).all())
+    counts = {
+        "needs_grouping": 0,
+        "needs_evidence": 0,
+        "ready": 0,
+        "problematic": 0,
+    }
+    for group in groups:
+        has_blocker = any(item.get("severity") == "blocking" for item in group.warnings)
+        if has_blocker or group.status == "deferred":
+            counts["problematic"] += 1
+        elif Decimal(group.evidence_coverage) < Decimal(1):
+            counts["needs_evidence"] += 1
+        elif group.status == "confirmed" or not group.warnings:
+            counts["ready"] += 1
+        else:
+            counts["needs_grouping"] += 1
+    return ReviewQueueCountsResponse(**counts, total=len(groups))
+
+
 @router.get("/review-groups", response_model=ReviewGroupListResponse)
 async def list_review_groups(
     review_status: ReviewStatus | None = Query(default=None, alias="status"),
+    event_type: EventType | None = None,
+    group_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
@@ -1253,6 +1313,10 @@ async def list_review_groups(
     filters = [FinanceReviewGroup.user_id == user.id]
     if review_status is not None:
         filters.append(FinanceReviewGroup.status == review_status)
+    if event_type is not None:
+        filters.append(FinanceReviewGroup.event_type == event_type)
+    if group_id is not None:
+        filters.append(FinanceReviewGroup.id == group_id)
     total = int(
         await session.scalar(select(func.count(FinanceReviewGroup.id)).where(*filters)) or 0
     )

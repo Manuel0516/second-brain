@@ -5,7 +5,7 @@ import { Card } from '../../components/Card'
 import { Dropdown } from '../../components/Dropdown'
 import { IconButton } from '../../components/IconButton'
 import { Segmented } from '../../components/Segmented'
-import { FinanceAssistantLauncher } from './FinanceAssistant'
+import { AddRecordDialog } from './AddRecordDialog'
 import { FinanceImportWizard } from './FinanceImportWizard'
 import { FinanceOverview } from './FinanceOverview'
 import { FinanceReports } from './FinanceReports'
@@ -27,6 +27,11 @@ export interface FinanceTabProps {
   onJurisdictionChange: (jurisdiction: string | undefined) => void
   tab: FinanceTab
   onSelectTab: (tab: FinanceTab) => void
+  /** Bumped after any mutation — pages refetch on it. */
+  refreshKey: number
+  onRefresh: () => void
+  sidebarOpen: boolean
+  onSidebarOpenChange: (open: boolean) => void
 }
 
 /** Shared header — tabs, tax-year navigation, record/import actions. Identical across every tab. */
@@ -35,25 +40,68 @@ export function FinanceHeader({
   onTaxYearChange,
   tab,
   onSelectTab,
+  onRefresh,
+  sidebarOpen,
+  onSidebarOpenChange,
 }: Pick<
   FinanceTabProps,
-  'taxYear' | 'onTaxYearChange' | 'tab' | 'onSelectTab'
+  | 'taxYear'
+  | 'onTaxYearChange'
+  | 'tab'
+  | 'onSelectTab'
+  | 'onRefresh'
+  | 'sidebarOpen'
+  | 'onSidebarOpenChange'
 >) {
   const [importOpen, setImportOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   const years = Array.from({ length: 6 }, (_, i) => taxYear - 4 + i)
 
   return (
     <header className="fin-header">
       <div className="fin-header-title">
+        <IconButton
+          icon={
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="2.5" y="3.5" width="15" height="13" rx="2" />
+              <path d="M7.5 3.5v13" />
+            </svg>
+          }
+          label={sidebarOpen ? 'Hide navigation' : 'Show navigation'}
+          pressed={sidebarOpen}
+          onClick={() => onSidebarOpenChange(!sidebarOpen)}
+          size="sm"
+          variant="raised"
+        />
         <h1>Finance</h1>
         <div className="fin-year-nav">
-          <IconButton
-            icon="‹"
-            label="Previous tax year"
-            onClick={() => onTaxYearChange(taxYear - 1)}
-            size="sm"
-          />
+          <div className="fin-year-nav-buttons">
+            <IconButton
+              icon="‹"
+              label="Previous tax year"
+              onClick={() => onTaxYearChange(taxYear - 1)}
+              size="sm"
+              variant="raised"
+            />
+            <IconButton
+              icon="›"
+              label="Next tax year"
+              onClick={() => onTaxYearChange(taxYear + 1)}
+              size="sm"
+              variant="raised"
+            />
+          </div>
           <Dropdown
+            className="fin-dropdown-plain"
             ariaLabel="Tax year"
             value={taxYear}
             onChange={onTaxYearChange}
@@ -61,12 +109,6 @@ export function FinanceHeader({
               value: year,
               label: `Tax year ${year}`,
             }))}
-          />
-          <IconButton
-            icon="›"
-            label="Next tax year"
-            onClick={() => onTaxYearChange(taxYear + 1)}
-            size="sm"
           />
         </div>
       </div>
@@ -84,16 +126,33 @@ export function FinanceHeader({
       <div className="fin-header-actions">
         <button
           type="button"
+          className="fin-btn fin-btn-ghost"
+          onClick={() => setAddOpen(true)}
+        >
+          + Add record
+        </button>
+        <button
+          type="button"
           className="fin-btn fin-btn-primary"
           onClick={() => setImportOpen(true)}
         >
-          Import statement
+          Import CSV
         </button>
       </div>
+      {addOpen && (
+        <AddRecordDialog
+          taxYear={taxYear}
+          onClose={() => setAddOpen(false)}
+          onSaved={onRefresh}
+        />
+      )}
       {importOpen && (
         <FinanceImportWizard
           onClose={() => setImportOpen(false)}
-          onCommitted={() => onSelectTab('review')}
+          onCommitted={() => {
+            onRefresh()
+            onSelectTab('review')
+          }}
         />
       )}
     </header>
@@ -139,6 +198,8 @@ export function Finance() {
   const [jurisdiction, setJurisdiction] = useState<string | undefined>(
     undefined,
   )
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   function selectTab(next: FinanceTab) {
     setSearchParams(next === 'overview' ? {} : { section: next }, {
@@ -153,6 +214,10 @@ export function Finance() {
     onJurisdictionChange: setJurisdiction,
     tab,
     onSelectTab: selectTab,
+    refreshKey,
+    onRefresh: () => setRefreshKey((key) => key + 1),
+    sidebarOpen,
+    onSidebarOpenChange: setSidebarOpen,
   }
 
   return (
@@ -167,7 +232,6 @@ export function Finance() {
       ) : (
         <FinanceOverview {...shared} />
       )}
-      <FinanceAssistantLauncher />
     </div>
   )
 }

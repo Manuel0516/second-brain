@@ -8,25 +8,28 @@ import {
   previewFinanceImport,
   uploadFinanceEvidence,
 } from './api'
-import { IconUpload, IconWarning, WarningList } from './primitives'
+import { IconUpload, IconWarning, StatusPill, WarningList } from './primitives'
 import type {
   FinanceAccount,
   ImportCommitResult,
   ImportMapping,
   ImportPreview,
+  ImportRowOverride,
+  PdfStatementRow,
 } from './types'
 
 type ParserId =
   | 'csv'
   | 'json'
-  | 'pdf_metadata'
+  | 'pdf_statement'
   | 'image_metadata'
   | 'archive_manifest'
 
 const PARSER_BY_MEDIA_TYPE: Record<string, ParserId> = {
   'text/csv': 'csv',
   'application/json': 'json',
-  'application/pdf': 'pdf_metadata',
+  // PDF statements parse into ledger rows via pdftotext heuristics (contract §PDF statement import).
+  'application/pdf': 'pdf_statement',
   'image/png': 'image_metadata',
   'image/jpeg': 'image_metadata',
   'image/webp': 'image_metadata',
@@ -66,6 +69,138 @@ function emptyMapping(): ImportMapping {
   return { decimal_separator: '.' }
 }
 
+const CONFIDENCE_TONE = {
+  high: 'success',
+  medium: 'warning',
+  low: 'danger',
+} as const
+
+/** Editable preview of heuristically parsed PDF statement rows — corrections go to commit as row_overrides. */
+function PdfRowsEditor({
+  rows,
+  unparsedLineCount,
+  edits,
+  excluded,
+  onEdit,
+  onToggleExcluded,
+}: {
+  rows: PdfStatementRow[]
+  unparsedLineCount: number
+  edits: Map<string, ImportRowOverride>
+  excluded: Set<string>
+  onEdit: (
+    sourceIndex: string,
+    field: 'date' | 'description' | 'amount' | 'currency',
+    value: string,
+  ) => void
+  onToggleExcluded: (sourceIndex: string, include: boolean) => void
+}) {
+  const value = (
+    row: PdfStatementRow,
+    field: 'date' | 'description' | 'amount' | 'currency',
+  ) => edits.get(row.source_index)?.[field] ?? row[field] ?? ''
+  return (
+    <div className="fin-inspector-section">
+      <span className="finance-section-label">Parsed rows ({rows.length})</span>
+      {unparsedLineCount > 0 && (
+        <p className="finance-muted">
+          <IconWarning /> {unparsedLineCount} line
+          {unparsedLineCount === 1 ? '' : 's'} could not be parsed and will be
+          skipped. Check the source PDF if totals look short.
+        </p>
+      )}
+      <div className="fin-table-wrap">
+        <table className="fin-table fin-pdf-rows">
+          <thead>
+            <tr>
+              <th>
+                <span className="sr-only">Include</span>
+              </th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Amount</th>
+              <th>Currency</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.source_index}
+                className={
+                  excluded.has(row.source_index)
+                    ? 'fin-row-excluded'
+                    : row.confidence === 'low'
+                      ? 'fin-row-low-confidence'
+                      : ''
+                }
+                title={row.source_line}
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={!excluded.has(row.source_index)}
+                    onChange={(e) =>
+                      onToggleExcluded(row.source_index, e.target.checked)
+                    }
+                    aria-label={`Include row ${row.source_index}`}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="date"
+                    value={value(row, 'date')}
+                    onChange={(e) =>
+                      onEdit(row.source_index, 'date', e.target.value)
+                    }
+                    aria-label={`Date for row ${row.source_index}`}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={value(row, 'description')}
+                    onChange={(e) =>
+                      onEdit(row.source_index, 'description', e.target.value)
+                    }
+                    aria-label={`Description for row ${row.source_index}`}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="finance-mono"
+                    inputMode="decimal"
+                    value={value(row, 'amount')}
+                    onChange={(e) =>
+                      onEdit(row.source_index, 'amount', e.target.value)
+                    }
+                    aria-label={`Amount for row ${row.source_index}`}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="finance-mono"
+                    maxLength={8}
+                    value={value(row, 'currency')}
+                    onChange={(e) =>
+                      onEdit(row.source_index, 'currency', e.target.value)
+                    }
+                    aria-label={`Currency for row ${row.source_index}`}
+                  />
+                </td>
+                <td>
+                  <StatusPill tone={CONFIDENCE_TONE[row.confidence]}>
+                    {row.confidence}
+                  </StatusPill>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function FinanceImportWizard({
   onClose,
   onCommitted,
@@ -87,6 +222,10 @@ export function FinanceImportWizard({
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set())
+  const [rowEdits, setRowEdits] = useState<Map<string, ImportRowOverride>>(
+    new Map(),
+  )
+  const [excludedRows, setExcludedRows] = useState<Set<string>>(new Set())
   const [committing, setCommitting] = useState(false)
   const [result, setResult] = useState<ImportCommitResult | null>(null)
 
@@ -137,6 +276,8 @@ export function FinanceImportWizard({
       )
       setPreview(result)
       setAcknowledged(new Set())
+      setRowEdits(new Map())
+      setExcludedRows(new Set())
       setStep('map')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not preview import')
@@ -187,7 +328,16 @@ export function FinanceImportWizard({
     try {
       const commitResult = await commitFinanceImport(
         preview.import_id,
-        { mapping, confirm_warnings: [...requiredWarningCodes] },
+        {
+          mapping,
+          confirm_warnings: [...requiredWarningCodes],
+          ...(rowEdits.size > 0
+            ? { row_overrides: [...rowEdits.values()] }
+            : {}),
+          ...(excludedRows.size > 0
+            ? { excluded_source_indexes: [...excludedRows] }
+            : {}),
+        },
         crypto.randomUUID(),
       )
       setResult(commitResult)
@@ -362,27 +512,55 @@ export function FinanceImportWizard({
               </>
             )}
 
-            {preview.sample_rows.length > 0 && (
-              <div className="fin-table-wrap">
-                <table className="fin-table">
-                  <thead>
-                    <tr>
-                      {preview.columns.map((column) => (
-                        <th key={column}>{column}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.sample_rows.slice(0, 5).map((row, index) => (
-                      <tr key={index}>
+            {preview.source_format === 'pdf' && preview.rows ? (
+              <PdfRowsEditor
+                rows={preview.rows}
+                unparsedLineCount={preview.unparsed_line_count ?? 0}
+                edits={rowEdits}
+                excluded={excludedRows}
+                onEdit={(sourceIndex, field, value) =>
+                  setRowEdits((prev) => {
+                    const next = new Map(prev)
+                    next.set(sourceIndex, {
+                      ...next.get(sourceIndex),
+                      source_index: sourceIndex,
+                      [field]: value,
+                    })
+                    return next
+                  })
+                }
+                onToggleExcluded={(sourceIndex, include) =>
+                  setExcludedRows((prev) => {
+                    const next = new Set(prev)
+                    if (include) next.delete(sourceIndex)
+                    else next.add(sourceIndex)
+                    return next
+                  })
+                }
+              />
+            ) : (
+              preview.sample_rows.length > 0 && (
+                <div className="fin-table-wrap">
+                  <table className="fin-table">
+                    <thead>
+                      <tr>
                         {preview.columns.map((column) => (
-                          <td key={column}>{row[column] ?? ''}</td>
+                          <th key={column}>{column}</th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {preview.sample_rows.slice(0, 5).map((row, index) => (
+                        <tr key={index}>
+                          {preview.columns.map((column) => (
+                            <td key={column}>{row[column] ?? ''}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
 
             {preview.rejected_rows.length > 0 && (

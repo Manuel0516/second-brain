@@ -8,18 +8,54 @@ import {
   confirmReviewGroup,
   deferReviewGroup,
   fetchFinanceAccounts,
+  fetchFinanceActivity,
+  fetchFinanceReviewQueueCounts,
   fetchReviewGroups,
   splitReviewGroup,
 } from './api'
+import { AddJurisdictionDialog } from './AddJurisdictionDialog'
+import { AddRecordDialog, type AddRecordEdit } from './AddRecordDialog'
 import { FinanceHeader, type FinanceTabProps } from './Finance'
+import {
+  FinanceSidebarClose,
+  FinanceSidebarContent,
+  useFinanceSummary,
+} from './FinanceSidebar'
 import { formatMoney } from './format'
-import { BarMeter, StatusPill, WarningList, type PillTone } from './primitives'
+import {
+  BarMeter,
+  IconChevronLeft,
+  IconChevronRight,
+  StatusPill,
+  WarningList,
+  type PillTone,
+} from './primitives'
 import type {
   Completeness,
   FinanceAccount,
+  FinanceEventType,
   FinanceLoadState,
+  PageMeta,
   ReviewGroup,
+  ReviewQueueCounts,
+  ReviewStatus,
 } from './types'
+
+const PAGE_SIZE = 10
+
+const EVENT_TYPE_FILTERS: Array<{
+  value: FinanceEventType | ''
+  label: string
+}> = [
+  { value: '', label: 'All types' },
+  { value: 'income', label: 'Income' },
+  { value: 'expense', label: 'Expense' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'staking_reward', label: 'Staking reward' },
+  { value: 'interest', label: 'Interest' },
+  { value: 'dividend', label: 'Dividend' },
+  { value: 'trade', label: 'Trade' },
+]
 
 type FilterKey =
   | 'all'
@@ -74,22 +110,34 @@ function statusLabel(group: ReviewGroup): string {
   return coverage(group) >= 0.8 ? 'Suggested' : 'Needs match'
 }
 
-function useReviewGroups() {
+function useReviewGroups(
+  page: number,
+  status: ReviewStatus | undefined,
+  eventType: FinanceEventType | undefined,
+  refreshKey: number,
+) {
   const [state, setState] = useState<FinanceLoadState<ReviewGroup[]>>({
     status: 'loading',
   })
   const [completeness, setCompleteness] = useState<Completeness | null>(null)
+  const [pageMeta, setPageMeta] = useState<PageMeta | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     let active = true
-    void fetchReviewGroups(undefined, 200, 0)
-      .then((page) => {
+    void fetchReviewGroups({
+      status,
+      event_type: eventType,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    })
+      .then((result) => {
         if (!active) return
-        setCompleteness(page.completeness)
+        setCompleteness(result.completeness)
+        setPageMeta(result.page)
         setState(
-          page.items.length === 0 && page.empty_state
-            ? { status: 'empty', empty_state: page.empty_state }
-            : { status: 'ready', data: page.items },
+          result.items.length === 0 && result.empty_state
+            ? { status: 'empty', empty_state: result.empty_state }
+            : { status: 'ready', data: result.items },
         )
       })
       .catch((error: unknown) => {
@@ -104,18 +152,25 @@ function useReviewGroups() {
     return () => {
       active = false
     }
-  }, [reloadKey])
-  return { state, completeness, reload: () => setReloadKey((k) => k + 1) }
+  }, [page, status, eventType, reloadKey, refreshKey])
+  return {
+    state,
+    completeness,
+    pageMeta,
+    reload: () => setReloadKey((k) => k + 1),
+  }
 }
 
 function ConfirmModal({
   group,
   onClose,
   onConfirmed,
+  onConflict,
 }: {
   group: ReviewGroup
   onClose: () => void
   onConfirmed: () => void
+  onConflict: () => void
 }) {
   const [reusable, setReusable] = useState(false)
   const [reason, setReason] = useState('Reviewed and confirmed.')
@@ -182,7 +237,19 @@ function ConfirmModal({
           Confirming creates a new event revision for each member and balanced
           postings. This can be superseded later, not silently overwritten.
         </p>
-        {error && <p className="fin-muted-danger">{error}</p>}
+        {error && (
+          <div className="fin-conflict-row">
+            <p className="fin-muted-danger">{error}</p>
+            {/* Optimistic-lock conflicts (stale member revisions) resolve by reloading the queue. */}
+            <button
+              type="button"
+              className="fin-btn fin-btn-ghost fin-btn-sm"
+              onClick={onConflict}
+            >
+              Reload queue
+            </button>
+          </div>
+        )}
         <div className="cal-card-actions">
           <button type="button" className="ghost" onClick={onClose}>
             Cancel
@@ -372,12 +439,16 @@ function DetailInspector({
   onConfirm,
   onSplit,
   onDefer,
+  onEdit,
+  editError,
 }: {
   group: ReviewGroup
   account: FinanceAccount | undefined
   onConfirm: () => void
   onSplit: () => void
   onDefer: () => void
+  onEdit: () => void
+  editError: string | null
 }) {
   const cov = coverage(group) * 100
   return (
@@ -457,11 +528,16 @@ function DetailInspector({
       <div className="fin-inspector-actions">
         <button
           type="button"
-          className="fin-btn fin-btn-primary"
-          onClick={onConfirm}
-          disabled={group.status !== 'pending'}
+          className="fin-btn fin-btn-ghost"
+          onClick={onEdit}
+          disabled={group.status !== 'pending' || group.member_count !== 1}
+          title={
+            group.member_count !== 1
+              ? 'Split the group first to edit individual events'
+              : undefined
+          }
         >
-          ✓ Confirm
+          Edit
         </button>
         <button
           type="button"
@@ -473,6 +549,14 @@ function DetailInspector({
         </button>
         <button
           type="button"
+          className="fin-btn fin-btn-primary"
+          onClick={onConfirm}
+          disabled={group.status !== 'pending'}
+        >
+          ✓ Confirm
+        </button>
+        <button
+          type="button"
           className="fin-btn fin-btn-ghost"
           onClick={onDefer}
           disabled={group.status !== 'pending'}
@@ -480,6 +564,7 @@ function DetailInspector({
           Defer
         </button>
       </div>
+      {editError && <p className="fin-muted-danger">{editError}</p>}
 
       <div className="fin-inspector-audit">
         <span className="finance-section-label">Audit trail</span>
@@ -507,14 +592,71 @@ function DetailInspector({
   )
 }
 
+/** Server status param for a sidebar filter; derived filters refine status=pending client-side. */
+function serverStatus(filter: FilterKey): ReviewStatus | undefined {
+  if (filter === 'pending' || filter === 'needs_evidence' || filter === 'ready')
+    return 'pending'
+  if (filter === 'confirmed' || filter === 'deferred') return filter
+  return undefined
+}
+
 export function FinanceReview(props: FinanceTabProps) {
-  const { state, completeness, reload } = useReviewGroups()
+  const summary = useFinanceSummary(
+    props.taxYear,
+    props.jurisdiction,
+    props.refreshKey,
+  )
+  const [addJurisdictionOpen, setAddJurisdictionOpen] = useState(false)
+  const [filter, setFilter] = useState<FilterKey>('all')
+  const [eventType, setEventType] = useState<FinanceEventType | ''>('')
+  const [page, setPage] = useState(0)
+  const { state, completeness, pageMeta, reload } = useReviewGroups(
+    page,
+    serverStatus(filter),
+    eventType || undefined,
+    props.refreshKey,
+  )
   const [accounts, setAccounts] = useState<Map<string, FinanceAccount>>(
     new Map(),
   )
-  const [filter, setFilter] = useState<FilterKey>('all')
+  const [queueCounts, setQueueCounts] = useState<ReviewQueueCounts | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [modal, setModal] = useState<'confirm' | 'split' | 'defer' | null>(null)
+  const [editTarget, setEditTarget] = useState<AddRecordEdit | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  /** Resolve the group's single raw member into the edit form (append-revision PATCH). */
+  async function openEdit(group: ReviewGroup) {
+    setEditError(null)
+    try {
+      const page = await fetchFinanceActivity({
+        view: 'raw',
+        group_id: group.id,
+        limit: 10,
+      })
+      const raw = page.items.find((item) => item.representation === 'raw')
+      if (!raw || raw.representation !== 'raw') {
+        throw new Error('Could not load the underlying event for this group.')
+      }
+      setEditTarget({
+        eventId: raw.event_id,
+        expectedRevisionId: raw.id,
+        initial: {
+          occurred_at: raw.effective_at,
+          event_type: raw.event_type,
+          amount: raw.report_value ?? raw.native_quantity,
+          currency: raw.report_currency ?? 'EUR',
+          source_account_id: raw.source_account_id,
+          description: group.label,
+          jurisdiction: null,
+        },
+      })
+    } catch (err) {
+      setEditError(
+        err instanceof Error ? err.message : 'Could not open the editor',
+      )
+    }
+  }
 
   useEffect(() => {
     void fetchFinanceAccounts().then((page) =>
@@ -522,10 +664,24 @@ export function FinanceReview(props: FinanceTabProps) {
     )
   }, [])
 
+  useEffect(() => {
+    void fetchFinanceReviewQueueCounts(props.taxYear, props.jurisdiction)
+      .then(setQueueCounts)
+      .catch(() => setQueueCounts(null))
+  }, [props.taxYear, props.jurisdiction, props.refreshKey])
+
+  // Filters and page depend on each other — changing a filter restarts at page 0.
+  function selectFilter(next: FilterKey) {
+    setFilter(next)
+    setPage(0)
+  }
+
   const groups = useMemo(
     () => (state.status === 'ready' ? state.data : []),
     [state],
   )
+  // ponytail: needs_evidence/ready refine the fetched pending page client-side —
+  // becomes a server param if these buckets ever need exact pagination.
   const filtered = useMemo(
     () => groups.filter((g) => matchesFilter(g, filter)),
     [groups, filter],
@@ -533,23 +689,16 @@ export function FinanceReview(props: FinanceTabProps) {
   const selected =
     filtered.find((g) => g.id === selectedId) ?? filtered[0] ?? null
 
-  const counts = useMemo(
-    () => ({
-      queue: groups.length,
-      pending: groups.filter((g) => g.status === 'pending').length,
-      needsEvidence: groups.filter((g) => matchesFilter(g, 'needs_evidence'))
-        .length,
-      ready: groups.filter((g) => matchesFilter(g, 'ready')).length,
-    }),
-    [groups],
-  )
+  const totalPages = pageMeta
+    ? Math.max(1, Math.ceil(pageMeta.total / PAGE_SIZE))
+    : 1
 
   // J/K/C/S/D keyboard nav scoped to this surface, ignored while typing or a modal is open.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
-      if (modal) return
+      if (modal || editTarget) return
       const index = filtered.findIndex((g) => g.id === selected?.id)
       if (event.key === 'j' || event.key === 'J') {
         event.preventDefault()
@@ -578,7 +727,7 @@ export function FinanceReview(props: FinanceTabProps) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [filtered, selected, modal])
+  }, [filtered, selected, modal, editTarget])
 
   return (
     <>
@@ -587,48 +736,22 @@ export function FinanceReview(props: FinanceTabProps) {
         title="Finance"
         className="finance-sidebar"
         ariaLabel="Finance navigation"
+        open={props.sidebarOpen}
+        actions={
+          <FinanceSidebarClose
+            onClose={() => props.onSidebarOpenChange(false)}
+          />
+        }
       >
-        <div className="fin-sidebar-section">
-          <span className="finance-section-label">Review filters</span>
-          <div className="fin-sidebar-list">
-            {FILTERS.map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                className={`fin-filter-row${filter === f.key ? ' active' : ''}`}
-                onClick={() => setFilter(f.key)}
-              >
-                <span>{f.label}</span>
-                <span className="fin-filter-count">
-                  {groups.filter((g) => matchesFilter(g, f.key)).length}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="fin-sidebar-section fin-review-totals">
-          <div>
-            <strong>{counts.queue}</strong>
-            <span>Items</span>
-          </div>
-          <div>
-            <strong>{counts.needsEvidence}</strong>
-            <span>Needs evidence</span>
-          </div>
-          <div>
-            <strong>{counts.ready}</strong>
-            <span>Ready</span>
-          </div>
-        </div>
-        <div className="fin-sidebar-section">
-          <div className="fin-tip-card">
-            <strong>Quick review tip</strong>
-            <p>
-              Use J/K to move between items, C to confirm, S to split, D to
-              defer.
-            </p>
-          </div>
-        </div>
+        <FinanceSidebarContent
+          taxYear={props.taxYear}
+          onTaxYearChange={props.onTaxYearChange}
+          summary={summary}
+          jurisdiction={props.jurisdiction}
+          onJurisdictionChange={props.onJurisdictionChange}
+          onAddJurisdiction={() => setAddJurisdictionOpen(true)}
+          onOpenReview={() => props.onSelectTab('review')}
+        />
       </SidebarShell>
       <main className="finance-canvas">
         <div className="finance-content">
@@ -637,6 +760,9 @@ export function FinanceReview(props: FinanceTabProps) {
             onTaxYearChange={props.onTaxYearChange}
             tab={props.tab}
             onSelectTab={props.onSelectTab}
+            onRefresh={props.onRefresh}
+            sidebarOpen={props.sidebarOpen}
+            onSidebarOpenChange={props.onSidebarOpenChange}
           />
 
           {completeness &&
@@ -668,53 +794,96 @@ export function FinanceReview(props: FinanceTabProps) {
             </Card>
           ) : (
             <>
-              <div className="fin-stat-row fin-stat-row-4">
-                <div className="fin-mini-stat">
-                  <span className="finance-section-label">Queue</span>
-                  <strong>{counts.queue}</strong>
-                  <span className="fin-table-sub">items</span>
+              {queueCounts && (
+                <div className="fin-stat-row fin-stat-row-4">
+                  <div className="fin-mini-stat">
+                    <span className="finance-section-label">
+                      Needs grouping
+                    </span>
+                    <strong>{queueCounts.needs_grouping}</strong>
+                    <span className="fin-table-sub">to classify</span>
+                  </div>
+                  <div className="fin-mini-stat">
+                    <span className="finance-section-label">
+                      Needs evidence
+                    </span>
+                    <strong>{queueCounts.needs_evidence}</strong>
+                    <span className="fin-table-sub">missing documents</span>
+                  </div>
+                  <div className="fin-mini-stat">
+                    <span className="finance-section-label">Ready</span>
+                    <strong>{queueCounts.ready}</strong>
+                    <span className="fin-table-sub">high confidence</span>
+                  </div>
+                  <div className="fin-mini-stat">
+                    <span className="finance-section-label">Problematic</span>
+                    <strong>{queueCounts.problematic}</strong>
+                    <span className="fin-table-sub">need attention</span>
+                  </div>
                 </div>
-                <div className="fin-mini-stat">
-                  <span className="finance-section-label">Pending</span>
-                  <strong>{counts.pending}</strong>
-                  <span className="fin-table-sub">
-                    {counts.queue > 0
-                      ? Math.round((counts.pending / counts.queue) * 100)
-                      : 0}
-                    % of queue
-                  </span>
-                </div>
-                <div className="fin-mini-stat">
-                  <span className="finance-section-label">Needs evidence</span>
-                  <strong>{counts.needsEvidence}</strong>
-                  <span className="fin-table-sub">
-                    {counts.queue > 0
-                      ? Math.round((counts.needsEvidence / counts.queue) * 100)
-                      : 0}
-                    % of queue
-                  </span>
-                </div>
-                <div className="fin-mini-stat">
-                  <span className="finance-section-label">
-                    Ready to confirm
-                  </span>
-                  <strong>{counts.ready}</strong>
-                  <span className="fin-table-sub">
-                    {counts.queue > 0
-                      ? Math.round((counts.ready / counts.queue) * 100)
-                      : 0}
-                    % of queue
-                  </span>
-                </div>
-              </div>
+              )}
 
               <div className="fin-review-split">
                 <Card className="fin-review-queue">
                   <div className="fin-card-head-row">
                     <span className="finance-section-label">
-                      Review queue {filtered.length}
+                      Review queue{' '}
+                      <span className="fin-count-badge">
+                        {pageMeta?.total ?? filtered.length}
+                      </span>
                     </span>
+                    <div className="fin-queue-filters">
+                      <label className="fin-type-filter">
+                        <span className="sr-only">Filter by status</span>
+                        <select
+                          value={filter}
+                          onChange={(e) =>
+                            selectFilter(e.target.value as FilterKey)
+                          }
+                        >
+                          {FILTERS.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {f.label}
+                              {f.key === 'all'
+                                ? queueCounts
+                                  ? ` (${queueCounts.total})`
+                                  : ''
+                                : f.key === 'needs_evidence'
+                                  ? queueCounts
+                                    ? ` (${queueCounts.needs_evidence})`
+                                    : ''
+                                  : f.key === 'ready'
+                                    ? queueCounts
+                                      ? ` (${queueCounts.ready})`
+                                      : ''
+                                    : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="fin-type-filter">
+                        <span className="sr-only">Filter by type</span>
+                        <select
+                          value={eventType}
+                          onChange={(e) => {
+                            setEventType(
+                              e.target.value as FinanceEventType | '',
+                            )
+                            setPage(0)
+                          }}
+                        >
+                          {EVENT_TYPE_FILTERS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                   </div>
+                  <p className="fin-queue-tip">
+                    J/K to move · C to confirm · S to split · D to defer
+                  </p>
                   <div className="fin-table-wrap">
                     <table className="fin-table fin-table-selectable">
                       <thead>
@@ -780,6 +949,31 @@ export function FinanceReview(props: FinanceTabProps) {
                       </p>
                     )}
                   </div>
+                  {pageMeta && pageMeta.total > PAGE_SIZE && (
+                    <div className="fin-pager">
+                      <button
+                        type="button"
+                        className="fin-btn fin-btn-ghost fin-btn-sm"
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        aria-label="Previous page"
+                      >
+                        <IconChevronLeft /> Prev
+                      </button>
+                      <span className="fin-pager-status">
+                        Page {page + 1} of {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        className="fin-btn fin-btn-ghost fin-btn-sm"
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={!pageMeta.has_more}
+                        aria-label="Next page"
+                      >
+                        Next <IconChevronRight />
+                      </button>
+                    </div>
+                  )}
                 </Card>
 
                 {selected && (
@@ -789,6 +983,8 @@ export function FinanceReview(props: FinanceTabProps) {
                     onConfirm={() => setModal('confirm')}
                     onSplit={() => setModal('split')}
                     onDefer={() => setModal('defer')}
+                    onEdit={() => void openEdit(selected)}
+                    editError={editError}
                   />
                 )}
               </div>
@@ -802,6 +998,10 @@ export function FinanceReview(props: FinanceTabProps) {
           group={selected}
           onClose={() => setModal(null)}
           onConfirmed={() => {
+            setModal(null)
+            reload()
+          }}
+          onConflict={() => {
             setModal(null)
             reload()
           }}
@@ -825,6 +1025,21 @@ export function FinanceReview(props: FinanceTabProps) {
             setModal(null)
             reload()
           }}
+        />
+      )}
+      {editTarget && (
+        <AddRecordDialog
+          taxYear={props.taxYear}
+          edit={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={reload}
+        />
+      )}
+      {addJurisdictionOpen && (
+        <AddJurisdictionDialog
+          taxYear={props.taxYear}
+          onClose={() => setAddJurisdictionOpen(false)}
+          onSaved={props.onRefresh}
         />
       )}
     </>

@@ -12,18 +12,22 @@ import {
   fetchFinanceResidencyFacts,
   fetchFinanceTaxProfiles,
   fetchFinanceTaxTreatments,
+  financeEvidenceBundleUrl,
 } from './api'
+import { AddJurisdictionDialog } from './AddJurisdictionDialog'
 import { FinanceHeader, type FinanceTabProps } from './Finance'
+import {
+  FinanceSidebarClose,
+  FinanceSidebarContent,
+  useFinanceSummary,
+} from './FinanceSidebar'
 import { JURISDICTIONS } from './navigation'
 import {
   IconCheck,
-  IconChevronRight,
   IconDownload,
   IconFile,
   IconWarning,
-  JurisdictionList,
   ReasonModal,
-  SidebarYearBlock,
   StatusPill,
   WarningList,
 } from './primitives'
@@ -246,6 +250,68 @@ function CreateProfileCard({
         {saving ? 'Creating…' : `Create ${jurisdiction} profile`}
       </button>
     </Card>
+  )
+}
+
+/** Per-category export buttons — B8 `?category=` reports in each of the three formats. */
+function CategoryExportButtons({
+  profile,
+  taxYear,
+  category,
+  onCreated,
+}: {
+  profile: FinanceTaxProfile
+  taxYear: number
+  category: string
+  onCreated: () => void
+}) {
+  const [busy, setBusy] = useState<'zip' | 'csv' | 'pdf_summary' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function exportAs(format: 'zip' | 'csv' | 'pdf_summary') {
+    setBusy(format)
+    setError(null)
+    try {
+      const expectedEventRevisionIds =
+        await collectConfirmedRevisionIds(taxYear)
+      await createFinanceReport(
+        {
+          tax_profile_id: profile.id,
+          format,
+          include_warnings: true,
+          expected_event_revision_ids: expectedEventRevisionIds,
+          category,
+        },
+        crypto.randomUUID(),
+      )
+      onCreated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <span className="fin-category-exports">
+      {(['zip', 'csv', 'pdf_summary'] as const).map((format) => (
+        <button
+          key={format}
+          type="button"
+          className="fin-btn fin-btn-ghost fin-btn-sm"
+          onClick={() => void exportAs(format)}
+          disabled={busy !== null}
+          aria-label={`Export ${category.replace(/_/g, ' ')} as ${format}`}
+        >
+          {busy === format
+            ? '…'
+            : format === 'pdf_summary'
+              ? 'PDF'
+              : format.toUpperCase()}
+        </button>
+      ))}
+      {error && <span className="fin-muted-danger">{error}</span>}
+    </span>
   )
 }
 
@@ -481,6 +547,12 @@ function JurisdictionCard({
                         open
                       </StatusPill>
                     )}
+                    <CategoryExportButtons
+                      profile={profile}
+                      taxYear={taxYear}
+                      category={category}
+                      onCreated={onReportsChanged}
+                    />
                   </div>
                 )
               })}
@@ -495,6 +567,14 @@ function JurisdictionCard({
           <span className="fin-table-sub">
             Tax year {taxYear} · human confirmation required
           </span>
+          {/* ponytail: derived treaty heuristic — no treaty ruleset model exists yet. */}
+          {profiles.filter((p) => p.tax_year === taxYear).length > 1 && (
+            <p className="fin-treaty-note">
+              <IconWarning /> Profiles exist in multiple jurisdictions for{' '}
+              {taxYear} — income may be reportable in both. Treaty review with
+              an adviser recommended before filing.
+            </p>
+          )}
           {residency.length === 0 ? (
             <p className="finance-muted">No residency facts recorded yet.</p>
           ) : (
@@ -555,9 +635,13 @@ function JurisdictionCard({
 function EvidenceBundleCard({
   state,
   total,
+  taxYear,
+  jurisdiction,
 }: {
   state: FinanceLoadState<FinanceEvidence[]>
   total: number
+  taxYear: number
+  jurisdiction: string | undefined
 }) {
   if (state.status === 'loading') {
     return (
@@ -583,6 +667,10 @@ function EvidenceBundleCard({
     )
   }
   const totalBytes = state.data.reduce((sum, doc) => sum + doc.size, 0)
+  const folders = new Map<string, number>()
+  for (const doc of state.data) {
+    folders.set(doc.source_kind, (folders.get(doc.source_kind) ?? 0) + 1)
+  }
   return (
     <Card>
       <div className="fin-card-head-row">
@@ -590,10 +678,28 @@ function EvidenceBundleCard({
           <span className="finance-section-label">Evidence bundle</span>
           <p className="fin-table-sub">All documents backing this tax year</p>
         </div>
-        <span className="fin-table-sub">
-          Showing {state.data.length} of {total} · {formatBytes(totalBytes)}
-        </span>
+        <div className="fin-chart-actions">
+          <span className="fin-table-sub">
+            Showing {state.data.length} of {total} · {formatBytes(totalBytes)}
+          </span>
+          <a
+            className="fin-btn fin-btn-primary fin-btn-sm"
+            href={financeEvidenceBundleUrl(taxYear, jurisdiction)}
+            download
+          >
+            <IconDownload /> Download bundle (ZIP)
+          </a>
+        </div>
       </div>
+      {folders.size > 0 && (
+        <p className="fin-table-sub">
+          Organized folders:{' '}
+          {[...folders.entries()]
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([kind, count]) => `${kind.replace(/_/g, ' ')} (${count})`)
+            .join(' · ')}
+        </p>
+      )}
       <div className="fin-table-wrap">
         <table className="fin-table">
           <thead>
@@ -645,6 +751,12 @@ function EvidenceBundleCard({
 export function FinanceReports(props: FinanceTabProps) {
   const { reports, reload: reloadReports } = useAllReports()
   const { state: evidenceState, total: evidenceTotal } = useEvidenceVault()
+  const summary = useFinanceSummary(
+    props.taxYear,
+    props.jurisdiction,
+    props.refreshKey,
+  )
+  const [addJurisdictionOpen, setAddJurisdictionOpen] = useState(false)
   const jurisdictions = props.jurisdiction
     ? JURISDICTIONS.filter((j) => j.code === props.jurisdiction)
     : JURISDICTIONS
@@ -656,28 +768,22 @@ export function FinanceReports(props: FinanceTabProps) {
         title="Finance"
         className="finance-sidebar"
         ariaLabel="Finance navigation"
+        open={props.sidebarOpen}
+        actions={
+          <FinanceSidebarClose
+            onClose={() => props.onSidebarOpenChange(false)}
+          />
+        }
       >
-        <SidebarYearBlock taxYear={props.taxYear} />
-        <JurisdictionList
+        <FinanceSidebarContent
+          taxYear={props.taxYear}
+          onTaxYearChange={props.onTaxYearChange}
+          summary={summary}
           jurisdiction={props.jurisdiction}
-          onChange={props.onJurisdictionChange}
+          onJurisdictionChange={props.onJurisdictionChange}
+          onAddJurisdiction={() => setAddJurisdictionOpen(true)}
+          onOpenReview={() => props.onSelectTab('review')}
         />
-
-        <div className="fin-sidebar-section">
-          <span className="finance-section-label">Exports</span>
-          <span className="fin-sidebar-link">
-            {reports.length} generated
-            <IconChevronRight />
-          </span>
-        </div>
-
-        <div className="fin-sidebar-section">
-          <span className="finance-section-label">Evidence</span>
-          <span className="fin-sidebar-link">
-            {evidenceTotal} documents
-            <IconChevronRight />
-          </span>
-        </div>
       </SidebarShell>
 
       <main className="finance-canvas">
@@ -687,6 +793,9 @@ export function FinanceReports(props: FinanceTabProps) {
             onTaxYearChange={props.onTaxYearChange}
             tab={props.tab}
             onSelectTab={props.onSelectTab}
+            onRefresh={props.onRefresh}
+            sidebarOpen={props.sidebarOpen}
+            onSidebarOpenChange={props.onSidebarOpenChange}
           />
 
           {jurisdictions.map((jurisdiction) => (
@@ -705,9 +814,21 @@ export function FinanceReports(props: FinanceTabProps) {
             />
           ))}
 
-          <EvidenceBundleCard state={evidenceState} total={evidenceTotal} />
+          <EvidenceBundleCard
+            state={evidenceState}
+            total={evidenceTotal}
+            taxYear={props.taxYear}
+            jurisdiction={props.jurisdiction}
+          />
         </div>
       </main>
+      {addJurisdictionOpen && (
+        <AddJurisdictionDialog
+          taxYear={props.taxYear}
+          onClose={() => setAddJurisdictionOpen(false)}
+          onSaved={props.onRefresh}
+        />
+      )}
     </>
   )
 }

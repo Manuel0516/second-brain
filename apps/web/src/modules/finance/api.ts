@@ -7,19 +7,15 @@ import type {
   FinanceAccount,
   FinanceAccountCreate,
   FinanceActivityItem,
-  FinanceAssistantToolName,
-  FinanceAssistantToolRequest,
-  FinanceAssistantToolResult,
   FinanceAsset,
   FinanceAssetCreate,
   FinanceEvidence,
   FinanceEvidenceUploadRequest,
+  FinanceEventCreate,
+  FinanceEventMutationResult,
+  FinanceEventPatch,
   FinanceEventType,
   FinanceImportSummary,
-  FinanceProposalConfirmRequest,
-  FinanceProposalCreateRequest,
-  FinanceProposalMutationResult,
-  FinanceProposalRejectRequest,
   FinanceRawRecord,
   FinanceReconciliation,
   FinanceReconciliationRunRequest,
@@ -38,6 +34,8 @@ import type {
   FinanceTaxTreatment,
   FinanceTaxTreatmentConfirmRequest,
   FinanceTaxTreatmentMutationResult,
+  FinanceTimeseries,
+  FinanceTimeseriesMetric,
   ImportCommitRequest,
   ImportCommitResult,
   ImportPreview,
@@ -48,6 +46,7 @@ import type {
   ReviewDeferRequest,
   ReviewDeferResult,
   ReviewGroup,
+  ReviewQueueCounts,
   ReviewSplitRequest,
   ReviewSplitResult,
   ReviewStatus,
@@ -125,6 +124,7 @@ export interface FinanceActivityQuery {
   account_id?: string
   asset_id?: string
   event_type?: FinanceEventType
+  group_id?: string
   status?: EventRevisionStatus
   limit?: number
   offset?: number
@@ -252,17 +252,19 @@ export function fetchFinanceImportRawRecords(
   )
 }
 
+export interface ReviewGroupsQuery {
+  status?: ReviewStatus
+  event_type?: FinanceEventType
+  group_id?: string
+  limit?: number
+  offset?: number
+}
+
 export function fetchReviewGroups(
-  reviewStatus?: ReviewStatus,
-  limit = 50,
-  offset = 0,
+  query: ReviewGroupsQuery = {},
 ): Promise<PagedResponse<ReviewGroup>> {
   return financeJson<PagedResponse<ReviewGroup>>(
-    withQuery('/review-groups', {
-      status: reviewStatus,
-      limit,
-      offset,
-    }),
+    withQuery('/review-groups', query),
   )
 }
 
@@ -411,44 +413,64 @@ export function fetchFinanceReportDownload(
   )
 }
 
-export function runFinanceAssistantTool(
-  toolName: FinanceAssistantToolName,
-  request: FinanceAssistantToolRequest,
-): Promise<FinanceAssistantToolResult> {
-  return financeJson(`/assistant/tools/${encodeURIComponent(toolName)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
+// ── v1 additions (see docs/work/plans/finance-module-v1/CONTRACT.md) ──
+
+export function createFinanceEvent(
+  event: FinanceEventCreate,
+  idempotencyKey: string,
+): Promise<FinanceEventMutationResult> {
+  return financeMutation('/events', event, idempotencyKey)
+}
+
+export function patchFinanceEvent(
+  eventId: string,
+  patch: FinanceEventPatch,
+  idempotencyKey: string,
+): Promise<FinanceEventMutationResult> {
+  return financeJson(`/events/${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify(patch),
   })
 }
 
-export function createFinanceAssistantProposal(
-  request: FinanceProposalCreateRequest,
-  idempotencyKey: string,
-): Promise<FinanceProposalMutationResult> {
-  return financeMutation('/assistant/proposals', request, idempotencyKey)
+export interface FinanceTimeseriesQuery {
+  tax_year: number
+  metric: FinanceTimeseriesMetric
+  granularity?: 'day' | 'week' | 'month'
+  group_by?: 'account' | 'source' | 'jurisdiction' | 'none'
+  from?: string
+  to?: string
 }
 
-export function confirmFinanceAssistantProposal(
-  proposalId: string,
-  request: FinanceProposalConfirmRequest,
-  idempotencyKey: string,
-): Promise<FinanceProposalMutationResult> {
-  return financeMutation(
-    `/assistant/proposals/${encodeURIComponent(proposalId)}/confirm`,
-    request,
-    idempotencyKey,
+export function fetchFinanceTimeseries(
+  query: FinanceTimeseriesQuery,
+): Promise<FinanceTimeseries> {
+  return financeJson<FinanceTimeseries>(withQuery('/timeseries', query))
+}
+
+export function fetchFinanceReviewQueueCounts(
+  taxYear: number,
+  jurisdiction?: string,
+): Promise<ReviewQueueCounts> {
+  return financeJson<ReviewQueueCounts>(
+    withQuery('/review-queue/counts', {
+      tax_year: taxYear,
+      jurisdiction,
+    }),
   )
 }
 
-export function rejectFinanceAssistantProposal(
-  proposalId: string,
-  request: FinanceProposalRejectRequest,
-  idempotencyKey: string,
-): Promise<FinanceProposalMutationResult> {
-  return financeMutation(
-    `/assistant/proposals/${encodeURIComponent(proposalId)}/reject`,
-    request,
-    idempotencyKey,
-  )
+/** The evidence bundle streams a ZIP directly — link/download URL, not JSON. */
+export function financeEvidenceBundleUrl(
+  taxYear: number,
+  jurisdiction?: string,
+): string {
+  return withQuery('/api/finance/evidence/bundle', {
+    tax_year: taxYear,
+    jurisdiction,
+  })
 }

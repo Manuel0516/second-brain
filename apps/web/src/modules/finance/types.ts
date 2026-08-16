@@ -59,7 +59,6 @@ export type TaxTreatmentStatus =
   | 'rejected'
   | 'superseded'
 export type ReportStatus = 'ready' | 'ready_with_warnings' | 'blocked'
-export type ProposalStatus = 'pending' | 'confirmed' | 'rejected' | 'expired'
 export type WarningSeverity = 'info' | 'warning' | 'blocking'
 
 export interface PageMeta {
@@ -273,6 +272,13 @@ export interface FinanceSummary {
     missing_evidence: number
   }
   readiness: ReportReadiness
+  previous_year: {
+    income: DecimalString
+    expense: DecimalString
+    rewards: DecimalString
+    transfers: DecimalString
+    net_worth: DecimalString
+  }
   completeness: Completeness
   empty_state: EmptyState | null
 }
@@ -353,6 +359,7 @@ export interface ImportPreviewRequest {
   parser_id:
     | 'csv'
     | 'json'
+    | 'pdf_statement'
     | 'pdf_metadata'
     | 'image_metadata'
     | 'archive_manifest'
@@ -382,11 +389,35 @@ export interface ImportPreview {
   }>
   mapping: ImportMapping
   warnings: FinanceWarning[]
+  source_format?: 'csv' | 'pdf'
+  unparsed_line_count?: number
+  rows?: PdfStatementRow[]
+}
+
+/** One parsed line of a PDF statement preview — user-correctable before commit. */
+export interface PdfStatementRow {
+  source_index: string
+  date: string | null
+  description: string | null
+  amount: DecimalString | null
+  currency: string | null
+  confidence: 'high' | 'medium' | 'low'
+  source_line: string
+}
+
+export interface ImportRowOverride {
+  source_index: string
+  date?: string
+  description?: string
+  amount?: DecimalString
+  currency?: string
 }
 
 export interface ImportCommitRequest {
   mapping: ImportMapping
   confirm_warnings: string[]
+  row_overrides?: ImportRowOverride[]
+  excluded_source_indexes?: string[]
 }
 
 export interface ImportCommitResult {
@@ -662,6 +693,7 @@ export interface FinanceReportCreateRequest {
   format: 'zip' | 'csv' | 'pdf_summary'
   include_warnings: boolean
   expected_event_revision_ids: string[]
+  category?: string
 }
 
 export interface FinanceReportMutationResult {
@@ -669,99 +701,82 @@ export interface FinanceReportMutationResult {
   audit: AuditMetadata
 }
 
-export type FinanceAssistantScope =
-  | { type: 'finance'; tax_year: number | null; jurisdiction: string | null }
-  | { type: 'account'; account_id: string }
-  | { type: 'event_revisions'; event_revision_ids: string[] }
-  | { type: 'report'; report_id: string }
+// ── v1 additions (see docs/work/plans/finance-module-v1/CONTRACT.md) ──
 
-export interface FinanceSourceCitation {
-  source_type: 'event' | 'raw_record' | 'evidence' | 'report' | 'official_web'
-  source_id: string | null
-  title: string
-  url: string | null
-  accessed_at: string | null
-  locator: string | null
+/** Manual "Add record" — POST /api/finance/events. */
+export interface FinanceEventCreate {
+  tax_year: number
+  occurred_at: string
+  event_type: FinanceEventType
+  amount: DecimalString
+  currency: string
+  source_account_id: string
+  description: string
+  jurisdiction: string | null
+  asset_id: string | null
 }
 
-export type FinanceAssistantToolName =
-  | 'get_financial_snapshot'
-  | 'list_accounts'
-  | 'list_events'
-  | 'get_event_lineage'
-  | 'get_evidence_for_event'
-  | 'get_reconciliation_status'
-  | 'explain_balance_change'
-  | 'get_asset_lots'
-  | 'get_derivative_position_summary'
-  | 'get_passive_income_breakdown'
-  | 'get_tax_package_status'
-  | 'calculate_scenario'
-  | 'research_current_guidance'
-  | 'propose_event_classification'
-  | 'propose_review_policy'
-  | 'create_open_question_draft'
-  | 'prepare_export_note'
-
-export interface FinanceAssistantToolRequest {
-  scope: FinanceAssistantScope
-  arguments: Record<string, unknown>
+/** Edit-as-append-revision — PATCH /api/finance/events/{id}. Omitted fields keep their values. */
+export interface FinanceEventPatch {
+  expected_revision_id: string
+  occurred_at?: string
+  event_type?: FinanceEventType
+  amount?: DecimalString
+  currency?: string
+  source_account_id?: string
+  description?: string
+  jurisdiction?: string | null
+  asset_id?: string | null
 }
 
-export interface FinanceAssistantToolResult {
-  tool_name: FinanceAssistantToolName
-  scope: FinanceAssistantScope
-  result: unknown
-  completeness: Completeness
-  citations: FinanceSourceCitation[]
-  audit: AuditMetadata
-}
-
-export interface FinanceProposalCreateRequest {
-  proposal_type:
-    | 'event_classification'
-    | 'review_policy'
-    | 'open_question'
-    | 'export_note'
-  scope: FinanceAssistantScope
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-  affected_record_count: number
-  impacted_report_ids: string[]
-  rationale: string
-  citations: FinanceSourceCitation[]
-}
-
-export interface FinanceProposalCard {
+export interface FinanceManualEvent {
   id: string
-  proposal_type:
-    | 'event_classification'
-    | 'review_policy'
-    | 'open_question'
-    | 'export_note'
-  status: ProposalStatus
-  scope: FinanceAssistantScope
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-  affected_record_count: number
-  impacted_report_ids: string[]
-  rationale: string
-  citations: FinanceSourceCitation[]
-  confirmation_token: string
-  expires_at: string
+  current_revision_id: string
+  revision_number: number
+  status: EventRevisionStatus
+  event_type: FinanceEventType
+  occurred_at: string
+  tax_year: number
+  tax_date: string
+  amount: DecimalString
+  currency: string
+  source_account_id: string
+  asset_id: string | null
+  description: string
+  jurisdiction: string | null
 }
 
-export interface FinanceProposalConfirmRequest {
-  confirmation_token: string
-  reason: string
-}
-
-export interface FinanceProposalRejectRequest {
-  reason: string
-}
-
-export interface FinanceProposalMutationResult {
-  proposal: FinanceProposalCard
+export interface FinanceEventMutationResult {
+  event: FinanceManualEvent
   audit: AuditMetadata
-  resulting_revision_id: string | null
+}
+
+export type FinanceTimeseriesMetric =
+  | 'net_worth'
+  | 'income'
+  | 'expense'
+  | 'rewards'
+  | 'readiness'
+
+export interface FinanceTimeseriesPoint {
+  t: string
+  v: DecimalString
+}
+
+export interface FinanceTimeseriesSeries {
+  key: string
+  label: string
+  points: FinanceTimeseriesPoint[]
+}
+
+export interface FinanceTimeseries {
+  series: FinanceTimeseriesSeries[]
+}
+
+export interface ReviewQueueCounts {
+  needs_grouping: number
+  needs_evidence: number
+  ready: number
+  problematic: number
+  total: number
 }

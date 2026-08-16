@@ -91,6 +91,11 @@
 .fin-year-nav {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+.fin-year-nav-buttons {
+  display: flex;
+  align-items: center;
   gap: 2px;
 }
 
@@ -156,45 +161,6 @@
   cursor: default;
 }
 
-/* ---------- Assistant launcher ---------- */
-
-.fin-assistant-launcher {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 1px solid var(--accent-tint-border);
-  background: var(--bg-elevated);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-  box-shadow: var(--shadow-md);
-  z-index: 20;
-  animation: springUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.fin-assistant-panel {
-  width: min(420px, calc(100vw - 32px));
-  max-height: min(640px, calc(100vh - 48px));
-  overflow-y: auto;
-  padding: 14px;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-.fin-assistant-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.fin-assistant-panel p {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
 /* ---------- Sidebar content ---------- */
 
 .fin-sidebar-section {
@@ -207,9 +173,48 @@
   border-bottom: 0;
 }
 
+.fin-sidebar-year-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .fin-sidebar-year-range {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.fin-sidebar-year-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Plain year selector — text + chevron only, no box. Used in the sidebar's
+   "This year" row and the topbar's "Tax year …" control; the boxed
+   .dropdown-trigger stays reserved for chart-scope selectors ("All accounts ▾"). */
+.fin-dropdown-plain {
+  min-height: auto;
+  width: auto;
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: 600 14px var(--font-ui);
+  color: var(--text-primary);
+}
+.fin-dropdown-plain:hover {
+  color: var(--text-primary);
+}
+.fin-dropdown-plain:focus-visible,
+.fin-dropdown-plain[aria-expanded='true'] {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--accent-tint);
+}
+.fin-dropdown-plain .dropdown-chevron {
+  width: 11px;
+  height: 11px;
 }
 
 .fin-sidebar-list {
@@ -219,7 +224,6 @@
 
 .fin-jurisdiction-row,
 .fin-warning-row,
-.fin-filter-row,
 .fin-source-row {
   display: flex;
   align-items: center;
@@ -237,16 +241,13 @@
     border-color 0.14s ease;
 }
 
-.fin-jurisdiction-row,
-.fin-filter-row {
+.fin-jurisdiction-row {
   cursor: pointer;
 }
-.fin-jurisdiction-row:hover,
-.fin-filter-row:hover {
+.fin-jurisdiction-row:hover {
   background: rgba(255, 240, 200, 0.04);
 }
-.fin-jurisdiction-row.active,
-.fin-filter-row.active {
+.fin-jurisdiction-row.active {
   background: var(--bg-raised);
   box-shadow: inset 2px 0 var(--accent);
   border-color: var(--border);
@@ -271,19 +272,9 @@
   color: var(--text-tertiary);
 }
 .fin-jurisdiction-row svg,
-.fin-filter-row svg,
 .fin-warning-row svg,
 .fin-sidebar-link svg {
   flex: none;
-  color: var(--text-tertiary);
-}
-
-.fin-filter-row {
-  justify-content: space-between;
-}
-.fin-filter-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
   color: var(--text-tertiary);
 }
 
@@ -349,62 +340,12 @@
 .fin-add-source-btn {
   justify-content: center;
 }
-.fin-add-source-form {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  margin-top: 4px;
-  background: var(--bg-raised);
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-}
-.fin-add-source-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
 
 .fin-grouping-note p {
   margin: 0 0 6px;
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
-}
-
-.fin-tip-card {
-  padding: 10px;
-  background: var(--bg-raised);
-  border-radius: var(--r-md);
-  display: grid;
-  gap: 4px;
-}
-.fin-tip-card strong {
-  font-size: 12.5px;
-  color: var(--text-primary);
-}
-.fin-tip-card p {
-  margin: 0;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  line-height: 1.5;
-}
-
-.fin-review-totals {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  text-align: center;
-}
-.fin-review-totals strong {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  color: var(--text-primary);
-}
-.fin-review-totals span {
-  color: var(--text-tertiary);
-  font: 600 10px var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .fin-export-card {
@@ -760,6 +701,12 @@
   font-weight: 600;
 }
 
+/* Compact variant inside a KPI stat card — no value column. */
+.fin-stat-sources .fin-source-mix-row {
+  grid-template-columns: minmax(0, 72px) 1fr 34px;
+  gap: 8px;
+}
+
 .fin-rule-list {
   display: grid;
   gap: 12px;
@@ -1032,38 +979,6 @@
   line-height: 1.5;
 }
 
-.fin-citation-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 6px;
-}
-.fin-citation-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--bg-raised);
-}
-.fin-citation-card svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--text-tertiary);
-}
-.fin-citation-card a {
-  color: var(--accent);
-  font-size: 12.5px;
-  text-decoration: none;
-}
-.fin-citation-card a:hover {
-  text-decoration: underline;
-}
-.fin-citation-card strong {
-  font-size: 12.5px;
-  color: var(--text-primary);
-}
-
 /* ---------- Import wizard ---------- */
 
 .fin-import-modal {
@@ -1125,47 +1040,6 @@
   color: var(--text-primary);
 }
 
-/* ---------- Assistant tools / proposals ---------- */
-
-.fin-tool-runner,
-.fin-proposal-composer {
-  display: grid;
-  gap: 10px;
-}
-.fin-tool-scope-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.fin-tool-result {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-.fin-tool-result-json {
-  margin: 0;
-  padding: 10px;
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.fin-proposal-card {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--bg-raised);
-}
-
 /* ---------- Reports: tax profiles ---------- */
 
 .fin-create-profile {
@@ -1198,8 +1072,7 @@
     position: static;
   }
   .fin-create-profile,
-  .fin-mapping-grid,
-  .fin-tool-scope-fields {
+  .fin-mapping-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1228,10 +1101,207 @@
   }
 }
 
+/* ---------- v1 additions: sidebar add, delta chips, table actions, dialogs ---------- */
+
+.fin-warning-row {
+  cursor: pointer;
+}
+.fin-warning-row:hover {
+  background: rgba(255, 240, 200, 0.04);
+}
+
+.fin-side-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.fin-side-add {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.fin-side-add:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.fin-kpi-delta {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+/* Semantic literals reused from StatusPill tones — not new colors. */
+.fin-kpi-delta--success {
+  color: #43c58a;
+}
+.fin-kpi-delta--danger {
+  color: #d9573f;
+}
+.fin-kpi-delta--neutral {
+  color: var(--text-tertiary);
+}
+
+.fin-chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fin-table-actions {
+  width: 36px;
+  text-align: right;
+}
+.fin-row-menu {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.fin-row-menu:hover {
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+
+.fin-record-modal {
+  width: min(480px, calc(100vw - 32px));
+}
+.fin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.fin-select-with-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fin-select-with-action select {
+  flex: 1;
+  min-width: 0;
+}
+.fin-form-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: #d9573f;
+}
+.fin-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.fin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.fin-pager-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.fin-type-filter select {
+  min-height: 28px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+.fin-queue-filters {
+  display: flex;
+  gap: 6px;
+}
+.fin-queue-tip {
+  margin: -4px 0 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.fin-conflict-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fin-pdf-rows input {
+  min-height: 28px;
+  width: 100%;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+.fin-pdf-rows input[type='checkbox'] {
+  width: auto;
+  min-height: 0;
+}
+.fin-row-excluded {
+  opacity: 0.45;
+}
+.fin-row-low-confidence {
+  background: rgba(217, 87, 63, 0.06);
+}
+
+.fin-category-exports {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.fin-treaty-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  color: #d9b13b;
+}
+.fin-treaty-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 800px) {
+  .fin-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .finance-content,
-  .fin-stat-card,
-  .fin-assistant-launcher {
+  .fin-stat-card {
     animation: none;
   }
 }

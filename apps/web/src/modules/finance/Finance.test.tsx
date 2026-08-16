@@ -23,6 +23,14 @@ vi.mock('./api', () => ({
   fetchFinanceAccounts: vi.fn().mockResolvedValue(emptyPage()),
   fetchFinanceActivity: vi.fn().mockResolvedValue(emptyPage()),
   createFinanceAccount: vi.fn(),
+  fetchFinanceTimeseries: vi.fn().mockResolvedValue({ series: [] }),
+  fetchFinanceReviewQueueCounts: vi.fn().mockResolvedValue({
+    needs_grouping: 0,
+    needs_evidence: 0,
+    ready: 0,
+    problematic: 0,
+    total: 0,
+  }),
   fetchFinanceSummary: vi.fn().mockResolvedValue({
     tax_year: 2026,
     jurisdiction: null,
@@ -50,6 +58,13 @@ vi.mock('./api', () => ({
       warning_count: 0,
       blockers: [],
       warnings: [],
+    },
+    previous_year: {
+      income: '0',
+      expense: '0',
+      rewards: '0',
+      transfers: '0',
+      net_worth: '0',
     },
     completeness: { is_complete: true, warnings: [], blockers: [] },
     empty_state: {

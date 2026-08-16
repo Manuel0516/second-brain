@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0210](0210-finance-frontend-v1.md)                                     | Finance frontend v1 (3-page dashboard, charts, PDF import UI, assistant removal)                       | 2026-08-01 | accepted                   |
+| [0209](0209-finance-backend-v1.md)                                      | Finance backend v1                                                                                     | 2026-08-01 | accepted                   |
 | [0208](0208-finance-risk-hardening.md)                                  | Close Finance scanner, source-snapshot, schema-drift, and web-warning risks                            | 2026-07-29 | accepted                   |
 | [0207](0207-finance-frontend-live-wiring.md)                            | Finance frontend: live import, assistant, and reports wiring                                           | 2026-07-29 | accepted                   |
 | [0206](0206-finance-backend-domain.md)                                  | Finance backend, ledger, tax, reports, and AI foundations                                              | 2026-07-29 | accepted                   |

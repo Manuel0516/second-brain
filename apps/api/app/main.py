@@ -21,7 +21,6 @@ from app.routes import (
     databases,
     files,
     finance,
-    finance_assistant,
     finance_ingestion,
     finance_review,
     finance_tax_reports,
@@ -109,7 +108,6 @@ app.include_router(finance.router)
 app.include_router(finance_ingestion.router)
 app.include_router(finance_review.router)
 app.include_router(finance_tax_reports.router)
-app.include_router(finance_assistant.router)
 app.include_router(admin.router)
 app.include_router(integrations.router)
 
