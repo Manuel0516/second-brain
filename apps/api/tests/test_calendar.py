@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Calendar, CalendarEvent, User
+from app.models import Calendar, CalendarEvent, Link, MealLog, User, WorkoutSession
 from app.security import hash_password
 
 pytestmark = pytest.mark.anyio
@@ -319,6 +319,103 @@ async def test_event_create_update_delete(
 
     deleted = await authenticated_client.delete(f"/api/events/{event['id']}")
     assert deleted.status_code == 204
+
+
+async def test_adding_food_to_existing_one_off_event_creates_planned_meal(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    user = await test_db_session.scalar(select(User).where(User.email == "testuser@example.com"))
+    assert user is not None
+    calendar = Calendar(user_id=user.id, name="Food", color="#2E9E6E", is_visible=True)
+    test_db_session.add(calendar)
+    await test_db_session.commit()
+
+    start = datetime.now(UTC) + timedelta(days=1)
+    created = await authenticated_client.post(
+        "/api/events",
+        json={
+            "calendar_id": calendar.id,
+            "title": "Lunch",
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert created.status_code == 201
+
+    updated = await authenticated_client.patch(
+        f"/api/events/{created.json()['id']}",
+        json={"connections": {"food": {"meal_type": "lunch", "notes": "Salad"}}},
+    )
+    assert updated.status_code == 200
+
+    meal = await test_db_session.scalar(
+        select(MealLog).where(MealLog.user_id == user.id, MealLog.meal_type == "lunch")
+    )
+    assert meal is not None
+    assert meal.status == "planned"
+    assert meal.scheduled_at == meal.date
+    link = await test_db_session.scalar(
+        select(Link).where(
+            Link.source_type == "event",
+            Link.source_id == created.json()["id"],
+            Link.target_type == "meal_log",
+            Link.target_id == meal.id,
+            Link.relation == "logged_from",
+        )
+    )
+    assert link is not None
+
+
+async def test_adding_fitness_to_existing_one_off_event_creates_planned_workout(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    user = await test_db_session.scalar(select(User).where(User.email == "testuser@example.com"))
+    assert user is not None
+    calendar = Calendar(user_id=user.id, name="Fitness", color="#2E9E6E", is_visible=True)
+    test_db_session.add(calendar)
+    await test_db_session.commit()
+
+    start = datetime.now(UTC) + timedelta(days=1)
+    created = await authenticated_client.post(
+        "/api/events",
+        json={
+            "calendar_id": calendar.id,
+            "title": "Strength training",
+            "start_at": start.isoformat(),
+            "end_at": (start + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert created.status_code == 201
+
+    updated = await authenticated_client.patch(
+        f"/api/events/{created.json()['id']}",
+        json={
+            "connections": {
+                "fitness": {"workout_type": "Strength", "notes": "Upper body"}
+            }
+        },
+    )
+    assert updated.status_code == 200
+
+    workout = await test_db_session.scalar(
+        select(WorkoutSession).where(
+            WorkoutSession.user_id == user.id,
+            WorkoutSession.type == "Strength",
+        )
+    )
+    assert workout is not None
+    assert workout.status == "planned"
+    assert workout.scheduled_at == workout.date
+    link = await test_db_session.scalar(
+        select(Link).where(
+            Link.source_type == "event",
+            Link.source_id == created.json()["id"],
+            Link.target_type == "workout_session",
+            Link.target_id == workout.id,
+            Link.relation == "logged_from",
+        )
+    )
+    assert link is not None
 
 
 async def test_event_rejects_blank_title(

@@ -1040,6 +1040,10 @@ async def patch_event(
         if fitness is not None or food is not None:
             occurrence_starts = list(_occurrence_starts(event, _as_utc(event.start_at)))
             await _create_linked_entries(session, user, event, fitness, food, occurrence_starts)
+    elif "connections" in values and (fitness is not None or food is not None):
+        # Adding a connection to an existing one-off event must materialize its
+        # planned target just like POST /events does.
+        await _create_linked_entries(session, user, event, fitness, food, [event.start_at])
     elif "start_at" in values:
         # Non-recurring reschedule: move linked entries along with it.
         # Planned entries (created via the event-editor create form).
