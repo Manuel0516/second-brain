@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0258](0258-calendar-test-formatting.md)                                 | Fix calendar test formatting for API deployment checks                                                     | 2026-08-19 | accepted                   |
 | [0257](0257-event-edit-food-materialization.md)                          | Create planned meals when editing existing events                                                       | 2026-08-19 | accepted                   |
 | [0256](0256-note-loss-guard-and-env-parity.md)                           | Stop the agent wiping notes, and why dev behaves differently from production                            | 2026-08-16 | accepted                   |
 | [0255](0255-telegram-live-progress.md)                                   | Telegram bot: live progress instead of a retrospective tool list                                        | 2026-08-16 | accepted                   |

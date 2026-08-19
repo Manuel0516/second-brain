@@ -389,11 +389,7 @@ async def test_adding_fitness_to_existing_one_off_event_creates_planned_workout(
 
     updated = await authenticated_client.patch(
         f"/api/events/{created.json()['id']}",
-        json={
-            "connections": {
-                "fitness": {"workout_type": "Strength", "notes": "Upper body"}
-            }
-        },
+        json={"connections": {"fitness": {"workout_type": "Strength", "notes": "Upper body"}}},
     )
     assert updated.status_code == 200
 
