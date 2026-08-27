@@ -4,7 +4,7 @@ This guide deploys Second Brain into the existing Zero Five VPS stack at
 `brain.zero-five.space`. The Hub's Traefik instance owns ports 80/443, TLS, and
 container routing. Second Brain does not run another reverse proxy on the host.
 The application route is VPN-only: the hostname must resolve to the WireGuard
-address and Traefik only accepts clients from `10.8.0.0/24`.
+address and Traefik only accepts clients from `10.40.0.0/24`.
 
 ## Existing VPS contract
 
@@ -12,7 +12,7 @@ address and Traefik only accepts clients from `10.8.0.0/24`.
 - The Hub router is already running Traefik with the `websecure` entrypoint and
   `letsencrypt` certificate resolver.
 - Traefik owns the external Docker network named `traefik`.
-- DNS for `brain.zero-five.space` resolves to the VPS's VPN address (`10.8.0.1`)
+- DNS for `brain.zero-five.space` resolves to the VPS's VPN address (`10.40.0.1`)
   for VPN clients; it must not expose the public VPS address.
 - Only Second Brain's nginx `web` service joins `traefik`. The API, PostgreSQL,
   and MinIO remain on Compose's private `internal` network with no host ports.
@@ -102,7 +102,7 @@ Run the external route checks from a device connected to the VPN:
 
 ```bash
 dig +short brain.zero-five.space
-# Expected: the WireGuard/VPS address (currently 10.8.0.1), not Cloudflare IPs.
+# Expected: the WireGuard/VPS address (currently 10.40.0.1), not Cloudflare IPs.
 curl --fail --silent --show-error https://brain.zero-five.space/api/health
 curl --fail --silent --show-error https://brain.zero-five.space/api/ready
 curl --silent --show-error --head https://brain.zero-five.space/
@@ -192,7 +192,7 @@ docker compose exec -T web \
 ```
 
 Run the external hostname checks only from a device connected to the VPN; the
-Traefik route intentionally returns `403` to requests outside `10.8.0.0/24`.
+Traefik route intentionally returns `403` to requests outside `10.40.0.0/24`.
 
 Compose replaces only changed services and preserves the named PostgreSQL and
 MinIO volumes.

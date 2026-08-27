@@ -105,10 +105,10 @@ services:
       traefik.http.routers.secondbrain.rule: "Host(`brain.zero-five.space`)"
       traefik.http.routers.secondbrain.entrypoints: "websecure"
       traefik.http.routers.secondbrain.tls.certresolver: "letsencrypt"
-      # brain.zero-five.space must resolve to the WireGuard address (10.8.0.1).
+      # brain.zero-five.space must resolve to the WireGuard address (10.40.0.1).
       # Traefik rejects requests that arrive from outside the VPN subnet.
       traefik.http.routers.secondbrain.middlewares: "secondbrain-vpn-only"
-      traefik.http.middlewares.secondbrain-vpn-only.ipwhitelist.sourcerange: "10.8.0.0/24"
+      traefik.http.middlewares.secondbrain-vpn-only.ipwhitelist.sourcerange: "10.40.0.0/24"
       traefik.http.services.secondbrain.loadbalancer.server.port: "80"
       hub.enable: "true"
       hub.name: "Second Brain"

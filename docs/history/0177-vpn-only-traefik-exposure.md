@@ -6,7 +6,7 @@ Status: pending approval
 ## What changed
 
 The production web service now advertises only its container port and attaches a
-Traefik IP allowlist middleware permitting the WireGuard subnet `10.8.0.0/24`.
+Traefik IP allowlist middleware permitting the WireGuard subnet `10.40.0.0/24`.
 The deployment workflow verifies readiness through the internal nginx path rather
 than the public hostname. Deployment and architecture documentation now describe
 the VPN-only route and private DNS requirement.
@@ -20,7 +20,7 @@ requests that do not arrive from the VPN network.
 ## Files touched
 
 - `compose.yaml` — adds the web container's explicit `80` exposure and the
-  `secondbrain-vpn-only` Traefik middleware for `10.8.0.0/24`.
+  `secondbrain-vpn-only` Traefik middleware for `10.40.0.0/24`.
 - `.github/workflows/deploy.yml` — verifies `/api/ready` inside the web container,
   so deployment does not depend on public ingress.
 - `infra/DEPLOY.md` — documents VPN DNS, private verification, and the enforced
