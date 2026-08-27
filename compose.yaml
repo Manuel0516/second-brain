@@ -71,8 +71,10 @@ services:
       minio:
         condition: service_healthy
     networks:
-      - internal
-      - egress
+      internal:
+        aliases:
+          - secondbrain-api
+      egress: {}
     healthcheck:
       test:
         [
