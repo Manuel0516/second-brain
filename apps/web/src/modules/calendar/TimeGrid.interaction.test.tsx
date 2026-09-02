@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { useCallback, useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -102,6 +109,64 @@ it('selects tapped events and starts pinch resizing from the real touch distance
     />,
   )
   expect(scroller.scrollTop).toBe(600)
+})
+
+it('pastes at the hovered grid time or next day at the original hour', async () => {
+  const copyBodies: Array<{ target_start: string }> = []
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/api/events/copy')) {
+      copyBodies.push(JSON.parse(String(init?.body)))
+      return new Response(JSON.stringify([calendarEvent]), { status: 201 })
+    }
+    return new Response(JSON.stringify([calendarEvent]), { status: 200 })
+  })
+  render(
+    <TimeGrid
+      days={[day]}
+      rowHeight={48}
+      calendars={[]}
+      refresh={0}
+      onCreate={vi.fn()}
+      onCreateAllDay={vi.fn()}
+      onEdit={vi.fn()}
+      onRowHeightChange={vi.fn()}
+      onHorizontalNavigate={vi.fn()}
+    />,
+  )
+  const eventButton = await screen.findByRole('button', {
+    name: 'Touch event',
+  })
+  const column = eventButton.closest<HTMLElement>('.day-column')!
+  vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({
+    top: 100,
+    bottom: 1252,
+    left: 0,
+    right: 100,
+    width: 100,
+    height: 1152,
+    x: 0,
+    y: 100,
+    toJSON: () => ({}),
+  })
+
+  fireEvent.pointerDown(eventButton, { pointerId: 1, button: 0 })
+  fireEvent.pointerUp(eventButton, { pointerId: 1, button: 0 })
+  expect(eventButton).toHaveAttribute('aria-pressed', 'true')
+  fireEvent.keyDown(window, { key: 'c', ctrlKey: true })
+
+  fireEvent.pointerMove(column, { clientY: 100 + 13 * 48 + 20 })
+  fireEvent.keyDown(window, { key: 'v', ctrlKey: true })
+  await waitFor(() => expect(copyBodies).toHaveLength(1))
+  expect(copyBodies[0].target_start).toBe(
+    new Date(2026, 5, 27, 13, 25).toISOString(),
+  )
+
+  fireEvent.pointerLeave(column)
+  fireEvent.keyDown(window, { key: 'v', ctrlKey: true })
+  await waitFor(() => expect(copyBodies).toHaveLength(2))
+  expect(copyBodies[1].target_start).toBe(
+    new Date(2026, 5, 28, 10).toISOString(),
+  )
 })
 
 it('starts event move or resize only after a stationary long press', async () => {

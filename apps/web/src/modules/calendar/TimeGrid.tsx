@@ -900,7 +900,6 @@ export function TimeGrid({
     }
     const created: CalendarEvent[] = await response.json()
     setSelectedKeys(new Set(created.map(occurrenceKey)))
-    pasteTargetRef.current = new Date(target.getTime() + 24 * 60 * 60 * 1000)
     loadEvents()
   }, [loadEvents])
 
@@ -943,7 +942,6 @@ export function TimeGrid({
         clipboardRef.current = events.filter((candidate) =>
           selectedKeys.has(occurrenceKey(candidate)),
         )
-        pasteTargetRef.current = null
       }
       if (event.key.toLowerCase() === 'v' && clipboardRef.current.length) {
         event.preventDefault()
@@ -971,6 +969,18 @@ export function TimeGrid({
     setSelectedKeys(new Set())
     column.setPointerCapture(event.pointerId)
     updateNewSelection({ day, anchorMinute: minute, currentMinute: minute })
+  }
+
+  const updatePasteTarget = (event: React.PointerEvent, day: Date) => {
+    const column = event.currentTarget as HTMLElement
+    pasteTargetRef.current = dateAtMinute(
+      day,
+      minuteAtPointer(
+        event.clientY,
+        column.getBoundingClientRect().top,
+        rowHeight,
+      ),
+    )
   }
 
   const moveNewSelection = (event: React.PointerEvent) => {
@@ -1439,7 +1449,11 @@ export function TimeGrid({
                 onTouchPointerMove(event)
                 return
               }
+              updatePasteTarget(event, day)
               moveNewSelection(event)
+            }}
+            onPointerLeave={() => {
+              pasteTargetRef.current = null
             }}
             onPointerUp={(event) => {
               if (event.pointerType === 'touch') {
