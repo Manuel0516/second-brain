@@ -210,6 +210,88 @@ body {
   height: 100%;
 }
 
+.swipe-reveal-shell {
+  position: relative;
+  overflow: hidden;
+  contain: paint;
+  border-radius: var(--r-lg);
+  background: var(--bg-raised);
+}
+
+.swipe-reveal-delete {
+  position: absolute;
+  inset: -1px 0 -1px auto;
+  z-index: 0;
+  width: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 0 8px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  background: #d9573f;
+  color: var(--text-primary);
+  font: 500 20px var(--font-ui);
+  cursor: pointer;
+}
+
+.swipe-reveal-delete:hover {
+  filter: brightness(1.08);
+}
+.swipe-reveal-delete:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -3px;
+}
+.swipe-reveal-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  touch-action: pan-y;
+  will-change: transform;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.swipe-reveal-content.swiping {
+  transition: none;
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+  .swipe-reveal-shell {
+    overflow: visible;
+    contain: none;
+  }
+
+  .swipe-reveal-delete {
+    inset: -7px -7px auto auto;
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: #d9573f;
+    font-size: 14px;
+    opacity: 0;
+  }
+
+  .swipe-reveal-delete::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+  }
+
+  .swipe-reveal-delete:hover,
+  .swipe-reveal-delete:focus-visible {
+    background: var(--bg-raised);
+    filter: none;
+    opacity: 1;
+  }
+
+  .swipe-reveal-delete:focus-visible {
+    outline-color: var(--accent);
+  }
+}
+
 body {
   background: var(--bg-base);
   color: var(--text-primary);

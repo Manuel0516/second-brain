@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { updateMealLog, type MealLog, type FoodSummary } from './api'
+import { SwipeReveal } from '../../components/SwipeReveal'
 
 interface OverviewProps {
   summary: FoodSummary | null
   weekOffset: number
   onLogMeal: (meal?: MealLog | null, mealType?: string) => void
   onSaved: () => void
+  onDeleteMeal: (meal: MealLog) => void
 }
 
 function mondayFor(offset: number): Date {
@@ -39,6 +41,7 @@ export function Overview({
   weekOffset,
   onLogMeal,
   onSaved,
+  onDeleteMeal,
 }: OverviewProps) {
   const monday = mondayFor(weekOffset)
   const todayStr = localDateStr(new Date())
@@ -209,7 +212,12 @@ export function Overview({
               const isEditing = editingNoteId === meal.id
 
               return (
-                <div key={meal.id} className="food-planned-card">
+                <SwipeReveal
+                  key={meal.id}
+                  className="food-planned-card"
+                  deleteLabel={`Delete planned ${meal.meal_type || 'meal'}`}
+                  onDelete={() => onDeleteMeal(meal)}
+                >
                   <div className="food-planned-info">
                     <strong>
                       {meal.meal_type
@@ -267,7 +275,7 @@ export function Overview({
                       </>
                     )}
                   </div>
-                </div>
+                </SwipeReveal>
               )
             })}
           </div>

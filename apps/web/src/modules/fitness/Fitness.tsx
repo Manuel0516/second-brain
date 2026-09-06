@@ -37,6 +37,7 @@ import {
   fetchBodyWeightStats,
   fetchExercises,
   fetchPlannedSessions,
+  deleteSession,
   updateSession,
   type BodyMetric,
   type Goal,
@@ -574,6 +575,19 @@ export function Fitness() {
   function handlePlanSession(session: WorkoutSession) {
     setPlanningSession(session)
     setShowWizard(true)
+  }
+
+  async function handleDeletePlanned(session: WorkoutSession) {
+    try {
+      await deleteSession(session.id)
+      setPlannedSessions((current) =>
+        current.filter((item) => item.id !== session.id),
+      )
+      await loadWeek()
+    } catch (err) {
+      console.error('Failed to delete planned session', err)
+      window.alert('Could not delete this planned session — try again.')
+    }
   }
 
   async function handleFinishSession() {
@@ -1187,6 +1201,7 @@ export function Fitness() {
                     plannedSessions={plannedSessions}
                     onStartSession={handleStartPlanned}
                     onPlanSession={handlePlanSession}
+                    onDeleteSession={handleDeletePlanned}
                     highlightSessionId={highlightSessionId}
                   />
                 )}

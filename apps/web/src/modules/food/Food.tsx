@@ -12,6 +12,7 @@ import { toDisplayWeight } from '../fitness/units'
 import {
   fetchMealLogs,
   fetchSummary,
+  deleteMealLog,
   upsertExtras,
   type DaySummary,
   type FoodSummary,
@@ -321,6 +322,16 @@ export function Food() {
       (mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack') ?? 'breakfast',
     )
     setShowLogModal(true)
+  }
+
+  async function handleDeletePlanned(meal: MealLog) {
+    try {
+      await deleteMealLog(meal.id)
+      await loadWeek()
+    } catch (err) {
+      console.error('Failed to delete planned meal', err)
+      window.alert('Could not delete this planned meal — try again.')
+    }
   }
 
   // Calorie ring calculations
@@ -873,6 +884,7 @@ export function Food() {
                 weekOffset={weekOffset}
                 onLogMeal={openLogModal}
                 onSaved={() => loadWeek()}
+                onDeleteMeal={handleDeletePlanned}
               />
             )}
 

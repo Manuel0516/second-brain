@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0262](0262-planned-row-swipe-delete.md)                                | Swipe to reveal deletion for planned meals and workouts                                               | 2026-09-06 | accepted                   |
 | [0261](0261-calendar-paste-target.md)                                   | Paste calendar events at the pointer                                                                  | 2026-09-02 | accepted                   |
 | [0260](0260-desktop-event-time-inputs.md)                                | Native desktop event time inputs                                                                       | 2026-09-02 | accepted                   |
 | [0259](0259-secondbrain-api-dns-collision.md)                            | Fix Second Brain API routing collision                                                                 | 2026-08-27 | accepted                   |

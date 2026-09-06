@@ -20,6 +20,7 @@ import {
 } from './api'
 import { useSettings } from '../../context/SettingsContext'
 import { toDisplayWeight } from './units'
+import { SwipeReveal } from '../../components/SwipeReveal'
 
 const tooltipStyle = {
   background: 'var(--bg-elevated)',
@@ -73,6 +74,7 @@ interface Props {
   plannedSessions: WorkoutSession[]
   onStartSession: (session: WorkoutSession) => void
   onPlanSession: (session: WorkoutSession) => void
+  onDeleteSession: (session: WorkoutSession) => void
   highlightSessionId?: string | null
 }
 
@@ -86,6 +88,7 @@ export function Overview({
   plannedSessions,
   onStartSession,
   onPlanSession,
+  onDeleteSession,
   highlightSessionId,
 }: Props) {
   const { settings } = useSettings()
@@ -242,12 +245,14 @@ export function Overview({
               const note = plainTextFromDoc(session.notes)
               const exCount = session.plan?.length ?? 0
               return (
-                <div
+                <SwipeReveal
                   key={session.id}
-                  id={`planned-session-${session.id}`}
                   className={`fit-planned-card${
                     highlightSessionId === session.id ? ' highlight' : ''
                   }`}
+                  id={`planned-session-${session.id}`}
+                  deleteLabel={`Delete planned workout ${session.type}`}
+                  onDelete={() => onDeleteSession(session)}
                 >
                   <div className="fit-planned-info">
                     <strong>{session.type}</strong>
@@ -277,7 +282,7 @@ export function Overview({
                       Start now
                     </button>
                   </div>
-                </div>
+                </SwipeReveal>
               )
             })}
           </div>
