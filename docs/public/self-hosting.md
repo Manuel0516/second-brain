@@ -71,24 +71,21 @@ its short-lived device code in the web app.
 
 ## Updating
 
+Run the updater from the repository checkout on the VPS:
+
 ```bash
-git pull --ff-only
-docker compose config --quiet
-docker compose build api web
-docker compose up -d
+./scripts/update-production.sh
 ```
 
-Compose recreates changed services and preserves named volumes. Review incoming
-migrations and release notes before updating a deployment with important data.
+The script refuses a dirty worktree, fetches and fast-forwards `main`, validates
+Compose, keeps PostgreSQL and MinIO running, rebuilds and restarts the API and
+web containers, applies migrations through the API entrypoint, and checks the
+internal readiness endpoint. It also updates the Telegram bot when
+`TELEGRAM_BOT_TOKEN` is configured. Pass another branch name as the first
+argument when needed.
 
-## Optional GitHub deployment
-
-The included deployment workflow is restricted to this repository so forks do
-not attempt to contact the maintainer's server. Maintainers using that workflow
-configure the `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`,
-`VPS_SSH_PORT`, and `VPS_DEPLOY_PATH` production secrets. Forks should adapt the
-workflow and repository guard to their own host, or remove it and deploy with
-the Compose commands above.
+Named volumes are never removed. Review incoming migrations and release notes
+before updating a deployment with important data, and keep a tested backup.
 
 ## Backups
 
