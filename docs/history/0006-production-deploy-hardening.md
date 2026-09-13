@@ -5,7 +5,7 @@ Status: accepted (code complete; some infra tasks pending VPS owner approval)
 
 ## What changed
 
-Hardened the app for first public deploy at `brain.zero-five.space`. Added startup security
+Hardened the app for first public deploy at `brain.example.com`. Added startup security
 assertions, strict CSP, self-hosted fonts, env-aware cookies, TOTP backend, and replaced
 the deprecated FastAPI startup event pattern.
 

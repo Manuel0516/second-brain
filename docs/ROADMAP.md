@@ -6,7 +6,7 @@ Status values: `planned`, `in progress`, `verified`.
 |---|---|---|
 | 0A — Repository, agents, local scaffold, CI | verified | All local checks pass, production Compose renders, baseline commit exists |
 | 0B — Single-user auth and security | verified | Password login, cookie sessions, TOTP, rate limits, audit trail, admin panel |
-| 0C — First private VPS deployment | in progress | Authenticated app available at `brain.zero-five.space`, backup and restore verified |
+| 0C — First private VPS deployment | in progress | Authenticated app available at `brain.example.com`, backup and restore verified |
 | 1 — Calendar | in progress | Local calendars, event CRUD, recurrence, responsive views |
 | 2 — Notes and graph linking | verified | Rich pages, nesting, links, backlinks, search |
 | 3 — Finance and investments | planned | Transactions, imports, documents, jurisdiction-aware reporting |

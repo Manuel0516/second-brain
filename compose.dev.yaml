@@ -51,7 +51,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       SECOND_BRAIN_API_URL: http://127.0.0.1:8000
       SB_VERIFICATION_BASE: ${SB_VERIFICATION_BASE:-http://localhost:5173}
-      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-1110963147}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       SB_BOT_STATE_FILE: /data/state.json
     volumes:
       - dev-bot-data:/data

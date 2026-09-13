@@ -6,7 +6,7 @@ Status: accepted
 ## What changed
 
 Google Calendar sign-in returned an internal server error in production. Debugged live on
-the VPS (`brain.zero-five.space`) and found three separate misconfigurations, all pre-existing
+the VPS (`brain.example.com`) and found three separate misconfigurations, all pre-existing
 gaps from when the Google/ICS sync feature (0138) was deployed without updating `compose.yaml`:
 
 1. **`compose.yaml` never forwarded the six Google/calendar-sync env vars into the `api`
@@ -16,7 +16,7 @@ gaps from when the Google/ICS sync feature (0138) was deployed without updating 
 2. **`GOOGLE_REDIRECT_URI`/`FRONTEND_URL` on the VPS pointed at `http://...:8000`**, but the
    `api` service isn't on the `traefik` network and has no published port — only `web`/nginx
    is reachable externally, proxying `/api/` internally to `api:8000`. Fixed to
-   `https://brain.zero-five.space/...` with no port.
+   `https://brain.example.com/...` with no port.
 3. **The `api` service only joined the `internal` network**, which is `internal: true` —
    Docker blocks all outbound internet on that network by design. Before this feature, `api`
    only ever talked to `db`/`minio` (both internal), so this never mattered. The OAuth code
@@ -40,7 +40,7 @@ behind the code.
   service's `environment:` block; added a new non-internal `egress` network and put `api` on
   it alongside `internal` (db/minio stay internal-only, they never call out).
 - VPS `.env` (not in git) — `GOOGLE_REDIRECT_URI` and `FRONTEND_URL` corrected to
-  `https://brain.zero-five.space/...`.
+  `https://brain.example.com/...`.
 
 ## How the pieces connect
 

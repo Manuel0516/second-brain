@@ -12,7 +12,7 @@ shared with the bot.
 Env:
   TELEGRAM_BOT_TOKEN        bot token from @BotFather (required)
   SECOND_BRAIN_API_URL      API base, e.g. http://api:8000 (compose) or http://127.0.0.1:8000 (dev)
-  SB_VERIFICATION_BASE      web origin for the /device?code= link (default https://brain.zero-five.space)
+  SB_VERIFICATION_BASE      web origin for the /device?code= link (default http://localhost:5173)
   TELEGRAM_ALLOWED_USERS    comma-separated chat ids allowed to use the bot
   SB_BOT_STATE_FILE         JSON state path, default /data/state.json
 """
@@ -30,10 +30,10 @@ import uuid
 from datetime import UTC, datetime
 
 API_BASE = os.environ.get("SECOND_BRAIN_API_URL", "http://127.0.0.1:8000")
-VERIFICATION_BASE = os.environ.get("SB_VERIFICATION_BASE", "https://brain.zero-five.space")
+VERIFICATION_BASE = os.environ.get("SB_VERIFICATION_BASE", "http://localhost:5173")
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 ALLOWED = {
-    int(x) for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "1110963147").split(",") if x.strip()
+    int(x) for x in os.environ.get("TELEGRAM_ALLOWED_USERS", "").split(",") if x.strip()
 }
 STATE_FILE = os.environ.get("SB_BOT_STATE_FILE", "/data/state.json")
 TG = f"https://api.telegram.org/bot{TOKEN}"

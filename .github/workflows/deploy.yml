@@ -16,6 +16,7 @@ concurrency:
 jobs:
   deploy:
     if: >-
+      github.repository == 'Manuel0516/second-brain' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
@@ -26,6 +27,8 @@ jobs:
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
       VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+      VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
     steps:
       - name: Configure SSH
         run: |
@@ -33,16 +36,20 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           host_key=$(printf '%s\n' "$VPS_KNOWN_HOSTS" | awk '$2 == "ssh-ed25519" { print $2, $3; exit }')
           test -n "$host_key"
-          printf '[%s]:2020 %s\n' "$VPS_HOST" "$host_key" > ~/.ssh/known_hosts
+          test -n "$VPS_SSH_PORT"
+          test -n "$VPS_DEPLOY_PATH"
+          printf '[%s]:%s %s\n' "$VPS_HOST" "$VPS_SSH_PORT" "$host_key" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
       - name: Deploy tested commit
         run: |
-          ssh -p 2020 -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" bash -s -- "$DEPLOY_SHA" <<'REMOTE'
+          ssh -p "$VPS_SSH_PORT" -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
+            bash -s -- "$DEPLOY_SHA" "$VPS_DEPLOY_PATH" <<'REMOTE'
           set -euo pipefail
 
           deploy_sha="$1"
-          cd /home/manuel/services/second-brain
+          deploy_path="$2"
+          cd "$deploy_path"
 
           test -z "$(git status --porcelain)" || {
             echo "Refusing to deploy over local repository changes" >&2

@@ -31,7 +31,7 @@ requests that do not arrive from the VPN network.
 
 ## How the pieces connect
 
-VPN clients resolve `brain.zero-five.space` to the WireGuard address and reach the
+VPN clients resolve `brain.example.com` to the WireGuard address and reach the
 Hub Traefik instance. Traefik applies `secondbrain-vpn-only` before forwarding to
 the nginx `web` container on the shared `traefik` network. Nginx continues to serve
 the frontend and proxy `/api` to the private API service. PostgreSQL, MinIO, and

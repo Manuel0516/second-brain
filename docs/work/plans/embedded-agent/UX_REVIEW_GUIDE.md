@@ -103,7 +103,7 @@ All paths are relative to the repo root (`~/services/second-brain`).
 
 ## 2. Device approval flow — intended contract
 
-- Flow: bot creates grant → user opens `https://brain.zero-five.space/device?code=XXXX`
+- Flow: bot creates grant → user opens `https://brain.example.com/device?code=XXXX`
   (VPN-only) → logs in → sees code + "Approve device" → POST
   `/api/auth/device/approve` → bot polls status → receives one-time bearer token.
 - Page states (all covered): auth loading, missing `code`, not-authenticated (CTA →
@@ -185,11 +185,11 @@ All paths are relative to the repo root (`~/services/second-brain`).
 Dev stack (VPS, no prod impact): `docker compose -f compose.dev.yaml up -d` (db :5433,
 minio :9100), API on host `uv run uvicorn app.main:app --reload --port 8000` (from
 `apps/api`, env `.env.dev`), web `npm run dev` (from `apps/web`, port 5173). Login:
-`manuel@dev.zero-five.space` (password in `/tmp/sb-dev-pass.txt` on the VPS).
+`demo@example.com` (password in `/tmp/secondbrain-dev-pass.txt` on the VPS).
 
 Bot against dev: run `apps/bot/bot.py` with `SECOND_BRAIN_API_URL=http://127.0.0.1:8000`
 `SB_VERIFICATION_BASE=http://127.0.0.1:5173` — then message @Zero_Five_bot from the owner
-Telegram account (1110963147). **Never run two pollers with the same token at once.**
+Telegram account (123456789). **Never run two pollers with the same token at once.**
 
 Checks to run after any change: `npm run check --workspace @secondbrain/web` (format,
 lint, 156 tests, build) and `uv run --directory apps/api pytest` (72 tests). CI runs both.

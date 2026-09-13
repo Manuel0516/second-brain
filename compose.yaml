@@ -48,7 +48,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-30}
-      INITIAL_USER_USERNAME: ${INITIAL_USER_USERNAME:-manuel}
+      INITIAL_USER_USERNAME: ${INITIAL_USER_USERNAME:-admin}
       INITIAL_USER_EMAIL: ${INITIAL_USER_EMAIL:?Set INITIAL_USER_EMAIL in .env}
       INITIAL_USER_PASSWORD: ${INITIAL_USER_PASSWORD:?Set INITIAL_USER_PASSWORD in .env}
       LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
@@ -104,31 +104,32 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: "traefik"
-      traefik.http.routers.secondbrain.rule: "Host(`brain.zero-five.space`)"
+      traefik.http.routers.secondbrain.rule: "Host(`${APP_HOST:?Set APP_HOST in .env}`)"
       traefik.http.routers.secondbrain.entrypoints: "websecure"
       traefik.http.routers.secondbrain.tls.certresolver: "letsencrypt"
-      # brain.zero-five.space must resolve to the WireGuard address (10.40.0.1).
-      # Traefik rejects requests that arrive from outside the VPN subnet.
+      # APP_HOST should resolve to the private address used by your VPN clients.
+      # Traefik rejects requests that arrive from outside this private subnet.
       traefik.http.routers.secondbrain.middlewares: "secondbrain-vpn-only"
       traefik.http.middlewares.secondbrain-vpn-only.ipwhitelist.sourcerange: "10.40.0.0/24"
       traefik.http.services.secondbrain.loadbalancer.server.port: "80"
       hub.enable: "true"
       hub.name: "Second Brain"
       hub.kind: "web"
-      hub.url: "https://brain.zero-five.space"
+      hub.url: "https://${APP_HOST:?Set APP_HOST in .env}"
       hub.icon: "🧠"
       hub.visibility: "admin"
 
   bot:
+    profiles: ["bot"]
     build:
       context: .
       dockerfile: apps/bot/Dockerfile
     restart: unless-stopped
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       SECOND_BRAIN_API_URL: http://api:8000
-      SB_VERIFICATION_BASE: https://brain.zero-five.space
-      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-1110963147}
+      SB_VERIFICATION_BASE: ${APP_ORIGIN:-http://localhost:5173}
+      TELEGRAM_ALLOWED_USERS: ${TELEGRAM_ALLOWED_USERS:-}
       SB_BOT_STATE_FILE: /data/state.json
     volumes:
       - bot-data:/data

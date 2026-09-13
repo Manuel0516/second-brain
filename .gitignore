@@ -1,5 +1,8 @@
 .env
 .env.*
+.analysis/
+.mcp.json
+.codex/config.toml
 !.env.example
 .venv/
 venv/

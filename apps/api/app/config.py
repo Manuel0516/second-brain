@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 30
 
     # Initial user (seeded on first run)
-    initial_user_username: str = "manuel"
+    initial_user_username: str = "admin"
     initial_user_email: str = "user@example.com"
     initial_user_password: str = "changeme"
 
