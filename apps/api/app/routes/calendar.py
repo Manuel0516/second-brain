@@ -20,7 +20,16 @@ from app.access import effective_role, shared_ids
 from app.collaboration import calendar_connections
 from app.database import async_session_factory, get_async_session
 from app.dependencies import get_current_user, get_websocket_user
-from app.models import Calendar, CalendarEvent, Link, MealLog, ResourceShare, User, WorkoutSession
+from app.models import (
+    Calendar,
+    CalendarEvent,
+    Link,
+    MealLog,
+    Page,
+    ResourceShare,
+    User,
+    WorkoutSession,
+)
 
 router = APIRouter(prefix="/api", tags=["calendar"])
 HEX = r"^#[0-9A-Fa-f]{6}$"
@@ -235,6 +244,8 @@ class BulkEventMove(BaseModel):
 class BulkEventCopy(BaseModel):
     event_ids: list[str] = Field(min_length=1, max_length=100)
     target_start: datetime
+    target_calendar_id: str | None = None
+    occurrence_only: bool = False
 
 
 def _own_share_overrides(
@@ -1128,8 +1139,9 @@ async def copy_events(
     session: AsyncSession = Depends(get_async_session),
 ) -> list[EventResponse]:
     event_ids = list(dict.fromkeys(data.event_ids))
-    # Copies land in the source calendar, so ICS-backed events cannot be copied.
-    events = [await writable_event(event_id, user, session) for event_id in event_ids]
+    events = [await owned_event(event_id, user, session) for event_id in event_ids]
+    for calendar_id in {data.target_calendar_id or event.calendar_id for event in events}:
+        await writable_calendar(calendar_id, user, session)
     starts = [
         event.start_at if event.start_at.tzinfo else event.start_at.replace(tzinfo=UTC)
         for event in events
@@ -1140,7 +1152,7 @@ async def copy_events(
         start_at = data.target_start + (event_start - first_start)
         workout, meal = await _linked_workout_and_meal(session, event.id)
         copy = CalendarEvent(
-            calendar_id=event.calendar_id,
+            calendar_id=data.target_calendar_id or event.calendar_id,
             title=event.title,
             icon=event.icon,
             description=event.description,
@@ -1152,17 +1164,49 @@ async def copy_events(
             timezone=event.timezone,
             color_override=event.color_override,
             reminder_minutes=event.reminder_minutes,
-            rrule=event.rrule,
+            rrule=None if data.occurrence_only else event.rrule,
             recurrence_interval=event.recurrence_interval,
             recurrence_byday=list(event.recurrence_byday or []),
-            recurrence_count=event.recurrence_count,
-            recurrence_until=event.recurrence_until,
+            recurrence_count=None if data.occurrence_only else event.recurrence_count,
+            recurrence_until=None if data.occurrence_only else event.recurrence_until,
             connections=dict(event.connections or {}),
         )
         session.add(copy)
         await session.flush()
         copies.append(copy)
-        if workout is not None:
+        # ponytail: keep links to existing notes; copying an event must not fork note content.
+        note_links = await session.scalars(
+            select(Link).where(
+                or_(
+                    (Link.source_type == "event")
+                    & (Link.source_id == event.id)
+                    & (Link.target_type == "page"),
+                    (Link.target_type == "event")
+                    & (Link.target_id == event.id)
+                    & (Link.source_type == "page"),
+                )
+            )
+        )
+        for link in note_links:
+            outgoing = link.source_type == "event"
+            page_id = link.target_id if outgoing else link.source_id
+            page = await session.get(Page, page_id)
+            if (
+                page is None
+                or page.deleted_at is not None
+                or not await effective_role("page", page.id, page.user_id, user.id, session)
+            ):
+                continue
+            session.add(
+                Link(
+                    source_type=link.source_type,
+                    source_id=copy.id if outgoing else link.source_id,
+                    target_type=link.target_type,
+                    target_id=link.target_id if outgoing else copy.id,
+                    relation=link.relation,
+                )
+            )
+        if workout is not None and workout.user_id == user.id:
             new_workout = WorkoutSession(
                 user_id=user.id,
                 type=workout.type,
@@ -1183,7 +1227,7 @@ async def copy_events(
                     relation="logged_from",
                 )
             )
-        if meal is not None:
+        if meal is not None and meal.user_id == user.id:
             new_meal = MealLog(
                 user_id=user.id,
                 date=start_at,
@@ -1214,6 +1258,8 @@ async def copy_events(
     await session.commit()
     for copy in copies:
         await session.refresh(copy)
+    for calendar_id in {copy.calendar_id for copy in copies}:
+        await notify_calendar(calendar_id, session)
     return [event_response(copy) for copy in copies]
 
 

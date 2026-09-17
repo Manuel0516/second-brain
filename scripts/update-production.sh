@@ -3,7 +3,16 @@ set -Eeuo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/update-production.sh [branch]
+Usage: ./scripts/update-production.sh [--development | branch]
+
+  --development   Test origin/codex/development on this server
+  branch          Update from a named branch (default: main)
+
+Examples:
+  ./scripts/update-production.sh --development
+  ./scripts/update-production.sh main
+
+Development uses this checkout’s existing database and volumes.
 
 Fast-forward a VPS checkout (default: main), rebuild the application images,
 restart the application containers, and verify internal readiness.
@@ -17,7 +26,16 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-branch="${1:-main}"
+if (( $# > 1 )); then
+  usage >&2
+  exit 2
+fi
+
+case "${1:-main}" in
+  --development) branch="codex/development" ;;
+  -*) usage >&2; exit 2 ;;
+  *) branch="${1:-main}" ;;
+esac
 git check-ref-format --branch "$branch" >/dev/null
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

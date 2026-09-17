@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Calendar, CalendarEvent, Link, MealLog, User, WorkoutSession
+from app.models import Calendar, CalendarEvent, Link, MealLog, Page, User, WorkoutSession
 from app.security import hash_password
 
 pytestmark = pytest.mark.anyio
@@ -681,3 +681,125 @@ async def test_event_links_scoped_to_occurrence_date(
     assert len(logged_meals) == 1
     assert logged_meals[0]["target_id"] == meals[0]["target_id"]
     assert day in logged_meals[0]["title"]
+
+
+async def test_copy_ics_occurrence_to_personal_preserves_details_and_note_links(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    personal = await _make_calendar(authenticated_client, test_db_session)
+    source = Calendar(user_id=personal.user_id, name="University", color="#123456", source="ics")
+    page = Page(user_id=personal.user_id, title="Lecture notes", content={"type": "doc"})
+    test_db_session.add_all([source, page])
+    await test_db_session.flush()
+    start = _next_monday()
+    event = CalendarEvent(
+        calendar_id=source.id,
+        title="Lecture",
+        start_at=start,
+        end_at=start + timedelta(hours=2),
+        description="Bring the textbook",
+        link="https://example.com/lecture",
+        location="Room 4",
+        icon="📚",
+        color_override="#654321",
+        reminder_minutes=15,
+        rrule="WEEKLY",
+        timezone="Europe/Stockholm",
+        connections={"notes": {"title": "Lecture notes"}},
+    )
+    test_db_session.add(event)
+    await test_db_session.flush()
+    test_db_session.add_all(
+        [
+            Link(
+                source_type="event",
+                source_id=event.id,
+                target_type="page",
+                target_id=page.id,
+                relation="documents",
+            ),
+            Link(
+                source_type="page",
+                source_id=page.id,
+                target_type="event",
+                target_id=event.id,
+                relation="mentions",
+            ),
+        ]
+    )
+    await test_db_session.commit()
+    response = await authenticated_client.post(
+        "/api/events/copy",
+        json={
+            "event_ids": [event.id],
+            "target_calendar_id": personal.id,
+            "target_start": (start + timedelta(days=7)).isoformat(),
+            "occurrence_only": True,
+        },
+    )
+    assert response.status_code == 201
+    copied = response.json()[0]
+    assert copied["id"] != event.id
+    assert copied["calendar_id"] == personal.id
+    for key in [
+        "title",
+        "description",
+        "link",
+        "location",
+        "icon",
+        "color_override",
+        "reminder_minutes",
+        "timezone",
+    ]:
+        assert copied[key] == getattr(event, key)
+    assert copied["connections"]["notes"]["title"] == "Lecture notes"
+    assert copied["rrule"] is None
+    assert datetime.fromisoformat(copied["start_at"]).replace(tzinfo=UTC) == start + timedelta(
+        days=7
+    )
+    assert datetime.fromisoformat(copied["end_at"]).replace(tzinfo=UTC) == start + timedelta(
+        days=7, hours=2
+    )
+    links = await authenticated_client.get(f"/api/events/{copied['id']}/links")
+    assert {(link["target_id"], link["direction"]) for link in links.json()} == {
+        (page.id, "incoming"),
+        (page.id, "outgoing"),
+    }
+    await test_db_session.refresh(event)
+    assert event.calendar_id == source.id
+    assert event.rrule == "WEEKLY"
+
+
+async def test_copy_rejects_read_only_destination(
+    authenticated_client: AsyncClient, test_db_session: AsyncSession
+) -> None:
+    calendar = await _make_calendar(authenticated_client, test_db_session)
+    event = await _create_series(authenticated_client, calendar.id)
+    calendar.source = "ics"
+    await test_db_session.commit()
+    response = await authenticated_client.post(
+        "/api/events/copy",
+        json={
+            "event_ids": [event["id"]],
+            "target_calendar_id": calendar.id,
+            "target_start": _next_monday().isoformat(),
+        },
+    )
+    assert response.status_code == 409
+
+
+async def test_copy_cannot_read_another_users_event(
+    authenticated_client: AsyncClient,
+    test_db_session: AsyncSession,
+    user_with_events: tuple[User, Calendar, list[CalendarEvent]],
+) -> None:
+    personal = await _make_calendar(authenticated_client, test_db_session)
+    response = await authenticated_client.post(
+        "/api/events/copy",
+        json={
+            "event_ids": [user_with_events[2][0].id],
+            "target_calendar_id": personal.id,
+            "target_start": _next_monday().isoformat(),
+        },
+    )
+    assert response.status_code == 404

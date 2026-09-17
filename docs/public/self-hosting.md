@@ -84,6 +84,17 @@ internal readiness endpoint. It also updates the Telegram bot when
 `TELEGRAM_BOT_TOKEN` is configured. Pass another branch name as the first
 argument when needed.
 
+To test the published development branch on this server:
+
+```bash
+./scripts/update-production.sh --development
+```
+
+This selects `codex/development`, which must first be committed and pushed to
+`origin`. Return to the main branch with `./scripts/update-production.sh main`.
+Both commands use the same database and volumes; switching branches does not
+undo database migrations. This is not an isolated staging environment.
+
 Named volumes are never removed. Review incoming migrations and release notes
 before updating a deployment with important data, and keep a tested backup.
 

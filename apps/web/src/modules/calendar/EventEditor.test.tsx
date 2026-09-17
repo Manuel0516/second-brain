@@ -531,3 +531,58 @@ describe('EventEditor', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+it('copies a saved university occurrence into Personal without editing the source', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(
+      async () => new Response(JSON.stringify([]), { status: 200 }),
+    )
+  const onSaved = vi.fn()
+  render(
+    <EventEditor
+      calendars={[
+        {
+          id: 'university',
+          name: 'University',
+          color: '#123456',
+          source: 'ics',
+          is_visible: true,
+        },
+        {
+          id: 'personal',
+          name: 'Personal',
+          color: '#654321',
+          source: 'local',
+          is_visible: true,
+        },
+      ]}
+      event={{
+        id: 'lecture',
+        calendar_id: 'university',
+        title: 'Lecture',
+        start_at: '2026-09-21T09:00:00Z',
+        end_at: '2026-09-21T10:00:00Z',
+        rrule: 'WEEKLY',
+      }}
+      onClose={vi.fn()}
+      onSaved={onSaved}
+    />,
+  )
+  expect(
+    screen.getByRole('button', { name: 'Copy destination calendar' }),
+  ).toHaveTextContent('Personal')
+  fireEvent.click(screen.getByRole('button', { name: 'Copy event' }))
+  await waitFor(() => expect(onSaved).toHaveBeenCalledOnce())
+  const writes = fetchMock.mock.calls.filter(
+    ([, init]) => init?.method === 'POST' || init?.method === 'PATCH',
+  )
+  expect(writes).toHaveLength(1)
+  expect(writes[0][0]).toBe('/api/events/copy')
+  expect(JSON.parse(String(writes[0][1]?.body))).toEqual({
+    event_ids: ['lecture'],
+    target_calendar_id: 'personal',
+    target_start: '2026-09-21T09:00:00Z',
+    occurrence_only: true,
+  })
+})

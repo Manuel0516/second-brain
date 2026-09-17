@@ -885,6 +885,24 @@ export function TimeGrid({
     const target =
       pasteTargetRef.current ??
       new Date(firstStart.getTime() + 24 * 60 * 60 * 1000)
+    const needsDestination = copied.some((event) => {
+      const calendar = calendars.find(
+        (candidate) => candidate.id === event.calendar_id,
+      )
+      return calendar?.source === 'ics' || calendar?.effective_role === 'viewer'
+    })
+    const writableCalendars = calendars.filter(
+      (calendar) =>
+        calendar.source !== 'ics' && calendar.effective_role !== 'viewer',
+    )
+    const destination =
+      writableCalendars.find(
+        (calendar) => calendar.name.toLowerCase() === 'personal',
+      ) ?? writableCalendars[0]
+    if (needsDestination && !destination) {
+      setInteractionError('Create a writable calendar before pasting events.')
+      return
+    }
     setInteractionError('')
     const response = await apiCall('/api/events/copy', {
       method: 'POST',
@@ -892,6 +910,8 @@ export function TimeGrid({
       body: JSON.stringify({
         event_ids: [...new Set(copied.map((event) => event.id))],
         target_start: target.toISOString(),
+        target_calendar_id: needsDestination ? destination?.id : undefined,
+        occurrence_only: needsDestination,
       }),
     })
     if (!response.ok) {
@@ -901,7 +921,7 @@ export function TimeGrid({
     const created: CalendarEvent[] = await response.json()
     setSelectedKeys(new Set(created.map(occurrenceKey)))
     loadEvents()
-  }, [loadEvents])
+  }, [calendars, loadEvents])
 
   const deleteSelectedEvents = useCallback(async () => {
     const targets = events.filter((candidate) =>

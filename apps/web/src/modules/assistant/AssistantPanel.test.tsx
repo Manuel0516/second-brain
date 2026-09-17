@@ -72,7 +72,7 @@ describe('AssistantPanel', () => {
     expect(
       await screen.findByRole('dialog', { name: 'AI Assistant' }),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('password')).toHaveAttribute(
+    expect(await screen.findByLabelText('password')).toHaveAttribute(
       'type',
       'password',
     )

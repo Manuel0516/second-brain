@@ -223,6 +223,18 @@ export function EventEditor({
   // Memoised so derived values (selectedCalendarId) stay stable across renders.
   const orderedCalendars = useMemo(() => orderCalendars(calendars), [calendars])
 
+  const copyCalendars = orderedCalendars.filter(
+    (calendar) =>
+      calendar.source !== 'ics' && calendar.effective_role !== 'viewer',
+  )
+  const [copyCalendarId, setCopyCalendarId] = useState(
+    copyCalendars.find((calendar) => calendar.name.toLowerCase() === 'personal')
+      ?.id ??
+      copyCalendars[0]?.id ??
+      '',
+  )
+  const [copying, setCopying] = useState(false)
+
   const [icon, setIcon] = useState(event.icon ?? '')
   const [form, setForm] = useState({
     title: event.title ?? '',
@@ -1006,6 +1018,29 @@ export function EventEditor({
     await commitSave('all')
   }
 
+  const copyToCalendar = async () => {
+    if (!event.id || !event.start_at || !copyCalendarId || copying) return
+    setCopying(true)
+    setError('')
+    try {
+      const response = await apiCall('/api/events/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_ids: [event.id],
+          target_calendar_id: copyCalendarId,
+          target_start: event.start_at,
+          occurrence_only: true,
+        }),
+      })
+      if (!response.ok) throw new Error('copy failed')
+      closeWithAnimation(onSaved)
+    } catch {
+      setError('Could not copy the event. Please try again.')
+      setCopying(false)
+    }
+  }
+
   const performDelete = async (scope: 'all' | 'this' | 'following') => {
     setScopePrompt(null)
     const query =
@@ -1151,6 +1186,33 @@ export function EventEditor({
                 onChange={(e) => set('title', e.target.value)}
               />
             </div>
+
+            {event.id && (
+              <fieldset className="editor-group">
+                <legend>Copy to calendar</legend>
+                <Dropdown
+                  ariaLabel="Copy destination calendar"
+                  value={copyCalendarId}
+                  onChange={setCopyCalendarId}
+                  options={copyCalendars.map((calendar) => ({
+                    value: calendar.id,
+                    label: calendar.name,
+                  }))}
+                  placeholder="No writable calendars"
+                />
+                <p>
+                  Copy the saved event with its details and linked notes
+                  {event.rrule ? ' (this occurrence only)' : ''}.
+                </p>
+                <button
+                  type="button"
+                  disabled={!copyCalendarId || copying || saveState !== 'idle'}
+                  onClick={() => void copyToCalendar()}
+                >
+                  {copying ? 'Copying…' : 'Copy event'}
+                </button>
+              </fieldset>
+            )}
 
             <fieldset className="editor-group">
               <legend>Calendar</legend>
@@ -2475,7 +2537,7 @@ export function EventEditor({
               <button
                 className={`primary ${saveState} ${saveErrorPulse ? 'save-error' : ''}`}
                 type="submit"
-                disabled={saveState !== 'idle'}
+                disabled={saveState !== 'idle' || copying}
                 aria-label={
                   saveState === 'saving'
                     ? 'Saving event'

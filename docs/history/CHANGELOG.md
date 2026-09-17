@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0266](0266-copy-events-across-calendars.md) | Copy events from read-only calendars with details and note links | 2026-09-17 | accepted |
+| [0265](0265-development-branch-updater.md) | Development branch option for the VPS updater | 2026-09-17 | accepted |
 | [0264](0264-vps-update-script.md)                                       | Replace GitHub deployment with an operator-run VPS update script                                      | 2026-09-13 | accepted                   |
 | [0263](0263-public-readme-and-docs.md)                                   | Public README, documentation, showcase data, and product GIFs                                          | 2026-09-13 | accepted                   |
 | [0262](0262-planned-row-swipe-delete.md)                                | Swipe to reveal deletion for planned meals and workouts                                               | 2026-09-06 | accepted                   |
