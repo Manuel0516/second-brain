@@ -1200,12 +1200,14 @@ export function EventEditor({
                   }))}
                   placeholder="No writable calendars"
                 />
-                <p>
+                <p className="connection-help" id="event-copy-help">
                   Copy the saved event with its details and linked notes
                   {event.rrule ? ' (this occurrence only)' : ''}.
                 </p>
                 <button
                   type="button"
+                  className="ghost connection-open-note"
+                  aria-describedby="event-copy-help"
                   disabled={!copyCalendarId || copying || saveState !== 'idle'}
                   onClick={() => void copyToCalendar()}
                 >
