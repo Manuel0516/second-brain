@@ -324,7 +324,7 @@ export function Calendar() {
         {/* Sidebar */}
         <Sidebar
           calendars={calendars}
-          onChanged={loadCalendars}
+          onChanged={refreshCalendar}
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
