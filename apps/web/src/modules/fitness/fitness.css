@@ -1699,7 +1699,8 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  animation: fitnessSmoothIn 0.28s ease-out both;
+  /* ponytail: release transform after entry so touch swipes can move the card. */
+  animation: fitnessSmoothIn 0.28s ease-out backwards;
 }
 
 .fit-planned-card.highlight {

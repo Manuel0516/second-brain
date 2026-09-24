@@ -7,6 +7,7 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0269](0269-planned-swipe-animation-conflict.md) | Release planned-card entrance transforms for touch swipes | 2026-09-24 | accepted |
 | [0268](0268-calendar-visibility-refresh.md) | Refresh events when calendar visibility changes | 2026-09-22 | accepted |
 | [0267](0267-event-copy-ui-consistency.md) | Match event copy helper text and button to the editor | 2026-09-20 | accepted |
 | [0266](0266-copy-events-across-calendars.md) | Copy events from read-only calendars with details and note links | 2026-09-17 | accepted |

@@ -4,6 +4,8 @@ import { SettingsProvider } from '../src/context/SettingsContext'
 import { Overview as FitnessOverview } from '../src/modules/fitness/Overview'
 import { Overview as FoodOverview } from '../src/modules/food/Overview'
 import '../src/styles.css'
+import '../src/modules/fitness/fitness.css'
+import '../src/modules/food/food.css'
 
 const now = new Date().toISOString()
 

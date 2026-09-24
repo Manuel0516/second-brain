@@ -881,7 +881,8 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* ponytail: release transform after entry so touch swipes can move the card. */
+  animation: springUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .food-planned-info {
