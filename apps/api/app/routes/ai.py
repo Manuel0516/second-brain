@@ -649,11 +649,13 @@ async def action_for(
 ) -> AIAction:
     action = (
         await session.execute(
-            select(AIAction).where(
+            select(AIAction)
+            .where(
                 AIAction.id == action_id,
                 AIAction.user_id == user.id,
                 AIAction.conversation_id == conversation_id,
             )
+            .with_for_update()
         )
     ).scalar_one_or_none()
     if not action or action.status != "pending":
@@ -737,8 +739,14 @@ async def confirm(
     if allowed_secure - payload.secure_args.keys():
         raise HTTPException(422, "Required secure arguments are missing")
     args = {**args, **payload.secure_args}
-    before = await tools.preimage(action.tool, args, session, user.id)
-    result = await tools.execute(action.tool, args, session, user.id)
+    if action.origin == "mcp":
+        from app.modules.mcp.domain import execute_approved
+
+        before = None
+        result = await execute_approved(action.tool, args, session, user.id)
+    else:
+        before = await tools.preimage(action.tool, args, session, user.id)
+        result = await tools.execute(action.tool, args, session, user.id)
     if not result["ok"]:
         raise HTTPException(502, str(result["summary"]))
     action.status = "executed"
@@ -754,6 +762,8 @@ async def confirm(
         return await action_result_stream(action, result["summary"], ok=True)
     message.status = "complete"
     await session.commit()
+    if action.origin == "mcp":
+        return await action_result_stream(action, result["summary"], ok=True)
     settings = await get_ai_settings(session, user)
     return StreamingResponse(
         agent.run_detached(
@@ -794,6 +804,8 @@ async def reject(
         return await action_result_stream(action, "user rejected this action", ok=False)
     message.status = "rejected"
     await session.commit()
+    if action.origin == "mcp":
+        return await action_result_stream(action, "user rejected this action", ok=False)
     settings = await get_ai_settings(session, user)
     return StreamingResponse(
         agent.run_detached(

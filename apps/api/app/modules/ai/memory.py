@@ -89,7 +89,9 @@ calendar_id or assume a color.
 }
 
 
-async def remember(session: AsyncSession, user_id: str, fact: str, category: str = "fact") -> str:
+async def remember(
+    session: AsyncSession, user_id: str, fact: str, category: str = "fact", *, commit: bool = True
+) -> str:
     if category not in _CATEGORIES:
         category = "fact"
     normalized = re.sub(r"\s+", " ", fact.strip().casefold())
@@ -100,7 +102,10 @@ async def remember(session: AsyncSession, user_id: str, fact: str, category: str
     if existing:
         return "Already remembered."
     session.add(AIMemory(user_id=user_id, fact=fact.strip(), category=category, normalized_key=key))
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     return "Remembered." if category == "fact" else f"Remembered ({category})."
 
 

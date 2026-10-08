@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     openrouter_model: str = "google/gemini-2.5-flash"
     ai_internal_api_url: str = "http://127.0.0.1:8000"
 
+    # MCP is opt-in. OAuth subjects are explicitly bound to existing local accounts.
+    mcp_enabled: bool = False
+    mcp_resource_url: str = "http://localhost:8000/api/mcp"
+    mcp_issuer_url: str = ""
+    mcp_jwks_url: str = ""
+    mcp_subject_users: dict[str, str] = Field(default_factory=dict)
+    mcp_allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost:*", "127.0.0.1:*"])
+
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
 

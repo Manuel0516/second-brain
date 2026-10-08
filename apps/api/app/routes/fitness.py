@@ -867,6 +867,16 @@ async def create_session(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> WorkoutSession:
+    ws = await build_workout_session(data, user, session)
+    await session.commit()
+    await session.refresh(ws)
+    return ws
+
+
+async def build_workout_session(
+    data: SessionCreate, user: User, session: AsyncSession
+) -> WorkoutSession:
+    """Build a session and its calendar link in the caller's transaction."""
     ws = WorkoutSession(
         user_id=user.id,
         date=data.date,
@@ -874,6 +884,7 @@ async def create_session(
         status=data.status,
         scheduled_at=data.scheduled_at,
         notes=data.notes or {},
+        plan=data.plan,
     )
     session.add(ws)
     await session.flush()
@@ -904,8 +915,6 @@ async def create_session(
         )
         session.add(link)
 
-    await session.commit()
-    await session.refresh(ws)
     return ws
 
 

@@ -6,10 +6,11 @@ import math
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    AIMemory,
     AISearchDocument,
     AISettings,
     Calendar,
@@ -31,30 +32,65 @@ def _text(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-async def _sources(session: AsyncSession, user_id: str) -> list[tuple[str, str, str, str]]:
+async def _sources(
+    session: AsyncSession,
+    user_id: str,
+    source_types: set[str] | None = None,
+    memory_category: str | None = None,
+) -> list[tuple[str, str, str, str]]:
+    allowed = source_types or {"page", "event", "meal_log", "workout_session", "memory"}
     pages = list(
         (
             await session.execute(
-                select(Page).where(Page.user_id == user_id, Page.deleted_at.is_(None))
+                select(Page).where(
+                    Page.user_id == user_id,
+                    Page.deleted_at.is_(None),
+                    true() if "page" in allowed else false(),
+                )
             )
         ).scalars()
     )
     events = list(
         (
             await session.execute(
-                select(CalendarEvent).join(Calendar).where(Calendar.user_id == user_id)
+                select(CalendarEvent)
+                .join(Calendar)
+                .where(Calendar.user_id == user_id, true() if "event" in allowed else false())
             )
         ).scalars()
     )
     meals = list(
-        (await session.execute(select(MealLog).where(MealLog.user_id == user_id))).scalars()
+        (
+            await session.execute(
+                select(MealLog).where(
+                    MealLog.user_id == user_id, true() if "meal_log" in allowed else false()
+                )
+            )
+        ).scalars()
     )
     workouts = list(
         (
-            await session.execute(select(WorkoutSession).where(WorkoutSession.user_id == user_id))
+            await session.execute(
+                select(WorkoutSession).where(
+                    WorkoutSession.user_id == user_id,
+                    true() if "workout_session" in allowed else false(),
+                )
+            )
         ).scalars()
     )
+    memories = list(
+        (
+            await session.scalars(
+                select(AIMemory).where(
+                    AIMemory.user_id == user_id,
+                    true() if "memory" in allowed else false(),
+                    *([AIMemory.category == memory_category] if memory_category else []),
+                )
+            )
+        ).all()
+    )
     return [
+        *(("memory", row.id, row.category, row.fact) for row in memories),
         *(("page", row.id, row.title, _text(row.content)) for row in pages),
         *(
             ("event", row.id, row.title, " ".join(filter(None, [row.description, row.location])))
@@ -115,8 +151,13 @@ async def _embed(texts: list[str], settings: AISettings) -> list[list[float]] | 
         return None
 
 
-async def sync(session: AsyncSession, user_id: str, settings: AISettings) -> None:
-    sources = await _sources(session, user_id)
+async def sync(
+    session: AsyncSession,
+    user_id: str,
+    settings: AISettings,
+    source_types: set[str] | None = None,
+) -> None:
+    sources = await _sources(session, user_id, source_types)
     existing = {
         (row.source_type, row.source_id): row
         for row in (
@@ -144,7 +185,7 @@ async def sync(session: AsyncSession, user_id: str, settings: AISettings) -> Non
         if row.content_hash != digest or row.embedding_model != settings.embedding_model:
             row.title, row.content, row.content_hash = title, content, digest
             changed.append((row, f"{title}\n{content}"))
-    stale = set(existing) - live
+    stale = {key for key in set(existing) - live if not source_types or key[0] in source_types}
     if stale:
         await session.execute(
             delete(AISearchDocument).where(
@@ -159,10 +200,19 @@ async def sync(session: AsyncSession, user_id: str, settings: AISettings) -> Non
 
 
 async def search(
-    session: AsyncSession, user_id: str, query: str, limit: int = 10
+    session: AsyncSession,
+    user_id: str,
+    query: str,
+    limit: int = 10,
+    source_types: set[str] | None = None,
+    memory_category: str | None = None,
 ) -> list[dict[str, Any]]:
-    settings = await session.get(AISettings, user_id) or AISettings(user_id=user_id)
-    await sync(session, user_id, settings)
+    settings = await session.get(AISettings, user_id)
+    if settings is None:
+        settings = AISettings(user_id=user_id)
+        session.add(settings)
+        await session.flush()
+    await sync(session, user_id, settings, source_types)
     rows = list(
         (
             await session.execute(
@@ -170,6 +220,13 @@ async def search(
             )
         ).scalars()
     )
+    # Filter before ranking so unrelated/sensitive records never enter results.
+    rows = [
+        row
+        for row in rows
+        if (not source_types or row.source_type in source_types)
+        and (not memory_category or row.title == memory_category)
+    ]
     query_vector = await _embed([query], settings)
     words = query.casefold().split()
 

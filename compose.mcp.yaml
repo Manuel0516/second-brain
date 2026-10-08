@@ -1,0 +1,11 @@
+# Opt-in environment only. No ports, public routes, networks, or tunnel credentials.
+# Operator: docker compose -f compose.yaml -f compose.mcp.yaml up -d --build api
+services:
+  api:
+    environment:
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_RESOURCE_URL: ${MCP_RESOURCE_URL:-https://brain.example.com/api/mcp}
+      MCP_ISSUER_URL: ${MCP_ISSUER_URL:-}
+      MCP_JWKS_URL: ${MCP_JWKS_URL:-}
+      MCP_SUBJECT_USERS: ${MCP_SUBJECT_USERS:-{}}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-["localhost:*","127.0.0.1:*","secondbrain-api:*"]}

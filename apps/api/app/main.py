@@ -14,6 +14,7 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from app.config import get_settings
 from app.database import async_session_factory, check_database
 from app.models import Calendar, LoginAttempt, User
+from app.modules.mcp.server import create_server, transport
 from app.routes import (
     admin,
     ai,
@@ -32,6 +33,9 @@ from app.security import hash_password
 from app.services import google_sync, ics_sync
 
 logger = logging.getLogger(__name__)
+
+mcp_server = create_server(get_settings()) if get_settings().mcp_enabled else None
+mcp_transport = transport(mcp_server) if mcp_server else None
 
 
 class HealthResponse(BaseModel):
@@ -73,7 +77,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     poller = asyncio.create_task(calendar_sync_loop())
     try:
-        yield
+        if mcp_server:
+            async with mcp_server.session_manager.run():
+                yield
+        else:
+            yield
     finally:
         poller.cancel()
 
@@ -241,3 +249,8 @@ async def cleanup_old_login_attempts() -> None:
             await session.delete(attempt)
 
         await session.commit()
+
+
+# Last mount leaves every existing API route unchanged. MCP is disabled by default.
+if mcp_transport is not None:
+    app.mount("/", mcp_transport)
