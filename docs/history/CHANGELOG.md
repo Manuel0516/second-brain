@@ -7,6 +7,12 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0276](0276-wardrobe-native-connections-and-context.md) | Native outfit event connections, calendar-aware AI, and compact mobile navigation | 2026-11-06 | accepted |
+| [0275](0275-wardrobe-ai-and-quiet-actions.md) | Wardrobe AI proposals, Lund weather planning, and quieter actions | 2026-11-06 | accepted |
+| [0274](0274-wardrobe-actions-and-settings.md) | Wardrobe action buttons, category management, and default calendar | 2026-11-06 | accepted |
+| [0273](0273-wardrobe-navigation-and-demo.md) | Wardrobe navigation, styled selectors, and sample data | 2026-11-06 | accepted |
+| [0272](0272-login-validation-errors.md) | Readable login validation errors and clearer authenticator help | 2026-11-06 | accepted |
+| [0271](0271-native-wardrobe.md) | Native wardrobe catalog, outfits, and calendar scheduling | 2026-11-06 | accepted |
 | [0270](0270-chatgpt-mcp-integration.md) | Private ChatGPT MCP tools, OAuth scopes and application approval | 2026-10-08 | accepted |
 | [0269](0269-planned-swipe-animation-conflict.md) | Release planned-card entrance transforms for touch swipes | 2026-09-24 | accepted |
 | [0268](0268-calendar-visibility-refresh.md) | Refresh events when calendar visibility changes | 2026-09-22 | accepted |

@@ -221,11 +221,36 @@ DEFAULT_FOOD_ANALYZE_PROMPT = (
 )
 
 
+DEFAULT_WARDROBE_CATEGORIES = [
+    "Tops",
+    "Bottoms",
+    "Dresses",
+    "Outerwear",
+    "Shoes",
+    "Accessories",
+    "Activewear",
+    "Other",
+]
+
+
 class UserSettings(Base):
     __tablename__ = "user_settings"
 
     user_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("users.id"), primary_key=True
+    )
+    wardrobe_ai_outfits_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    wardrobe_weather_planning_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    wardrobe_weather_city: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    wardrobe_categories: Mapped[list[str]] = mapped_column(
+        JSON, default=lambda: list(DEFAULT_WARDROBE_CATEGORIES), nullable=False
+    )
+    wardrobe_default_calendar_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("calendars.id", ondelete="SET NULL"), nullable=True
     )
     # Appearance / general
     theme: Mapped[str] = mapped_column(String(10), default="system", nullable=False)
@@ -925,3 +950,48 @@ class DeviceGrant(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WardrobeGarment(Base):
+    __tablename__ = "wardrobe_garments"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    brand: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    size: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    color: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    photo_file_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class WardrobeOutfit(Base):
+    __tablename__ = "wardrobe_outfits"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class WardrobeOutfitGarment(Base):
+    __tablename__ = "wardrobe_outfit_garments"
+
+    outfit_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("wardrobe_outfits.id", ondelete="CASCADE"), primary_key=True
+    )
+    garment_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("wardrobe_garments.id"), primary_key=True
+    )

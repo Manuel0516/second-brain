@@ -28,6 +28,8 @@ from app.routes import (
     integrations,
     notes,
     settings,
+    wardrobe,
+    wardrobe_ai,
 )
 from app.security import hash_password
 from app.services import google_sync, ics_sync
@@ -99,6 +101,8 @@ app.include_router(settings.router)
 app.include_router(files.router)
 app.include_router(fitness.router)
 app.include_router(food.router)
+app.include_router(wardrobe.router)
+app.include_router(wardrobe_ai.router)
 app.include_router(admin.router)
 app.include_router(integrations.router)
 

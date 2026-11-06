@@ -40,7 +40,7 @@ class OpenRouterProvider:
     async def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        response = await self._post({"messages": messages, "tools": tools})
+        response = await self._post({"messages": messages, **({"tools": tools} if tools else {})})
         return dict(response.json()["choices"][0]["message"])
 
     async def stream(

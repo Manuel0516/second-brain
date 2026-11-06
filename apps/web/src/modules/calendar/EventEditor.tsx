@@ -10,6 +10,7 @@ import { useSettings } from '../../context/SettingsContext'
 import { onColor } from './colors'
 import { orderCalendars } from './order'
 import { SESSION_TYPES, SessionTypeIcon } from '../fitness/sessionTypes'
+import type { Outfit } from '../wardrobe/api'
 import type { MealLog } from '../food/api'
 import type { WorkoutSession } from '../fitness/api'
 import type { CalendarData, CalendarEvent, EventConnections } from './types'
@@ -73,12 +74,18 @@ interface Props {
   onOpenNote?: (pageId: string) => void
   onOpenFitness?: (sessionId: string) => void
   onOpenFood?: (mealLogId: string) => void
+  onOpenWardrobe?: (outfitId: string) => void
   onDraftChange?: (event: Partial<CalendarEvent>) => void
 }
 
 interface EventLink {
   id: string
-  target_type: 'page' | 'event' | 'workout_session' | 'meal_log'
+  target_type:
+    | 'page'
+    | 'event'
+    | 'workout_session'
+    | 'meal_log'
+    | 'wardrobe_outfit'
   target_id: string
   relation: string
   direction: 'incoming' | 'outgoing'
@@ -208,6 +215,7 @@ export function EventEditor({
   onOpenNote,
   onOpenFitness,
   onOpenFood,
+  onOpenWardrobe,
   onDraftChange,
 }: Props) {
   const { settings } = useSettings()
@@ -247,6 +255,8 @@ export function EventEditor({
     link: event.link ?? '',
     reminder_minutes: event.reminder_minutes?.toString() ?? '',
     description: event.description ?? '',
+    connect_wardrobe: Boolean(event.connections?.wardrobe),
+    outfit_id: event.connections?.wardrobe?.outfit_id ?? '',
     connect_notes: Boolean(event.connections?.notes),
     note_title: event.connections?.notes?.title ?? event.title ?? '',
     note_folder_id: event.connections?.notes?.folder_id ?? null,
@@ -264,6 +274,20 @@ export function EventEditor({
     meal_type: event.connections?.food?.meal_type ?? 'lunch',
     food_notes: event.connections?.food?.notes ?? '',
   })
+  const [wardrobeOutfits, setWardrobeOutfits] = useState<Outfit[]>([])
+  useEffect(() => {
+    if (!form.connect_wardrobe) return
+    let active = true
+    void apiCall('/api/wardrobe/outfits')
+      .then((response) => (response.ok ? response.json() : []))
+      .then((items: Outfit[]) => {
+        if (active) setWardrobeOutfits(items)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [form.connect_wardrobe])
   // Fitness workout-type card selection: mirrors form.workout_type, but keeps
   // "Custom" highlighted while its text input is still empty.
   const initialWorkoutType = event.connections?.fitness?.workout_type ?? ''
@@ -407,6 +431,15 @@ export function EventEditor({
         const links = await response.json()
         if (Array.isArray(links) && active) {
           setEventLinks(links)
+          const outfit = links.find(
+            (link: EventLink) => link.target_type === 'wardrobe_outfit',
+          )
+          if (outfit)
+            setForm((current) => ({
+              ...current,
+              connect_wardrobe: true,
+              outfit_id: outfit.target_id,
+            }))
           // Links made elsewhere (notes side) still flip the toggle on.
           if (links.some((link) => link.target_type === 'page')) {
             setForm((current) =>
@@ -458,7 +491,20 @@ export function EventEditor({
 
   const unlinkItem = async (linkId: string) => {
     const response = await apiCall(`/api/links/${linkId}`, { method: 'DELETE' })
-    if (response.ok) await refreshLinks()
+    if (response.ok) {
+      if (
+        eventLinks.some(
+          (link) =>
+            link.id === linkId && link.target_type === 'wardrobe_outfit',
+        )
+      )
+        setForm((current) => ({
+          ...current,
+          connect_wardrobe: false,
+          outfit_id: '',
+        }))
+      await refreshLinks()
+    }
   }
 
   // ── Link existing food / fitness ──────────────────────────────────────
@@ -791,7 +837,10 @@ export function EventEditor({
       }
       const saveStartedAt = performance.now()
       setSaveState('saving')
+      if (form.connect_wardrobe && !form.outfit_id)
+        return fail('Choose an outfit to connect.')
       const connections: EventConnections = {
+        wardrobe: form.connect_wardrobe ? { outfit_id: form.outfit_id } : null,
         notes: form.connect_notes
           ? {
               title: form.note_title.trim() || form.title.trim(),
@@ -1267,7 +1316,8 @@ export function EventEditor({
                         disabled={
                           link.target_type !== 'page' &&
                           link.target_type !== 'workout_session' &&
-                          link.target_type !== 'meal_log'
+                          link.target_type !== 'meal_log' &&
+                          link.target_type !== 'wardrobe_outfit'
                         }
                         onClick={() => {
                           if (link.target_type === 'page')
@@ -1277,6 +1327,10 @@ export function EventEditor({
                           else if (link.target_type === 'workout_session')
                             closeWithAnimation(() =>
                               onOpenFitness?.(link.target_id),
+                            )
+                          else if (link.target_type === 'wardrobe_outfit')
+                            closeWithAnimation(() =>
+                              onOpenWardrobe?.(link.target_id),
                             )
                           else if (link.target_type === 'meal_log')
                             closeWithAnimation(() =>
@@ -1890,6 +1944,55 @@ export function EventEditor({
                 Prepare related records that will live in the other modules.
               </p>
               <div className="connection-list">
+                <div
+                  className={`connection-card ${form.connect_wardrobe ? 'active' : ''}`}
+                >
+                  <label className="toggle-row">
+                    <span>Wardrobe</span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={form.connect_wardrobe}
+                      disabled={
+                        Boolean(event.id) &&
+                        eventLinks.some(
+                          (link) => link.target_type === 'wardrobe_outfit',
+                        )
+                      }
+                      onChange={(event) =>
+                        set('connect_wardrobe', event.target.checked)
+                      }
+                    />
+                  </label>
+                  {form.connect_wardrobe &&
+                    (event.id &&
+                    eventLinks.some(
+                      (link) => link.target_type === 'wardrobe_outfit',
+                    ) ? (
+                      <p className="connection-help">
+                        Managed from the linked outfit — open or unlink it from
+                        Linked above.
+                      </p>
+                    ) : (
+                      <div className="connection-fields">
+                        <Dropdown
+                          ariaLabel="Connected outfit"
+                          value={form.outfit_id}
+                          options={wardrobeOutfits.map((item) => ({
+                            value: item.id,
+                            label: item.name,
+                          }))}
+                          onChange={(value) => set('outfit_id', value)}
+                          placeholder="Choose an outfit"
+                        />
+                        {wardrobeOutfits.length === 0 && (
+                          <p className="connection-help">
+                            Create an outfit in Wardrobe first.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                </div>
                 <div
                   className={`connection-card ${form.connect_notes ? 'active' : ''}`}
                 >

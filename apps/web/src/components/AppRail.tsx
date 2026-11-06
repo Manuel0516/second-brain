@@ -1,7 +1,13 @@
 import { useSettings } from '../context/SettingsContext'
 import { logoAssetFor } from '../lib/appearance'
 
-export type ActiveRail = 'calendar' | 'notes' | 'fitness' | 'food' | 'settings'
+export type ActiveRail =
+  | 'calendar'
+  | 'notes'
+  | 'fitness'
+  | 'food'
+  | 'wardrobe'
+  | 'settings'
 
 const IconCalendar = () => (
   <svg
@@ -229,6 +235,24 @@ export function AppRail({ active, onNavigate }: Props) {
         <IconFood />
       </RailBtn>
 
+      <RailBtn
+        active={active === 'wardrobe'}
+        title="Wardrobe"
+        onClick={() => nav('/wardrobe')}
+      >
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M7 3 3 5 1 9l4 2v6h10v-6l4-2-2-4-4-2c0 3-6 3-6 0Z" />
+        </svg>
+      </RailBtn>
       <RailBtn title="Finance">
         <IconFinance />
       </RailBtn>

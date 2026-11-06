@@ -99,3 +99,24 @@ This subsumes it rather than sitting alongside it: a vision-capable provider cal
 `log_food` tool *is* the photo-capture feature — not a separate system. Send a photo in the
 assistant chat, it calls `log_food` with structured macros, same confirmation flow as any
 other write action.
+
+## 7. Wardrobe outfit proposals
+
+Wardrobe has two independently opt-in switches under Settings → Wardrobe: AI outfit
+creation and weather-based planning. Both are disabled by default and use the same
+provider/model configured under AI settings. Weather planning additionally needs a city
+and uses the selected date's Open-Meteo temperature, rain probability, and wind forecast
+(up to 15 days ahead). City/forecast context and active garment metadata are supplied to
+the provider; wardrobe photos are not sent.
+
+Suggestions appear as review cards. The model has no write tools in this flow: the user
+explicitly saves an outfit or saves and schedules it. Invalid, archived, or other users'
+garment IDs are rejected. Missing provider configuration and unavailable weather return
+clear errors rather than fabricated outfits or forecasts.
+
+Wardrobe suggestions also consider visible calendar events on the selected day, using
+the existing timezone, recurrence, sharing, and visibility rules. The model receives
+event times, titles, locations, and bounded descriptions. Existing saved outfit garment
+combinations are supplied as exclusions, and the API rejects saved/repeated combinations
+independently of their names or item order. Weather and manual planning share a single
+date/calendar form.

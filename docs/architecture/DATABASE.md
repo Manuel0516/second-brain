@@ -487,3 +487,69 @@ Per-day quick-log totals for water, vegetables, and fruit outside meals. One row
 | 031 | `ai_memories.category` — fact/profile/preference/correction memory categorization |
 
 Always check `alembic current` before writing a new migration.
+
+---
+
+### Wardrobe (migration 037)
+
+- `wardrobe_garments`: UUID `id`, indexed owner `user_id` → users, required `name`
+  and custom `category`, `brand`, `size`, `color`, `notes`, `archived`, optional
+  `photo_file_id` → files (`ON DELETE SET NULL`). Photos use the existing authenticated
+  upload/download endpoints; the wardrobe API accepts only the owner's image files.
+- `wardrobe_outfits`: UUID `id`, indexed owner `user_id` → users, `name`, `notes`.
+- `wardrobe_outfit_garments`: composite primary key (`outfit_id`, `garment_id`), foreign
+  keys to outfits (`ON DELETE CASCADE`) and garments. A garment used in an outfit cannot
+  be deleted; remove it from outfits or archive it instead.
+
+Outfit schedules reuse `calendar_events` and `links`, with no separate scheduling table.
+`POST /api/wardrobe/schedule` creates an all-day event in an owned local calendar using
+IANA timezone day boundaries (including DST), marks `created_by = system:wardrobe`, and
+creates an `event` → `wardrobe_outfit` edge with relation `logged_from`, matching Food and
+Fitness. The event stores `connections.wardrobe.outfit_id`, never an outfit URL. Event
+editors resolve these edges through the existing Linked panel. Calendar edits or deletions
+are reflected by the schedule query. Removing a scheduled outfit disconnects it while
+preserving both the calendar event and saved outfit; deleting a saved outfit removes
+membership, graph edges, and wardrobe connection intent while preserving calendar history. Uploaded files are retained when garments or photos are
+removed because files may be reused elsewhere.
+
+### Wardrobe preferences (migration 038)
+
+`user_settings.wardrobe_categories` is a non-null JSON array initialized with the eight
+built-in garment categories. `wardrobe_default_calendar_id` is an optional calendar UUID
+foreign key with `ON DELETE SET NULL`. These are managed by the owner-scoped
+`GET/PUT /api/wardrobe/preferences` endpoints; the selected calendar must be owned and
+local. The frontend uses this calendar ahead of the app-wide default.
+
+Preferences reads include categories already used by garments so older custom categories
+remain visible. Removing a category used by any active or archived garment returns 409.
+`POST /api/wardrobe/categories/rename` atomically updates that user's category list and
+all matching garments, preserving other users' records and existing outfit membership.
+
+### Wardrobe AI preferences (migration 039)
+
+`user_settings.wardrobe_ai_outfits_enabled` and `wardrobe_weather_planning_enabled` are
+non-null booleans defaulting to false. `wardrobe_weather_city` is a non-null string (200
+characters, default empty). The wardrobe preferences API exposes all three fields and
+preserves them when categories are renamed.
+
+`POST /api/wardrobe/ai/suggestions` returns proposals only. The matching opt-in flag must
+be enabled. It reads active, owned garments, uses the existing configured AI provider,
+and validates returned garment UUIDs against that catalog. Weather mode geocodes the
+configured city and retrieves a date-specific Open-Meteo forecast; only today through
+15 days ahead are accepted. Existing outfit/schedule endpoints persist a proposal only
+when the user chooses Save or Save and schedule. No separate AI-outfit table is needed.
+
+### Native wardrobe event connections (migration 040)
+
+`EventConnections.wardrobe` contains an optional `outfit_id`. Calendar create/edit/copy
+uses the same `logged_from` graph relationship as Food/Fitness, with outfit ownership
+validation and native Linked-panel open/unlink controls. Outfit templates are reused
+rather than duplicated when events are copied or an occurrence is overridden. Migration
+040 normalizes old wardrobe edge relations and replaces generated outfit URLs with
+connection data. User-entered unrelated URLs are preserved.
+
+AI proposals additionally read the selected timezone-local day's visible calendar events
+through the existing recurrence/share-aware calendar query. Prompt and response include
+that day context. Saved outfit combinations are compared as unordered garment UUID sets;
+renaming or reordering an existing combination cannot bypass duplicate rejection. Duplicate
+candidates in a response are filtered; an all-duplicate response returns an actionable error.

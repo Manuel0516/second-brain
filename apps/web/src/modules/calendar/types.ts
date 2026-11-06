@@ -18,6 +18,7 @@ export interface CalendarData {
 }
 
 export interface EventConnections {
+  wardrobe?: { outfit_id: string } | null
   notes?: {
     title: string
     folder_id?: string | null

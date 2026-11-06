@@ -586,3 +586,66 @@ it('copies a saved university occurrence into Personal without editing the sourc
     occurrence_only: true,
   })
 })
+
+it('saves a wardrobe connection without placing the outfit in the URL field', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify(
+          String(input).endsWith('/api/wardrobe/outfits')
+            ? [
+                {
+                  id: 'outfit-1',
+                  name: 'Office day',
+                  notes: '',
+                  garment_ids: [],
+                },
+              ]
+            : String(input).endsWith('/api/pages')
+              ? []
+              : { id: 'event-1' },
+        ),
+        { status: 200 },
+      ),
+    ),
+  )
+  render(
+    <EventEditor
+      calendars={[
+        {
+          id: 'calendar-1',
+          name: 'Default',
+          color: '#22d3ee',
+          is_visible: true,
+          source: 'local',
+        },
+      ]}
+      event={{
+        title: 'Office',
+        start_at: '2026-11-06T10:00:00Z',
+        end_at: '2026-11-06T11:00:00Z',
+      }}
+      onClose={vi.fn()}
+      onSaved={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole('switch', { name: 'Wardrobe' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Connected outfit' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Office day' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([path, options]) =>
+          String(path) === '/api/events' && options?.method === 'POST',
+      ),
+    ).toBe(true),
+  )
+  const request = fetchMock.mock.calls.find(
+    ([path, options]) =>
+      String(path) === '/api/events' && options?.method === 'POST',
+  )!
+  const payload = JSON.parse(request[1]!.body as string)
+  expect(payload.connections.wardrobe).toEqual({ outfit_id: 'outfit-1' })
+  expect(payload.link).toBeNull()
+})

@@ -572,6 +572,9 @@ export function Calendar() {
               navigate(`/fitness?tab=history&edit_session=${sessionId}`)
             else navigate(`/fitness?session=${sessionId}`)
           }}
+          onOpenWardrobe={(outfitId) =>
+            navigate(`/wardrobe?tab=outfits&outfit=${outfitId}`)
+          }
           onOpenFood={(mealLogId) => {
             const isPast = editorEvent?.end_at
               ? new Date(editorEvent.end_at) < new Date()

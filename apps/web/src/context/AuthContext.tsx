@@ -5,7 +5,7 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { apiCall, refreshAccessToken } from '../lib/api'
+import { apiCall, apiErrorMessage, refreshAccessToken } from '../lib/api'
 
 interface User {
   id: string
@@ -83,11 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      if (error.detail === 'TOTP code required') {
+      const error = await response
+        .clone()
+        .json()
+        .catch(() => null)
+      if (error?.detail === 'TOTP code required') {
         return 'totp_required'
       }
-      throw new Error(error.detail || 'Login failed')
+      throw new Error(await apiErrorMessage(response, 'Login failed'))
     }
 
     const data = await response.json()

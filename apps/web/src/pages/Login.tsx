@@ -350,7 +350,8 @@ export function Login() {
               marginTop: 14,
             }}
           >
-            Authenticator code requested after password
+            Authenticator code requested only if two-factor authentication is
+            enabled
           </p>
         )}
       </div>

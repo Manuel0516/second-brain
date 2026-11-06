@@ -197,3 +197,12 @@ create events on their own calendars (a workout log writes a Fitness-calendar ev
 due date writes a Finance-calendar event), the `CalendarEvent` API needs a `created_by`
 concept (`"user"` vs `"system:fitness"` vs `"system:finance"`) so the UI can, e.g., warn
 before letting you manually delete a system-generated event rather than its source log.
+
+## Wardrobe connections
+
+The event editor includes a Wardrobe connection alongside Food/Fitness. Choose a saved
+outfit to create an `event` → `wardrobe_outfit` graph edge with relation `logged_from`.
+The chosen template is stored in `connections.wardrobe.outfit_id`; it is not put in the
+event URL field. The Linked panel opens and unlinks outfits with the existing controls.
+Copies and individual occurrence overrides retain their outfit connection. Unlinking or
+removing a scheduled outfit preserves the underlying calendar event and outfit template.

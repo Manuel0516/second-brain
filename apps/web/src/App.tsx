@@ -14,6 +14,7 @@ import { SettingsLayout } from './modules/settings/SettingsLayout'
 import { GeneralSettings } from './modules/settings/GeneralSettings'
 import { CalendarSettings } from './modules/settings/CalendarSettings'
 import { FitnessSettings } from './modules/settings/FitnessSettings'
+import { WardrobeSettings } from './modules/settings/WardrobeSettings'
 import { FoodSettings } from './modules/settings/FoodSettings'
 import { NotesSettings } from './modules/settings/NotesSettings'
 import { AdminSettings } from './modules/settings/AdminSettings'
@@ -36,6 +37,12 @@ const Fitness = lazy(() =>
 const Food = lazy(() =>
   import('./modules/food/Food').then((module) => ({
     default: module.Food,
+  })),
+)
+
+const Wardrobe = lazy(() =>
+  import('./modules/wardrobe/Wardrobe').then((module) => ({
+    default: module.Wardrobe,
   })),
 )
 
@@ -116,12 +123,23 @@ function AppRoutes() {
             </Suspense>
           }
         />
+        <Route
+          path="/wardrobe"
+          element={
+            <Suspense
+              fallback={<main className="route-loading">Loading…</main>}
+            >
+              <Wardrobe />
+            </Suspense>
+          }
+        />
         <Route path="/settings" element={<SettingsLayout />}>
           <Route index element={<Navigate to="/settings/general" replace />} />
           <Route path="general" element={<GeneralSettings />} />
           <Route path="calendar" element={<CalendarSettings />} />
           <Route path="fitness" element={<FitnessSettings />} />
           <Route path="food" element={<FoodSettings />} />
+          <Route path="wardrobe" element={<WardrobeSettings />} />
           <Route path="notes" element={<NotesSettings />} />
           <Route path="ai" element={<AISettings />} />
           <Route path="admin" element={<AdminSettings />} />

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { AuthProvider, useAuth } from './AuthContext'
@@ -8,7 +9,10 @@ const apiMocks = vi.hoisted(() => ({
   refreshAccessToken: vi.fn(),
 }))
 
-vi.mock('../lib/api', () => apiMocks)
+vi.mock('../lib/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/api')>()),
+  ...apiMocks,
+}))
 
 const userResponse = () =>
   new Response(
@@ -88,3 +92,57 @@ test('refreshes an expired access token before retrying logout', async () => {
     method: 'POST',
   })
 })
+
+function LoginProbe() {
+  const { login } = useAuth()
+  const [result, setResult] = useState('')
+  return (
+    <>
+      <button
+        onClick={() => {
+          void login('wardrobe@example.test', 'test-password')
+            .then(setResult)
+            .catch((error: Error) => setResult(error.message))
+        }}
+      >
+        Sign in
+      </button>
+      <p role="status">{result}</p>
+    </>
+  )
+}
+
+test.each([
+  [
+    422,
+    {
+      detail: [
+        {
+          msg: 'Invalid email address',
+          type: 'value_error',
+          loc: ['body', 'email'],
+        },
+      ],
+    },
+    'Invalid email address',
+  ],
+  [401, { detail: 'Invalid credentials' }, 'Invalid credentials'],
+  [401, { detail: 'TOTP code required' }, 'totp_required'],
+  [500, { detail: { unexpected: 'object' } }, 'Login failed'],
+])(
+  'shows readable login results for HTTP %s',
+  async (status, body, message) => {
+    apiMocks.apiCall
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { status }))
+    render(
+      <AuthProvider>
+        <LoginProbe />
+      </AuthProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(message),
+    )
+  },
+)

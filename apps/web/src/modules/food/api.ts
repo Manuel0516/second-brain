@@ -57,14 +57,7 @@ export interface FoodSummary {
   days: DaySummary[]
 }
 
-export interface FileUpload {
-  id: string
-  url: string
-  name: string
-  content_type: string
-  size: number
-  created_at: string
-}
+export { uploadFile, type FileUpload } from '../../lib/files'
 
 // ── Meal Logs ──────────────────────────────────────────────────────────
 
@@ -187,22 +180,6 @@ export async function upsertExtras(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || 'Failed to update daily extras')
-  }
-  return res.json()
-}
-
-// ── File Upload ────────────────────────────────────────────────────────
-
-export async function uploadFile(file: File): Promise<FileUpload> {
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await apiCall('/api/files', {
-    method: 'POST',
-    body: formData,
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || 'Failed to upload file')
   }
   return res.json()
 }

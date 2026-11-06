@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -28,6 +29,7 @@ from app.models import (
     Page,
     ResourceShare,
     User,
+    WardrobeOutfit,
     WorkoutSession,
 )
 
@@ -127,7 +129,17 @@ class FoodConnection(BaseModel):
     notes: str | None = Field(default=None, max_length=10_000)
 
 
+class WardrobeConnection(BaseModel):
+    outfit_id: str
+
+    @field_validator("outfit_id")
+    @classmethod
+    def valid_id(cls, value: str) -> str:
+        return str(UUID(value))
+
+
 class EventConnections(BaseModel):
+    wardrobe: WardrobeConnection | None = None
     notes: NoteConnection | None = None
     finance: FinanceConnection | None = None
     fitness: FitnessConnection | None = None
@@ -562,6 +574,36 @@ async def _delete_event_links(session: AsyncSession, event_ids: list[str]) -> No
 
 # ponytail: caps unbounded recurring series at ~1yr of linked entries; a
 # top-up background job would be the upgrade path if a longer horizon matters.
+async def _sync_outfit_link(session: AsyncSession, user: User, event: CalendarEvent) -> None:
+    wardrobe = EventConnections.model_validate(event.connections or {}).wardrobe
+    if wardrobe is not None:
+        outfit = await session.scalar(
+            select(WardrobeOutfit).where(
+                WardrobeOutfit.id == wardrobe.outfit_id, WardrobeOutfit.user_id == user.id
+            )
+        )
+        if outfit is None:
+            raise HTTPException(404, "Outfit not found")
+    await session.execute(
+        delete(Link).where(
+            Link.source_type == "event",
+            Link.source_id == event.id,
+            Link.target_type == "wardrobe_outfit",
+            Link.relation == "logged_from",
+        )
+    )
+    if wardrobe is not None:
+        session.add(
+            Link(
+                source_type="event",
+                source_id=event.id,
+                target_type="wardrobe_outfit",
+                target_id=wardrobe.outfit_id,
+                relation="logged_from",
+            )
+        )
+
+
 MAX_LINKED_OCCURRENCES = 366
 
 
@@ -974,6 +1016,8 @@ async def create_event(
         )
         await _create_linked_entries(session, user, event, fitness, food, occurrence_starts)
 
+    await session.flush()
+    await _sync_outfit_link(session, user, event)
     await session.commit()
     await session.refresh(event)
     await notify_calendar(event.calendar_id, session)
@@ -1009,6 +1053,8 @@ async def patch_event(
             _as_utc(data.occurrence_start).isoformat(),
         ]
         session.add(override)
+        await session.flush()
+        await _sync_outfit_link(session, user, override)
         await session.commit()
         await session.refresh(override)
         await notify_calendar(override.calendar_id, session)
@@ -1072,6 +1118,12 @@ async def patch_event(
             if meal.status != "planned":
                 meal.date = event.start_at
 
+    await session.flush()
+    if (
+        "connections" in values
+        or EventConnections.model_validate(event.connections or {}).wardrobe is not None
+    ):
+        await _sync_outfit_link(session, user, event)
     await session.commit()
     await session.refresh(event)
     await notify_calendar(event.calendar_id, session)
@@ -1174,6 +1226,7 @@ async def copy_events(
         session.add(copy)
         await session.flush()
         copies.append(copy)
+        await _sync_outfit_link(session, user, copy)
         # ponytail: keep links to existing notes; copying an event must not fork note content.
         note_links = await session.scalars(
             select(Link).where(

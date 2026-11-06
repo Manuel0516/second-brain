@@ -32,12 +32,13 @@ from app.models import (
     Page,
     ResourceShare,
     User,
+    WardrobeOutfit,
     WorkoutSession,
 )
 from app.routes.calendar import owned_event
 
 router = APIRouter(prefix="/api", tags=["notes"])
-NodeType = Literal["page", "event", "meal_log", "workout_session"]
+NodeType = Literal["page", "event", "meal_log", "workout_session", "wardrobe_outfit"]
 
 
 class PageCreate(BaseModel):
@@ -305,6 +306,13 @@ async def _node_details(
             )
         ).one_or_none()
         return (event_row.title, event_row.icon, None, None, None) if event_row else None
+    if node_type == "wardrobe_outfit":
+        outfit = await session.scalar(
+            select(WardrobeOutfit).where(
+                WardrobeOutfit.id == node_id, WardrobeOutfit.user_id == user.id
+            )
+        )
+        return (outfit.name, "👕", None, None, None) if outfit else None
     if node_type == "workout_session":
         workout = (
             await session.execute(
@@ -1005,7 +1013,13 @@ async def get_event_links(
         if on is not None and node_type in {"workout_session", "meal_log"}:
             if details is None or details[4] != on:
                 continue
-        if details and node_type in {"page", "event", "workout_session", "meal_log"}:
+        if details and node_type in {
+            "page",
+            "event",
+            "workout_session",
+            "meal_log",
+            "wardrobe_outfit",
+        }:
             result.append(
                 LinkedNodeResponse(
                     id=link.id,
@@ -1076,6 +1090,12 @@ async def delete_link(
         raise HTTPException(status_code=404, detail="Link not found")
     await _require_node(link.source_type, link.source_id, user, session, include_deleted=True)
     await _require_node(link.target_type, link.target_id, user, session, include_deleted=True)
+    if link.source_type == "event" and link.target_type == "wardrobe_outfit":
+        event = await session.get(CalendarEvent, link.source_id)
+        if event is not None:
+            event.connections = {
+                key: value for key, value in (event.connections or {}).items() if key != "wardrobe"
+            }
     await session.delete(link)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
