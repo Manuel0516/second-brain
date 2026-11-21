@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiCall, apiErrorMessage } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
@@ -17,7 +17,6 @@ import {
 import type { CalendarData } from './types'
 import { ShareManager } from '../../components/ShareManager'
 
-const LONG_PRESS_DELAY = 375
 const ROW_GAP = 2 // matches `.calendar-list { gap }` in styles.css
 
 function ColorField({
@@ -117,36 +116,18 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
   const [dragging, setDragging] = useState<{ id: string; y: number } | null>(
     null,
   )
-  const listRef = useRef<HTMLDivElement>(null)
   const menuAnchorRef = useRef<HTMLElement>(null)
   const dragRef = useRef<{
     id: string
     pointerId: number
     startY: number
-    y: number
     rowHeight: number
     homeIndex: number
     active: boolean
-    timer: ReturnType<typeof setTimeout>
   } | null>(null)
   const suppressMenuClickRef = useRef<string | null>(null)
 
   const orderedCalendars = orderCalendars(calendars, calendarOrder)
-
-  useEffect(() => {
-    const list = listRef.current
-    if (!list) return
-    const preventScrollWhileDragging = (event: TouchEvent) => {
-      if (dragRef.current?.active) event.preventDefault()
-    }
-    list.addEventListener('touchmove', preventScrollWhileDragging, {
-      passive: false,
-    })
-    return () => {
-      list.removeEventListener('touchmove', preventScrollWhileDragging)
-      if (dragRef.current) clearTimeout(dragRef.current.timer)
-    }
-  }, [])
 
   const reorder = (id: string, targetId: string) => {
     setCalendarOrder((current) => {
@@ -166,48 +147,38 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
     pointer: React.PointerEvent<HTMLButtonElement>,
     calendar: CalendarData,
   ) => {
-    if (pointer.button !== 0) return
+    if (pointer.button !== 0 || dragRef.current) return
+    suppressMenuClickRef.current = null
     pointer.currentTarget.setPointerCapture(pointer.pointerId)
-    const pending = {
+    dragRef.current = {
       id: calendar.id,
       pointerId: pointer.pointerId,
       startY: pointer.clientY,
-      y: pointer.clientY,
       rowHeight:
         ((
           pointer.currentTarget.closest('.calendar-row') as HTMLElement | null
         )?.getBoundingClientRect().height || 40) + ROW_GAP,
       homeIndex: orderedCalendars.findIndex((c) => c.id === calendar.id),
       active: false,
-      timer: 0 as unknown as ReturnType<typeof setTimeout>,
     }
-    pending.timer = setTimeout(() => {
-      if (dragRef.current !== pending) return
-      pending.active = true
-      suppressMenuClickRef.current = calendar.id
-      setMenuFor(null)
-      setDragging({ id: calendar.id, y: 0 })
-    }, LONG_PRESS_DELAY)
-    dragRef.current = pending
   }
 
-  const moveReorder = (pointer: React.PointerEvent<HTMLButtonElement>) => {
+  const moveReorder = (pointer: React.PointerEvent<HTMLDivElement>) => {
     const current = dragRef.current
     if (!current || current.pointerId !== pointer.pointerId) return
-    current.y = pointer.clientY
+    const rawOffset = pointer.clientY - current.startY
 
-    // Before the long-press fires, any real movement is a scroll — bail out.
     if (!current.active) {
-      if (Math.abs(current.startY - pointer.clientY) > 8) {
-        clearTimeout(current.timer)
-        dragRef.current = null
-      }
-      return
+      if (Math.abs(rawOffset) < 8) return
+      // ponytail: capture on the list so moving a row cannot interrupt the drag.
+      pointer.currentTarget.setPointerCapture(pointer.pointerId)
+      current.active = true
+      suppressMenuClickRef.current = current.id
+      setMenuFor(null)
     }
 
     pointer.preventDefault()
     const ids = orderedCalendars.map((c) => c.id)
-    const rawOffset = current.y - current.startY
     const fromIndex = ids.indexOf(current.id)
     // Where the finger has dragged the row, measured in row slots from home.
     const toIndex = Math.max(
@@ -217,6 +188,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
         current.homeIndex + Math.round(rawOffset / current.rowHeight),
       ),
     )
+    if (fromIndex < 0) return
     if (toIndex !== fromIndex) {
       ids.splice(fromIndex, 1)
       ids.splice(toIndex, 0, current.id)
@@ -229,17 +201,8 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
     setDragging({ id: current.id, y: residual })
   }
 
-  const finishReorder = (pointer: React.PointerEvent<HTMLButtonElement>) => {
-    const current = dragRef.current
-    if (!current || current.pointerId !== pointer.pointerId) return
-    clearTimeout(current.timer)
-    dragRef.current = null
-    setDragging(null)
-    // The order was already committed live during the drag; nothing to do.
-  }
-
-  const cancelReorder = () => {
-    if (dragRef.current) clearTimeout(dragRef.current.timer)
+  const finishReorder = (pointer: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== pointer.pointerId) return
     dragRef.current = null
     setDragging(null)
   }
@@ -417,7 +380,12 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
           {error}
         </p>
       )}
-      <div className="calendar-list" ref={listRef}>
+      <div
+        className="calendar-list"
+        onPointerMove={moveReorder}
+        onPointerUp={finishReorder}
+        onPointerCancel={finishReorder}
+      >
         {orderedCalendars.map((calendar, index) => (
           <div
             key={calendar.id}
@@ -459,11 +427,11 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
               aria-haspopup="dialog"
               aria-expanded={menuFor === calendar.id}
               onPointerDown={(pointer) => startReorder(pointer, calendar)}
-              onPointerMove={moveReorder}
-              onPointerUp={finishReorder}
-              onPointerCancel={cancelReorder}
               onClick={(event) => {
-                if (suppressMenuClickRef.current === calendar.id) {
+                if (
+                  event.detail > 0 &&
+                  suppressMenuClickRef.current === calendar.id
+                ) {
                   suppressMenuClickRef.current = null
                   return
                 }
@@ -482,7 +450,7 @@ export function Sidebar({ calendars, onChanged, open = true, onClose }: Props) {
                 reorder(calendar.id, target.id)
               }}
             >
-              ⋯
+              <span className="calendar-menu-dots" aria-hidden="true" />
             </button>
             {menuFor === calendar.id &&
               calendar.effective_role !== 'viewer' &&

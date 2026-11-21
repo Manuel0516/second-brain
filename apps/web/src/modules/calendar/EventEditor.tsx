@@ -1237,64 +1237,6 @@ export function EventEditor({
             </div>
 
             {event.id && (
-              <fieldset className="editor-group">
-                <legend>Copy to calendar</legend>
-                <Dropdown
-                  ariaLabel="Copy destination calendar"
-                  value={copyCalendarId}
-                  onChange={setCopyCalendarId}
-                  options={copyCalendars.map((calendar) => ({
-                    value: calendar.id,
-                    label: calendar.name,
-                  }))}
-                  placeholder="No writable calendars"
-                />
-                <p className="connection-help" id="event-copy-help">
-                  Copy the saved event with its details and linked notes
-                  {event.rrule ? ' (this occurrence only)' : ''}.
-                </p>
-                <button
-                  type="button"
-                  className="ghost connection-open-note"
-                  aria-describedby="event-copy-help"
-                  disabled={!copyCalendarId || copying || saveState !== 'idle'}
-                  onClick={() => void copyToCalendar()}
-                >
-                  {copying ? 'Copying…' : 'Copy event'}
-                </button>
-              </fieldset>
-            )}
-
-            <fieldset className="editor-group">
-              <legend>Calendar</legend>
-              <div
-                className="calendar-chips"
-                role="radiogroup"
-                aria-label="Calendar"
-              >
-                {orderedCalendars.map((calendar) => {
-                  const active = calendar.id === selectedCalendarId
-                  return (
-                    <button
-                      key={calendar.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      className={`calendar-chip ${active ? 'active' : ''}`}
-                      onClick={() => set('calendar_id', calendar.id)}
-                    >
-                      <span
-                        className="chip-dot"
-                        style={{ background: calendar.color }}
-                      />
-                      {calendar.name}
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
-
-            {event.id && (
               <fieldset className="editor-group event-linked-group">
                 <legend>
                   Linked{eventLinks.length ? ` · ${eventLinks.length}` : ''}
@@ -1762,6 +1704,35 @@ export function EventEditor({
                 </div>
               </fieldset>
             )}
+
+            <fieldset className="editor-group">
+              <legend>Calendar</legend>
+              <div
+                className="calendar-chips"
+                role="radiogroup"
+                aria-label="Calendar"
+              >
+                {orderedCalendars.map((calendar) => {
+                  const active = calendar.id === selectedCalendarId
+                  return (
+                    <button
+                      key={calendar.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={`calendar-chip ${active ? 'active' : ''}`}
+                      onClick={() => set('calendar_id', calendar.id)}
+                    >
+                      <span
+                        className="chip-dot"
+                        style={{ background: calendar.color }}
+                      />
+                      {calendar.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
 
             <fieldset className="editor-group">
               <legend>When</legend>
@@ -2609,6 +2580,35 @@ export function EventEditor({
                 />
               </label>
             </fieldset>
+
+            {event.id && (
+              <fieldset className="editor-group">
+                <legend>Copy to calendar</legend>
+                <Dropdown
+                  ariaLabel="Copy destination calendar"
+                  value={copyCalendarId}
+                  onChange={setCopyCalendarId}
+                  options={copyCalendars.map((calendar) => ({
+                    value: calendar.id,
+                    label: calendar.name,
+                  }))}
+                  placeholder="No writable calendars"
+                />
+                <p className="connection-help" id="event-copy-help">
+                  Copy the saved event with its details and linked notes
+                  {event.rrule ? ' (this occurrence only)' : ''}.
+                </p>
+                <button
+                  type="button"
+                  className="ghost connection-open-note"
+                  aria-describedby="event-copy-help"
+                  disabled={!copyCalendarId || copying || saveState !== 'idle'}
+                  onClick={() => void copyToCalendar()}
+                >
+                  {copying ? 'Copying…' : 'Copy event'}
+                </button>
+              </fieldset>
+            )}
 
             <footer>
               {event.id && (

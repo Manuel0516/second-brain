@@ -7,6 +7,8 @@ Entries are numbered sequentially. Add new entries at the top.
 
 | #                                                                       | Title                                                                                                  | Date       | Status                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- | -------------------------- |
+| [0278](0278-event-editor-card-order.md) | Event editor card order | 2026-11-21 | accepted |
+| [0277](0277-calendar-sidebar-reordering.md) | Calendar sidebar reordering | 2026-11-21 | accepted |
 | [0276](0276-wardrobe-native-connections-and-context.md) | Native outfit event connections, calendar-aware AI, and compact mobile navigation | 2026-11-06 | accepted |
 | [0275](0275-wardrobe-ai-and-quiet-actions.md) | Wardrobe AI proposals, Lund weather planning, and quieter actions | 2026-11-06 | accepted |
 | [0274](0274-wardrobe-actions-and-settings.md) | Wardrobe action buttons, category management, and default calendar | 2026-11-06 | accepted |

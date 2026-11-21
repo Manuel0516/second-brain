@@ -1134,6 +1134,20 @@ button:not(.calendar-event):active {
     background 0.14s,
     color 0.14s;
 }
+.calendar-list .calendar-menu-btn {
+  touch-action: none;
+}
+
+.calendar-menu-dots {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow:
+    -5px 0 currentColor,
+    5px 0 currentColor;
+}
+
 @media (pointer: coarse) {
   .calendar-row {
     min-height: 44px;

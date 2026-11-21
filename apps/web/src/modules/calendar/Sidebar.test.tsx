@@ -1,5 +1,4 @@
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -95,7 +94,7 @@ test('shows the API validation reason', async () => {
   )
 })
 
-test('reorders calendars only after a long press and saves the preference', () => {
+test('reorders calendars by dragging and saves the preference', () => {
   Element.prototype.setPointerCapture = vi.fn()
   const calendars = [
     {
@@ -133,7 +132,6 @@ test('reorders calendars only after a long press and saves the preference', () =
   expect(
     screen.queryByRole('heading', { name: 'Edit calendar' }),
   ).not.toBeInTheDocument()
-  vi.useFakeTimers()
 
   fireEvent.pointerDown(work, {
     pointerId: 1,
@@ -144,9 +142,8 @@ test('reorders calendars only after a long press and saves the preference', () =
   fireEvent.pointerMove(work, {
     pointerId: 1,
     clientX: 20,
-    clientY: 120,
+    clientY: 104,
   })
-  act(() => vi.advanceTimersByTime(650))
   expect(workRow).not.toHaveClass('reordering')
   fireEvent.pointerUp(work, { pointerId: 1 })
 
@@ -156,7 +153,6 @@ test('reorders calendars only after a long press and saves the preference', () =
     clientX: 20,
     clientY: 100,
   })
-  act(() => vi.advanceTimersByTime(650))
   fireEvent.pointerMove(work, {
     pointerId: 2,
     clientX: 20,
@@ -166,12 +162,12 @@ test('reorders calendars only after a long press and saves the preference', () =
   // The row drops two slots (80px / 42px row pitch ≈ 2), and the lifted row
   // is re-anchored under the finger, leaving only the residual offset.
   expect(workRow).toHaveStyle({ transform: 'translateY(-4px) scale(1.03)' })
-  fireEvent.pointerUp(work, {
+  fireEvent.pointerUp(work.closest('.calendar-list')!, {
     pointerId: 2,
     clientX: 20,
     clientY: 180,
   })
-  fireEvent.click(work)
+  fireEvent.click(work, { detail: 1 })
   expect(
     screen.queryByRole('heading', { name: 'Edit calendar' }),
   ).not.toBeInTheDocument()
